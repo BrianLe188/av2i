@@ -1,0 +1,123 @@
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { generateTerraform, validateGraph, type Graph } from '@av2i/core';
+import { CreateProjectDto, UpdateProjectDto } from './dto';
+import { ProjectVersion } from './project-version.entity';
+import { Project } from './project.entity';
+
+const MAX_VERSIONS = 50;
+
+function assertGraph(graph: unknown): asserts graph is Graph {
+  const g = graph as Graph | undefined;
+  if (!g || !Array.isArray(g.nodes) || !Array.isArray(g.edges)) {
+    throw new BadRequestException('graph must be { nodes: [], edges: [] }');
+  }
+  const ids = new Set<string>();
+  for (const n of g.nodes) {
+    if (!n || typeof n.id !== 'string' || typeof n.type !== 'string') {
+      throw new BadRequestException('invalid node in graph');
+    }
+    if (ids.has(n.id)) throw new BadRequestException(`duplicate node id ${n.id}`);
+    ids.add(n.id);
+  }
+}
+
+@Injectable()
+export class ProjectsService {
+  constructor(
+    @InjectRepository(Project) private readonly projects: Repository<Project>,
+    @InjectRepository(ProjectVersion) private readonly versions: Repository<ProjectVersion>,
+  ) {}
+
+  async list() {
+    const rows = await this.projects.find({ order: { updatedAt: 'DESC' } });
+    return rows.map((p) => ({
+      id: p.id,
+      name: p.name,
+      region: p.region,
+      nodeCount: p.graph.nodes.length,
+      updatedAt: p.updatedAt,
+    }));
+  }
+
+  async get(id: string) {
+    const project = await this.projects.findOneBy({ id });
+    if (!project) throw new NotFoundException('Project not found');
+    return project;
+  }
+
+  create(dto: CreateProjectDto) {
+    const graph = dto.graph ?? { nodes: [], edges: [] };
+    assertGraph(graph);
+    return this.projects.save(
+      this.projects.create({ name: dto.name, region: dto.region ?? 'us-east-1', graph }),
+    );
+  }
+
+  async update(id: string, dto: UpdateProjectDto) {
+    const project = await this.get(id);
+    if (dto.graph !== undefined) {
+      assertGraph(dto.graph);
+      project.graph = dto.graph;
+    }
+    if (dto.name !== undefined) project.name = dto.name;
+    if (dto.region !== undefined) project.region = dto.region;
+    return this.projects.save(project);
+  }
+
+  async remove(id: string) {
+    const project = await this.get(id);
+    await this.versions.delete({ projectId: id });
+    await this.projects.remove(project);
+  }
+
+  async listVersions(projectId: string) {
+    await this.get(projectId);
+    const rows = await this.versions.find({
+      where: { projectId },
+      order: { createdAt: 'DESC' },
+    });
+    return rows.map((v) => ({
+      id: v.id,
+      label: v.label,
+      region: v.region,
+      nodeCount: v.graph.nodes.length,
+      createdAt: v.createdAt,
+    }));
+  }
+
+  async snapshot(projectId: string, label?: string) {
+    const project = await this.get(projectId);
+    const saved = await this.versions.save(
+      this.versions.create({
+        projectId,
+        label: label ?? null,
+        region: project.region,
+        graph: project.graph,
+      }),
+    );
+    const all = await this.versions.find({ where: { projectId }, order: { createdAt: 'DESC' } });
+    if (all.length > MAX_VERSIONS) await this.versions.remove(all.slice(MAX_VERSIONS));
+    return { id: saved.id, label: saved.label, createdAt: saved.createdAt };
+  }
+
+  async restore(projectId: string, versionId: string) {
+    const project = await this.get(projectId);
+    const version = await this.versions.findOneBy({ id: versionId, projectId });
+    if (!version) throw new NotFoundException('Version not found');
+    // Keep what we're about to overwrite so a restore can itself be undone.
+    await this.snapshot(projectId, 'Before restore');
+    project.graph = version.graph;
+    project.region = version.region;
+    return this.projects.save(project);
+  }
+
+  async export(id: string) {
+    const project = await this.get(id);
+    return {
+      files: generateTerraform(project.graph, { region: project.region }),
+      issues: validateGraph(project.graph),
+    };
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "av2i",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @av2i/core && npm run build -w @av2i/api && npm run build -w @av2i/web",
+    "build:core": "npm run build -w @av2i/core",
+    "dev": "npm run build:core && concurrently -n core,api,web -c gray,cyan,magenta \"npm run dev -w @av2i/core\" \"npm run start:dev -w @av2i/api\" \"npm run dev -w @av2i/web\"",
+    "test": "npm run test -w @av2i/core",
+    "db:up": "docker compose up -d postgres"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}

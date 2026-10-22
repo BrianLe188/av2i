@@ -1,0 +1,35 @@
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  OneToMany,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
+import type { Graph } from '@av2i/core';
+import { ProjectVersion } from './project-version.entity';
+
+@Entity('projects')
+export class Project {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column()
+  name: string;
+
+  @Column({ default: 'us-east-1' })
+  region: string;
+
+  /** `simple-json` works on both sql.js and Postgres; switch to jsonb later if we need to query inside it. */
+  @Column('simple-json')
+  graph: Graph;
+
+  @OneToMany(() => ProjectVersion, (v) => v.project)
+  versions: ProjectVersion[];
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+}
