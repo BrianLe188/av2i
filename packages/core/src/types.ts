@@ -1,4 +1,4 @@
-export type ResourceType = 'vpc' | 'subnet' | 'igw' | 'route_table' | 'alb' | 'ec2' | 'rds' | 's3';
+export type ResourceType = 'vpc' | 'subnet' | 'igw' | 'nat' | 'route_table' | 'alb' | 'ec2' | 'rds' | 's3';
 
 export type PropValue = string | number | boolean;
 

@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, type ProjectSummary } from '../api';
 import { useAuth } from '../auth';
+import { REGIONS, TEMPLATES } from '@av2i/core';
 
 export function DashboardPage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
   const [name, setName] = useState('');
+  const [templateId, setTemplateId] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -18,7 +20,9 @@ export function DashboardPage() {
     e.preventDefault();
     if (!name.trim()) return;
     try {
-      const p = await api.createProject(name.trim());
+      const region = REGIONS[0];
+      const template = TEMPLATES.find((t) => t.id === templateId);
+      const p = await api.createProject(name.trim(), region, template?.build(region));
       navigate(`/projects/${p.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -55,10 +59,19 @@ export function DashboardPage() {
             maxLength={100}
             onChange={(e) => setName(e.target.value)}
           />
+          <select value={templateId} onChange={(e) => setTemplateId(e.target.value)} aria-label="Template">
+            <option value="">Blank canvas</option>
+            {TEMPLATES.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
           <button className="primary" disabled={!name.trim()}>
             Create
           </button>
         </form>
+        {templateId && <p className="muted">{TEMPLATES.find((t) => t.id === templateId)?.description}</p>}
         {projects === null ? (
           <p className="muted">Loading…</p>
         ) : projects.length === 0 ? (

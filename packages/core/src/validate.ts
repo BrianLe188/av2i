@@ -104,12 +104,28 @@ function validateConnections(graph: Graph, issues: Issue[]): void {
     for (const id of ids.slice(1)) add(id, 'error', 'A VPC can have only one Internet Gateway.');
   }
 
+  for (const nat of nodes.filter((n) => n.type === 'nat')) {
+    const subnet = nodes.find((n) => n.id === nat.parentId);
+    const routedToIgw =
+      subnet &&
+      of('association').some(
+        (r) => r.to!.id === subnet.id && of('route').some((x) => x.to!.id === r.from!.id),
+      );
+    if (!routedToIgw) {
+      add(nat.id, 'warning', 'A NAT Gateway needs a public subnet with a route to an Internet Gateway.');
+    }
+    if (!of('nat-route').some((r) => r.from!.id === nat.id)) {
+      add(nat.id, 'warning', 'Not connected to a Route Table, so no subnet uses it.');
+    }
+  }
+
   for (const rt of nodes.filter((n) => n.type === 'route_table')) {
     if (!of('association').some((r) => r.from!.id === rt.id)) {
       add(rt.id, 'warning', 'Not associated with any subnet.');
     }
-    if (of('route').filter((r) => r.to!.id === rt.id).length > 1) {
-      add(rt.id, 'error', 'Connected to more than one Internet Gateway: duplicate default route.');
+    const defaultRoutes = [...of('route'), ...of('nat-route')].filter((r) => r.to!.id === rt.id);
+    if (defaultRoutes.length > 1) {
+      add(rt.id, 'error', 'Connected to more than one gateway (Internet or NAT): duplicate default route.');
     }
   }
 

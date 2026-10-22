@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
+import { strToU8, zipSync } from 'fflate';
 import { generateTerraform } from '@av2i/core';
 import { useStore } from '../store';
 
-export function download(filename: string, text: string) {
-  const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+function download(filename: string, data: BlobPart, type: string) {
+  const url = URL.createObjectURL(new Blob([data], { type }));
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
@@ -42,13 +43,11 @@ export function CodePanel({ errorCount }: { errorCount: number }) {
         </button>
         <button
           onClick={() => {
-            download(
-              `${slug}.tf`,
-              names.map((f) => `# ---- ${f} ----\n${files[f]}`).join('\n'),
-            );
+            const zip = zipSync(Object.fromEntries(names.map((f) => [`${slug}/${f}`, strToU8(files[f])])));
+            download(`${slug}.zip`, zip, 'application/zip');
           }}
         >
-          Download
+          Download .zip
         </button>
       </div>
       {errorCount > 0 && (

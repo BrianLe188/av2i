@@ -126,7 +126,7 @@ export function PropertiesPanel({ issues }: { issues: Issue[] }) {
         <p>Select a resource to edit its properties.</p>
         <p className="muted">
           {nodes.length} resource{nodes.length === 1 ? '' : 's'} on the canvas. Drag from one
-          resource's side handle to another to connect them: IGW ↔ Route table ↔ Subnet, EC2 ↔ RDS,
+          resource's side handle to another to connect them: IGW ↔ Route table ↔ Subnet, NAT ↔ Route table, EC2 ↔ RDS,
           Load balancer ↔ EC2, EC2 ↔ S3.
         </p>
       </div>

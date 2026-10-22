@@ -16,7 +16,8 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --clean",
     "dev": "tsup src/index.ts --format esm,cjs --dts --watch",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:tofu": "TOFU_VALIDATE=1 vitest run test/tofu.test.ts"
   },
   "devDependencies": {
     "tsup": "^8.0.0",

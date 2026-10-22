@@ -65,6 +65,15 @@ export const RESOURCES: Record<ResourceType, ResourceDef> = {
     minSize: { width: 140, height: 64 },
     fields: [],
   },
+  nat: {
+    type: 'nat',
+    label: 'NAT gateway',
+    kind: 'placed',
+    parents: ['subnet'],
+    defaultSize: { width: 140, height: 64 },
+    minSize: { width: 140, height: 64 },
+    fields: [],
+  },
   route_table: {
     type: 'route_table',
     label: 'Route table',
@@ -164,6 +173,7 @@ export const RESOURCE_ORDER: ResourceType[] = [
   'vpc',
   'subnet',
   'igw',
+  'nat',
   'route_table',
   'alb',
   'ec2',

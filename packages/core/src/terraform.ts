@@ -126,17 +126,40 @@ export function generateTerraform(graph: Graph, opts: { region: string }): Recor
     );
   }
 
+  for (const nat of ofType('nat')) {
+    const vpc = vpcOf(nodes, nat);
+    if (!vpc || !nat.parentId) continue;
+    const igws = ofType('igw').filter((g) => vpcOf(nodes, g)?.id === vpc.id);
+    add(
+      `eip.${nat.id}`,
+      block(`resource "aws_eip" "${L(nat)}"`, [['domain', str('vpc')], tags(nat.name)]),
+    );
+    add(
+      `nat.${nat.id}`,
+      block(
+        `resource "aws_nat_gateway" "${L(nat)}"`,
+        [
+          ['allocation_id', `aws_eip.${L(nat)}.id`],
+          ['subnet_id', `aws_subnet.${L(byId.get(nat.parentId)!)}.id`],
+          tags(nat.name),
+        ],
+        igws.length ? [`depends_on = [${igws.map((g) => `aws_internet_gateway.${L(g)}`).join(', ')}]`] : [],
+      ),
+    );
+  }
+
   for (const rt of ofType('route_table')) {
     const vpc = vpcOf(nodes, rt);
     if (!vpc) continue;
-    const routes = edgesOf('route')
-      .filter((r) => r.to.id === rt.id)
-      .flatMap((r) => [
-        'route {',
-        '  cidr_block = "0.0.0.0/0"',
-        `  gateway_id = aws_internet_gateway.${L(r.from)}.id`,
-        '}',
-      ]);
+    const route = (target: string) => ['route {', '  cidr_block = "0.0.0.0/0"', `  ${target}`, '}'];
+    const routes = [
+      ...edgesOf('route')
+        .filter((r) => r.to.id === rt.id)
+        .flatMap((r) => route(`gateway_id = aws_internet_gateway.${L(r.from)}.id`)),
+      ...edgesOf('nat-route')
+        .filter((r) => r.to.id === rt.id)
+        .flatMap((r) => route(`nat_gateway_id = aws_nat_gateway.${L(r.from)}.id`)),
+    ];
     add(
       `rt.${rt.id}`,
       block(

@@ -76,8 +76,8 @@ export const api = {
   logout: () => request<void>('/auth/logout', json('POST')),
   listProjects: () => request<ProjectSummary[]>('/projects'),
   getProject: (id: string) => request<Project>(`/projects/${id}`),
-  createProject: (name: string, region?: string) =>
-    request<Project>('/projects', json('POST', { name, region })),
+  createProject: (name: string, region?: string, graph?: Graph) =>
+    request<Project>('/projects', json('POST', { name, region, graph })),
   updateProject: (id: string, patch: { name?: string; region?: string; graph?: Graph }) =>
     request<Project>(`/projects/${id}`, json('PUT', patch)),
   deleteProject: (id: string) => request<void>(`/projects/${id}`, json('DELETE')),

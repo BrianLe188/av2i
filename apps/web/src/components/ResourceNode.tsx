@@ -6,6 +6,7 @@ export const TYPE_COLORS: Record<ResourceType, string> = {
   vpc: '#7c3aed',
   subnet: '#2563eb',
   igw: '#0d9488',
+  nat: '#475569',
   route_table: '#a16207',
   alb: '#db2777',
   ec2: '#ea580c',
@@ -13,7 +14,7 @@ export const TYPE_COLORS: Record<ResourceType, string> = {
   s3: '#16a34a',
 };
 
-const BADGES: Partial<Record<ResourceType, string>> = { route_table: 'RTB' };
+const BADGES: Partial<Record<ResourceType, string>> = { route_table: 'RTB', nat: 'NAT' };
 
 export interface ResourceData extends Record<string, unknown> {
   resource: GraphNode;
@@ -31,6 +32,8 @@ function summary(n: GraphNode): string {
       return `${n.props.cidr_block} · ${String(n.props.availability_zone).slice(-2) || '—'}${n.props.public ? ' · public' : ''}`;
     case 'igw':
       return 'internet gateway';
+    case 'nat':
+      return 'outbound only';
     case 'route_table':
       return 'routes';
     case 'alb':

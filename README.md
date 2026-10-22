@@ -37,5 +37,5 @@ For PostgreSQL: `npm run db:up` and set `DATABASE_URL=postgres://av2i:av2i@local
 
 - Auth is GitHub-only with a signed 7-day cookie (no revocation). The OAuth scope is `read:user`; repo access for opening PRs will need a wider scope. Not tested against real GitHub yet (no OAuth app was available).
 - `synchronize: true` creates the schema; switch to migrations before deploying.
-- Connections have meaning for five pairs only (IGW↔Route table, Route table↔Subnet, EC2↔RDS, Load balancer↔EC2, EC2↔S3); anything else is rejected. ALB is HTTP-only, and generated Terraform has not been run through `terraform validate`.
+- Connections have meaning for six pairs only (IGW↔Route table, NAT↔Route table, Route table↔Subnet, EC2↔RDS, Load balancer↔EC2, EC2↔S3); anything else is rejected. ALB is HTTP-only. Generated Terraform is checked with `tofu validate` in Docker (`npm run test:tofu -w @av2i/core`, opt-in; first run downloads the AWS provider).
 - Palette HTML5 drag-and-drop was verified by dispatching drop events, not with a real mouse drag.

@@ -2,7 +2,7 @@ import { vpcOf } from './graph';
 import { RESOURCES } from './resources';
 import type { Graph, GraphEdge, GraphNode, ResourceType } from './types';
 
-export type EdgeKind = 'route' | 'association' | 'db-access' | 'forward' | 's3-access';
+export type EdgeKind = 'route' | 'nat-route' | 'association' | 'db-access' | 'forward' | 's3-access';
 
 export const DB_PORTS: Record<string, number> = { postgres: 5432, mysql: 3306, mariadb: 3306 };
 
@@ -15,6 +15,7 @@ interface Pair {
 
 const PAIRS: Pair[] = [
   { kind: 'route', from: 'igw', to: 'route_table' },
+  { kind: 'nat-route', from: 'nat', to: 'route_table' },
   { kind: 'association', from: 'route_table', to: 'subnet' },
   { kind: 'db-access', from: 'ec2', to: 'rds' },
   { kind: 'forward', from: 'alb', to: 'ec2' },
@@ -25,6 +26,11 @@ export const EDGE_INFO: Record<EdgeKind, { title: string; generates: string }> =
   route: {
     title: 'Default route to the internet',
     generates: 'A 0.0.0.0/0 route through the Internet Gateway in the Route Table.',
+  },
+  'nat-route': {
+    title: 'Default route through NAT',
+    generates:
+      'An Elastic IP and NAT Gateway, and a 0.0.0.0/0 route through it in the Route Table (outbound-only internet for private subnets).',
   },
   association: {
     title: 'Route table association',
@@ -92,6 +98,9 @@ export function classifyEdge(nodes: GraphNode[], edge: GraphEdge): ResolvedEdge 
   switch (pair.kind) {
     case 'route':
       label = '0.0.0.0/0';
+      break;
+    case 'nat-route':
+      label = '0.0.0.0/0 via NAT';
       break;
     case 'association':
       label = 'associated';

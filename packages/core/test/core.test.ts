@@ -9,22 +9,11 @@ import {
   parseCidr,
   removeNode,
   reparent,
+  TEMPLATES,
   validateGraph,
   type GraphNode,
 } from '../src';
-
-const region = 'us-east-1';
-
-function build() {
-  let nodes: GraphNode[] = [];
-  const vpc = addNode(nodes, 'vpc', { region, position: { x: 0, y: 0 } });
-  nodes = vpc.nodes;
-  const s1 = addNode(nodes, 'subnet', { region, parentId: vpc.node.id });
-  nodes = s1.nodes;
-  const s2 = addNode(nodes, 'subnet', { region, parentId: vpc.node.id });
-  nodes = s2.nodes;
-  return { nodes, vpc: vpc.node, s1: s1.node, s2: s2.node };
-}
+import { build, edge, region, scenario } from './fixtures';
 
 describe('cidr', () => {
   it('parses and rejects', () => {
@@ -142,30 +131,6 @@ describe('validation', () => {
     expect(issues.some((i) => i.nodeId === withDb.node.id && i.severity === 'error')).toBe(true);
   });
 });
-
-function edge(source: string, target: string, props?: Record<string, string>) {
-  return { id: `${source}-${target}`, source, target, props };
-}
-
-/** vpc: 2 public subnets (a, b) + 1 private (c); igw, rt, alb in vpc; ec2 in a; rds in c; s3 free. */
-function scenario() {
-  let { nodes, vpc, s1, s2 } = build();
-  nodes = nodes.map((n) => (n.id === s1.id || n.id === s2.id ? { ...n, props: { ...n.props, public: true } } : n));
-  const s3sub = addNode(nodes, 'subnet', { region, parentId: vpc.id });
-  nodes = s3sub.nodes;
-  const add = (type: Parameters<typeof addNode>[1], parentId?: string) => {
-    const r = addNode(nodes, type, { region, parentId });
-    nodes = r.nodes;
-    return r.node;
-  };
-  const igw = add('igw', vpc.id);
-  const rt = add('route_table', vpc.id);
-  const alb = add('alb', vpc.id);
-  const ec2 = add('ec2', s1.id);
-  const rds = add('rds', s3sub.node.id);
-  const bucket = add('s3');
-  return { nodes, vpc, s1, s2, priv: s3sub.node, igw, rt, alb, ec2, rds, bucket };
-}
 
 describe('edges', () => {
   it('classifies pairs regardless of drawing direction', () => {
@@ -288,4 +253,63 @@ describe('connection validation', () => {
     expect(issues.some((i) => i.nodeId === k.alb.id && /2 availability zones/.test(i.message))).toBe(true);
     expect(issues.some((i) => i.nodeId === extraIgw.node.id && /only one Internet Gateway/.test(i.message))).toBe(true);
   });
+});
+
+describe('nat gateway', () => {
+  /** Public subnet s1 holds a NAT; private subnet routes out through it. */
+  function withNat() {
+    const k = scenario();
+    const r = addNode(k.nodes, 'nat', { region, parentId: k.s1.id });
+    const rt2 = addNode(r.nodes, 'route_table', { region, parentId: k.vpc.id });
+    const nodes = rt2.nodes;
+    const edges = [
+      edge(k.igw.id, k.rt.id),
+      edge(k.rt.id, k.s1.id),
+      edge(r.node.id, rt2.node.id),
+      edge(rt2.node.id, k.priv.id),
+    ];
+    return { ...k, nodes, nat: r.node, rt2: rt2.node, edges };
+  }
+
+  it('classifies NAT ↔ route table in either direction', () => {
+    const k = withNat();
+    expect(classifyEdge(k.nodes, edge(k.nat.id, k.rt2.id)).kind).toBe('nat-route');
+    expect(classifyEdge(k.nodes, edge(k.rt2.id, k.nat.id)).from!.id).toBe(k.nat.id);
+  });
+
+  it('generates an EIP, NAT gateway and a nat_gateway_id route', () => {
+    const k = withNat();
+    const main = generateTerraform({ nodes: k.nodes, edges: k.edges }, { region })['main.tf'];
+    expect(main).toContain('resource "aws_eip"');
+    expect(main).toContain('resource "aws_nat_gateway"');
+    expect(main).toMatch(/depends_on = \[aws_internet_gateway\./);
+    expect(main).toMatch(/nat_gateway_id = aws_nat_gateway\./);
+  });
+
+  it('is clean when set up properly and warns when not', () => {
+    const k = withNat();
+    const issues = validateGraph({ nodes: k.nodes, edges: k.edges }).filter((i) => i.nodeId === k.nat.id);
+    expect(issues).toEqual([]);
+    const loose = validateGraph({ nodes: k.nodes, edges: [] }).filter((i) => i.nodeId === k.nat.id);
+    expect(loose.map((i) => i.message).join(' ')).toMatch(/public subnet[\s\S]*Route Table/);
+  });
+
+  it('rejects a route table with both an IGW and a NAT default route', () => {
+    const k = withNat();
+    const edges = [...k.edges, edge(k.nat.id, k.rt.id)];
+    const errors = validateGraph({ nodes: k.nodes, edges }).filter((i) => i.severity === 'error');
+    expect(errors.some((i) => /duplicate default route/.test(i.message))).toBe(true);
+  });
+});
+
+describe('templates', () => {
+  for (const t of TEMPLATES) {
+    it(`${t.id} has no errors and generates terraform`, () => {
+      const graph = t.build(region);
+      expect(graph.nodes.length).toBeGreaterThan(0);
+      const errors = validateGraph(graph).filter((i) => i.severity === 'error');
+      expect(errors, JSON.stringify(errors)).toEqual([]);
+      expect(generateTerraform(graph, { region })['main.tf']).toContain('aws_vpc');
+    });
+  }
 });
