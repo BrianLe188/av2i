@@ -1,5 +1,5 @@
 import { Handle, NodeResizer, Position, type Node, type NodeProps } from '@xyflow/react';
-import { RESOURCES, type GraphNode, type ResourceType } from '@av2i/core';
+import { RESOURCES, sgRules, type GraphNode, type ResourceType } from '@av2i/core';
 import { useStore } from '../store';
 
 export const TYPE_COLORS: Record<ResourceType, string> = {
@@ -38,7 +38,7 @@ function summary(n: GraphNode): string {
     case 'igw':
       return 'internet gateway';
     case 'sg':
-      return String(n.props.ingress_ports).trim() ? `in: ${n.props.ingress_ports}` : 'no inbound';
+      return `${sgRules(n, 'ingress').length} in · ${sgRules(n, 'egress').length} out`;
     case 'nat':
       return 'outbound only';
     case 'route_table':

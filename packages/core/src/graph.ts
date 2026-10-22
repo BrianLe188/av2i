@@ -1,5 +1,6 @@
 import { nextSubnetCidr } from './cidr';
 import { availabilityZones, RESOURCES } from './resources';
+import { stripReferences } from './sg-rules';
 import type { Graph, GraphNode, Point, PropValue, ResourceType, Size } from './types';
 
 /** Inner margin of a container, and room reserved for its title bar. */
@@ -293,7 +294,7 @@ export function removeNode(graph: Graph, id: string): Graph {
     graph.nodes.filter((n) => n.id === id || isDescendant(graph.nodes, n.id, id)).map((n) => n.id),
   );
   const parentId = graph.nodes.find((n) => n.id === id)?.parentId;
-  const nodes = graph.nodes.filter((n) => !doomed.has(n.id));
+  const nodes = graph.nodes.filter((n) => !doomed.has(n.id)).map((n) => stripReferences(n, doomed));
   return {
     nodes: autoResize(nodes, { fit: parentId ? [parentId] : [] }),
     edges: graph.edges.filter((e) => !doomed.has(e.source) && !doomed.has(e.target)),

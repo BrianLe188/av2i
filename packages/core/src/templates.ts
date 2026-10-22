@@ -1,4 +1,5 @@
 import { addNode, autoResize } from './graph';
+import { serializeRules } from './sg-rules';
 import type { Graph, GraphEdge, GraphNode, ResourceType } from './types';
 
 export interface Template {
@@ -33,7 +34,7 @@ export const TEMPLATES: Template[] = [
   {
     id: 'web-3tier',
     name: 'Web app (3 tiers)',
-    description: 'Load balancer in two public subnets, an app server, and a database in private subnets. Includes an S3 bucket the app can read and write.',
+    description: 'Load balancer in front of two app servers in public subnets and a database in private subnets, with three shared security groups and an S3 bucket the app can read and write.',
     build(region) {
       const b = builder(region);
       const vpc = b.add('vpc', { name: 'main' });
@@ -45,8 +46,14 @@ export const TEMPLATES: Template[] = [
       const rt = b.add('route_table', { parent: vpc, name: 'public', at: [200, 460] });
       const alb = b.add('alb', { parent: vpc, name: 'web', at: [380, 460] });
       const app = b.add('ec2', { parent: pubA, name: 'app' });
+      const app2 = b.add('ec2', { parent: pubB, name: 'app-2' });
       const db = b.add('rds', { parent: privA, name: 'db' });
       const bucket = b.add('s3', { name: 'assets' });
+      // Three security groups for the whole stack: the load balancer's, one shared by both app servers, and the database's.
+      // The load balancer -> app and app -> database rules come from the connections below.
+      const webSg = b.add('sg', { parent: vpc, name: 'web', at: [20, 520], props: { ingress_rules: serializeRules([{ protocol: 'tcp', ports: '80', peer: '0.0.0.0/0', description: 'HTTP from anywhere' }]) } });
+      const appSg = b.add('sg', { parent: vpc, name: 'app', at: [200, 520] });
+      const dataSg = b.add('sg', { parent: vpc, name: 'data', at: [380, 520], props: { egress_rules: '[]' } });
       // Private subnets reach the internet outbound-only, through a NAT Gateway in a public subnet.
       const nat = b.add('nat', { parent: pubB });
       const privRt = b.add('route_table', { parent: vpc, name: 'private', at: [560, 460] });
@@ -56,9 +63,16 @@ export const TEMPLATES: Template[] = [
       b.connect(igw, rt);
       b.connect(rt, pubA);
       b.connect(rt, pubB);
+      b.connect(webSg, alb);
+      b.connect(appSg, app);
+      b.connect(appSg, app2);
+      b.connect(dataSg, db);
       b.connect(alb, app);
+      b.connect(alb, app2);
       b.connect(app, db);
+      b.connect(app2, db);
       b.connect(app, bucket, { access: 'readwrite' });
+      b.connect(app2, bucket, { access: 'readwrite' });
       return b.finish();
     },
   },

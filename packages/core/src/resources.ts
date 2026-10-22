@@ -1,3 +1,4 @@
+import { DEFAULT_EGRESS_RULES, DEFAULT_INGRESS_RULES } from './sg-rules';
 import type { PropValue, ResourceType, Size } from './types';
 
 export type ResourceKind = 'container' | 'placed' | 'free';
@@ -5,8 +6,11 @@ export type ResourceKind = 'container' | 'placed' | 'free';
 export interface FieldDef {
   key: string;
   label: string;
-  type: 'text' | 'number' | 'select' | 'boolean';
+  /** `rules` holds a security group rule list (JSON text); `ref` holds the id of another node of `refType`. */
+  type: 'text' | 'number' | 'select' | 'boolean' | 'rules' | 'ref';
   options?: string[];
+  refType?: ResourceType;
+  direction?: 'ingress' | 'egress';
   default: PropValue;
   hint?: string;
 }
@@ -35,6 +39,14 @@ export const RESOURCES: Record<ResourceType, ResourceDef> = {
     fields: [
       { key: 'cidr_block', label: 'CIDR block', type: 'text', default: '10.0.0.0/16' },
       { key: 'enable_dns_hostnames', label: 'DNS hostnames', type: 'boolean', default: true },
+      {
+        key: 'default_sg',
+        label: 'Default security group',
+        type: 'ref',
+        refType: 'sg',
+        default: '',
+        hint: 'Used by every instance, function, service, database and load balancer that has no security group attached, instead of a group of its own for each. Rules from connections (database access, load balancer targets) are added to it too.',
+      },
     ],
   },
   subnet: {
@@ -74,20 +86,21 @@ export const RESOURCES: Record<ResourceType, ResourceDef> = {
     minSize: { width: 140, height: 64 },
     fields: [
       {
-        key: 'ingress_cidr',
-        label: 'Allow from CIDR',
-        type: 'text',
-        default: '',
-        hint: 'Source for the ports below, e.g. 0.0.0.0/0 or your office range. Empty = no inbound rule.',
+        key: 'ingress_rules',
+        label: 'Inbound rules',
+        type: 'rules',
+        direction: 'ingress',
+        default: DEFAULT_INGRESS_RULES,
+        hint: 'Traffic allowed in. The source is a CIDR or another security group.',
       },
       {
-        key: 'ingress_ports',
-        label: 'Inbound TCP ports',
-        type: 'text',
-        default: '',
-        hint: 'Comma separated, ranges allowed: 22, 443, 8000-8100',
+        key: 'egress_rules',
+        label: 'Outbound rules',
+        type: 'rules',
+        direction: 'egress',
+        default: DEFAULT_EGRESS_RULES,
+        hint: 'Traffic allowed out. With no rules, nothing can leave.',
       },
-      { key: 'egress_all', label: 'Allow all outbound', type: 'boolean', default: true },
     ],
   },
   nat: {

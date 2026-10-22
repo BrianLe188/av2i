@@ -1,7 +1,8 @@
 import { cidrContains, cidrOverlaps, parseCidr } from './cidr';
 import { resolveEdges } from './edges';
 import { vpcOf } from './graph';
-import { parsePorts } from './ports';
+import { HAS_SG, sgAssignments } from './sg';
+import { expandRule, sgIdOfPeer, sgRules } from './sg-rules';
 import { securityChecks } from './security';
 import { RESOURCES } from './resources';
 import type { Graph, Issue } from './types';
@@ -85,6 +86,7 @@ export function validateGraph(graph: Graph): Issue[] {
 
 function validateConnections(graph: Graph, issues: Issue[]): void {
   const { nodes } = graph;
+  const byId = new Map(nodes.map((n) => [n.id, n]));
   const resolved = resolveEdges(graph);
   const add = (nodeId: string, severity: Issue['severity'], message: string, edgeId?: string) =>
     issues.push({ nodeId, edgeId, severity, message });
@@ -145,15 +147,50 @@ function validateConnections(graph: Graph, issues: Issue[]): void {
     }
   }
 
+  const assigned = sgAssignments(nodes, ok);
+  const isDefault = new Set(nodes.filter((n) => n.type === 'vpc').map((v) => String(v.props.default_sg ?? '')));
   for (const sg of nodes.filter((n) => n.type === 'sg')) {
-    const cidr = String(sg.props.ingress_cidr).trim();
-    const ports = parsePorts(String(sg.props.ingress_ports));
-    if (cidr && !parseCidr(cidr)) add(sg.id, 'error', `Invalid CIDR "${cidr}".`);
-    if (!ports) add(sg.id, 'error', 'Ports must look like 22, 443, 8000-8100 (1 to 65535).');
-    if (ports?.length && !cidr) add(sg.id, 'warning', 'Ports are set but there is no source CIDR, so no inbound rule is created.');
-    if (!of('sg-attach').some((r) => r.from!.id === sg.id)) {
-      add(sg.id, 'warning', 'Not attached to anything: connect it to an EC2 instance, function, database or load balancer.');
+    const vpc = vpcOf(nodes, sg);
+    for (const dir of ['ingress', 'egress'] as const) {
+      sgRules(sg, dir).forEach((r, i) => {
+        const where = `${dir === 'ingress' ? 'Inbound' : 'Outbound'} rule ${i + 1}`;
+        if (!expandRule(r)) add(sg.id, 'error', `${where}: ports must look like 22, 443, 8000-8100 (1 to 65535).`);
+        const peerId = sgIdOfPeer(r.peer);
+        if (peerId !== undefined) {
+          const peer = byId.get(peerId);
+          if (peer?.type !== 'sg') add(sg.id, 'error', `${where}: the security group it refers to no longer exists.`);
+          else if (vpcOf(nodes, peer)?.id !== vpc?.id) add(sg.id, 'error', `${where}: "${peer.name}" is in another VPC.`);
+        } else if (!r.peer.trim()) {
+          add(sg.id, 'error', `${where}: the ${dir === 'ingress' ? 'source' : 'destination'} is empty.`);
+        } else if (!parseCidr(r.peer)) {
+          add(sg.id, 'error', `${where}: invalid CIDR "${r.peer}".`);
+        }
+      });
     }
+    if (!of('sg-attach').some((r) => r.from!.id === sg.id) && !isDefault.has(sg.id)) {
+      add(sg.id, 'warning', 'Not attached to anything: connect it to an EC2 instance, function, database or load balancer, or make it a VPC default.');
+    }
+  }
+  for (const vpc of nodes.filter((n) => n.type === 'vpc' && String(n.props.default_sg ?? ''))) {
+    const sg = byId.get(String(vpc.props.default_sg));
+    if (sg?.type !== 'sg' || vpcOf(nodes, sg)?.id !== vpc.id) add(vpc.id, 'error', 'The default security group must be a security group inside this VPC.');
+  }
+  for (const n of nodes.filter((x) => HAS_SG.has(x.type))) {
+    const groups = assigned.get(n.id) ?? [];
+    if (groups.length > 5) add(n.id, 'error', 'AWS allows at most 5 security groups on one resource.');
+  }
+  // A load balancer with its own security groups is only reachable if those groups let the listener in.
+  for (const alb of nodes.filter((n) => n.type === 'alb')) {
+    const groups = assigned.get(alb.id) ?? [];
+    if (groups.length === 0) continue;
+    const opens = (port: number) =>
+      groups.some((g) =>
+        sgRules(g, 'ingress').some((r) =>
+          expandRule(r)?.some((seg) => seg.from === undefined || (seg.protocol === 'tcp' && seg.from <= port && port <= seg.to!)),
+        ),
+      );
+    const port = Number(alb.props.listener_port) || 80;
+    if (!opens(port)) add(alb.id, 'warning', `Its security groups allow no inbound traffic on the listener port ${port}, so nothing can reach it.`);
   }
 
   /** True when `subnetId` is associated with a route table that has a NAT default route. */

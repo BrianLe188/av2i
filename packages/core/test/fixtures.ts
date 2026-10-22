@@ -1,4 +1,4 @@
-import { addNode, type GraphNode } from '../src';
+import { addNode, serializeRules, type GraphNode, type SgRule } from '../src';
 
 export const region = 'us-east-1';
 
@@ -37,3 +37,16 @@ export function scenario() {
   return { nodes, vpc, s1, s2, priv: s3sub.node, igw, rt, alb, ec2, rds, bucket };
 }
 
+
+/** A complete rule from a partial one: tcp from anywhere unless said otherwise. */
+export const rule = (r: Partial<SgRule> = {}): SgRule => ({ protocol: 'tcp', ports: '', peer: '0.0.0.0/0', description: '', ...r });
+
+/** Node props holding these inbound rules. */
+export const ingressProps = (...rules: Partial<SgRule>[]) => ({ ingress_rules: serializeRules(rules.map(rule)) });
+
+/** Adds a security group to `nodes` inside `vpcId`, with the given inbound rules and name. */
+export function addSg(nodes: GraphNode[], vpcId: string, name: string, rules: Partial<SgRule>[] = [], extra: Record<string, string | number | boolean> = {}) {
+  const r = addNode(nodes, 'sg', { region, parentId: vpcId });
+  const sg = { ...r.node, name, props: { ...r.node.props, ...ingressProps(...rules), ...extra } };
+  return { sg, nodes: r.nodes.map((n) => (n.id === sg.id ? sg : n)) };
+}

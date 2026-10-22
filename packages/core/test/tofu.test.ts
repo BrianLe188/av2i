@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { addNode, generateTerraform, TEMPLATES, type Graph } from '../src';
-import { edge, region, scenario } from './fixtures';
+import { addSg, edge, ingressProps, region, scenario } from './fixtures';
 
 /**
  * Runs the generated HCL through `tofu init` + `tofu validate` in Docker (no AWS credentials needed).
@@ -98,9 +98,33 @@ describe.skipIf(!process.env.TOFU_VALIDATE)('tofu validate', () => {
     'security-group': (() => {
       const r = addNode(k.nodes, 'sg', { region, parentId: k.vpc.id });
       const nodes = r.nodes.map((n) =>
-        n.id === r.node.id ? { ...n, props: { ...n.props, ingress_cidr: '10.0.0.0/8', ingress_ports: '22, 8000-8100' } } : n,
+        n.id === r.node.id ? { ...n, props: { ...n.props, ...ingressProps({ ports: '22, 8000-8100', peer: '10.0.0.0/8', description: 'office' }, { protocol: 'udp', ports: '53', peer: '10.0.0.0/16' }, { protocol: 'icmp', peer: '10.0.0.0/16' }, { protocol: 'all', peer: '10.2.0.0/16' }) } } : n,
       );
       return { nodes, edges: [edge(r.node.id, k.ec2.id), edge(r.node.id, k.rds.id), edge(r.node.id, k.alb.id)] };
+    })(),
+    'shared-groups': (() => {
+      const second = addNode(k.nodes, 'ec2', { region, parentId: k.s2.id });
+      const app = addSg(second.nodes, k.vpc.id, 'app', [{ ports: '8080', peer: '10.0.0.0/16' }]);
+      const web = addSg(app.nodes, k.vpc.id, 'web', [{ ports: '80, 443' }]);
+      const data = addSg(web.nodes, k.vpc.id, 'data', []);
+      return {
+        nodes: data.nodes,
+        edges: [
+          edge(web.sg.id, k.alb.id),
+          edge(app.sg.id, k.ec2.id),
+          edge(app.sg.id, second.node.id),
+          edge(data.sg.id, k.rds.id),
+          edge(k.alb.id, k.ec2.id),
+          edge(k.alb.id, second.node.id),
+          edge(k.ec2.id, k.rds.id),
+          edge(second.node.id, k.rds.id),
+        ],
+      };
+    })(),
+    'vpc-default-group': (() => {
+      const shared = addSg(k.nodes, k.vpc.id, 'shared', [{ ports: '80', peer: '0.0.0.0/0' }, { ports: '5432', peer: '10.0.0.0/16' }]);
+      const nodes = shared.nodes.map((n) => (n.id === k.vpc.id ? { ...n, props: { ...n.props, default_sg: shared.sg.id } } : n));
+      return { nodes, edges: [edge(k.alb.id, k.ec2.id), edge(k.ec2.id, k.rds.id)] };
     })(),
     'ecs-behind-alb': (() => {
       const r = addNode(k.nodes, 'ecs', { region, parentId: k.s1.id });

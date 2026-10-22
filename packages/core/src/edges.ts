@@ -47,7 +47,8 @@ export const EDGE_INFO: Record<EdgeKind, { title: string; generates: string }> =
   },
   'sg-attach': {
     title: 'Security group attachment',
-    generates: 'Adds this security group (and its rules) to the resource, next to the one av2i manages for it.',
+    generates:
+      'The resource uses this security group (and its rules) instead of a group of its own. Attach one group to several resources to share it.',
   },
   'cdn-origin': {
     title: 'CloudFront origin',
@@ -65,7 +66,7 @@ export const EDGE_INFO: Record<EdgeKind, { title: string; generates: string }> =
   'db-access': {
     title: 'Database access',
     generates:
-      'A security group rule on the database allowing its port from the instance\'s or function\'s security group.',
+      'A rule on the database\'s security group allowing its port from the instance\'s or function\'s security group. With drawn groups it goes on the first group of each side.',
   },
   forward: {
     title: 'Load balancer target',

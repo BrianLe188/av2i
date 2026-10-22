@@ -1,6 +1,8 @@
+import { DB_PORTS } from './edges';
 import { asBool, asNumber, asString, parseHcl, refOf, refsIn, type Block, type Expr } from './hcl';
 import { addNode, autoResize, newId } from './graph';
 import { REGIONS } from './resources';
+import { parseRules, peerOfSg, serializeRules, type SgProtocol, type SgRule } from './sg-rules';
 import type { Graph, GraphEdge, GraphNode, PropValue, ResourceType } from './types';
 
 export interface ImportReport {
@@ -102,27 +104,62 @@ export function importTerraform(source: string, opts: { region?: string } = {}):
   for (const b of of('aws_nat_gateway')) place(b, 'nat', refOf(b.attrs.subnet_id), {});
   for (const b of of('aws_route_table')) place(b, 'route_table', refOf(b.attrs.vpc_id), {});
 
-  // Explicit security groups: the ones av2i did not create itself.
-  const sgRules = [...of('aws_vpc_security_group_ingress_rule')];
+  // Explicit security groups: the ones av2i did not create itself, with every rule written for them.
+  const PROTOCOLS: Record<string, SgProtocol> = { tcp: 'tcp', udp: 'udp', icmp: 'icmp', '-1': 'all', '6': 'tcp', '17': 'udp', '1': 'icmp' };
+  const protocolOf = (e: Expr | undefined) => {
+    const v = asString(e) ?? (asNumber(e) !== undefined ? String(asNumber(e)) : undefined);
+    return v === undefined ? undefined : PROTOCOLS[v];
+  };
+  const portsOf = (protocol: SgProtocol, from: number | undefined, to: number | undefined) => {
+    if (protocol !== 'tcp' && protocol !== 'udp') return '';
+    if (from === undefined || (from === 0 && to === 65535)) return '';
+    return to === undefined || to === from ? `${from}` : `${from}-${to}`;
+  };
+  const strings = (e: Expr | undefined) => (e?.kind === 'list' ? e.items.map((i) => asString(i)).filter((x): x is string => !!x) : []);
+  const sgRuleBlocks = {
+    ingress: of('aws_vpc_security_group_ingress_rule'),
+    egress: of('aws_vpc_security_group_egress_rule'),
+  };
+  const importedSgs: GraphNode[] = [];
   for (const b of of('aws_security_group')) {
     if ((asString(b.attrs.description) ?? '').startsWith('Managed by av2i')) continue;
-    const cidrs = new Set<string>();
-    const ports: string[] = [];
-    const take = (cidr: string | undefined, from: number | undefined, to: number | undefined) => {
-      if (!cidr || from === undefined) return;
-      cidrs.add(cidr);
-      ports.push(to === undefined || to === from ? `${from}` : `${from}-${to}`);
+    const ownKey = `aws_security_group.${b.labels[1]}`;
+    const rules = { ingress: [] as SgRule[], egress: [] as SgRule[] };
+    const addRule = (dir: 'ingress' | 'egress', protocol: SgProtocol | undefined, from: number | undefined, to: number | undefined, peer: string | undefined, text: string | undefined) => {
+      if (!protocol || !peer) return;
+      rules[dir].push({ protocol, ports: portsOf(protocol, from, to), peer, description: text ?? '' });
     };
-    for (const r of sgRules.filter((x) => key(refOf(x.attrs.security_group_id)) === `aws_security_group.${b.labels[1]}`)) {
-      take(asString(r.attrs.cidr_ipv4), asNumber(r.attrs.from_port), asNumber(r.attrs.to_port));
+    let skippedPeers = 0;
+    for (const dir of ['ingress', 'egress'] as const) {
+      for (const r of sgRuleBlocks[dir].filter((x) => key(refOf(x.attrs.security_group_id)) === ownKey)) {
+        const sgPeer = refOf(r.attrs.referenced_security_group_id);
+        const peer = asString(r.attrs.cidr_ipv4) ?? (sgPeer ? `ref:${key(sgPeer)}` : undefined);
+        if (!peer) skippedPeers++;
+        addRule(dir, protocolOf(r.attrs.ip_protocol), asNumber(r.attrs.from_port), asNumber(r.attrs.to_port), peer, asString(r.attrs.description));
+      }
+      for (const blk of b.blocks.filter((x) => x.type === dir)) {
+        const protocol = protocolOf(blk.attrs.protocol);
+        const peers = [...strings(blk.attrs.cidr_blocks), ...(blk.attrs.security_groups?.kind === 'list' ? blk.attrs.security_groups.items.map((i) => refOf(i)).filter((r) => r).map((r) => `ref:${key(r)}`) : [])];
+        if (peers.length === 0) skippedPeers++;
+        for (const peer of peers) addRule(dir, protocol, asNumber(blk.attrs.from_port), asNumber(blk.attrs.to_port), peer, asString(blk.attrs.description));
+      }
     }
-    for (const ing of b.blocks.filter((x) => x.type === 'ingress')) {
-      const list = ing.attrs.cidr_blocks;
-      take(list?.kind === 'list' ? asString(list.items[0]) : undefined, asNumber(ing.attrs.from_port), asNumber(ing.attrs.to_port));
-    }
-    if (cidrs.size > 1) warn(`${b.labels[1]} allows several source ranges; only ${[...cidrs][0]} was kept.`);
-    place(b, 'sg', refOf(b.attrs.vpc_id), { ingress_cidr: [...cidrs][0] ?? '', ingress_ports: ports.join(', ') });
+    if (skippedPeers > 0) warn(`${b.labels[1]}: ${skippedPeers} rule(s) with IPv6, prefix list or unrecognised sources were skipped.`);
+    const node = place(b, 'sg', refOf(b.attrs.vpc_id), { ingress_rules: serializeRules(rules.ingress), egress_rules: serializeRules(rules.egress) });
+    if (node) importedSgs.push(node);
   }
+  // Rules that name another group: point them at its canvas node. Groups av2i manages per resource aren't on the canvas, so rules naming them are dropped.
+  const resolvePeers = (rules: SgRule[]) =>
+    rules.flatMap((r) => {
+      if (!r.peer.startsWith('ref:')) return [r];
+      const target = idOf.get(r.peer.slice(4));
+      return target ? [{ ...r, peer: peerOfSg(target) }] : [];
+    });
+  nodes = nodes.map((n) =>
+    importedSgs.some((g) => g.id === n.id)
+      ? { ...n, props: { ...n.props, ingress_rules: serializeRules(resolvePeers(parseRules(n.props.ingress_rules))), egress_rules: serializeRules(resolvePeers(parseRules(n.props.egress_rules))) } }
+      : n,
+  );
 
   // --- Compute and data --------------------------------------------------------
   for (const b of of('aws_instance')) {
@@ -258,7 +295,14 @@ export function importTerraform(source: string, opts: { region?: string } = {}):
 
   // Database access: an ingress rule on the database's group that names another group.
   for (const r of of('aws_vpc_security_group_ingress_rule')) {
-    const targets = (sgOwners.get(key(refOf(r.attrs.security_group_id))) ?? []).filter((n) => nodes.find((x) => x.id === n)?.type === 'rds');
+    const from = asNumber(r.attrs.from_port);
+    const to = asNumber(r.attrs.to_port);
+    const allTraffic = asString(r.attrs.ip_protocol) === '-1';
+    const targets = (sgOwners.get(key(refOf(r.attrs.security_group_id))) ?? []).filter((n) => {
+      const db = nodes.find((x) => x.id === n);
+      const port = DB_PORTS[String(db?.props.engine)] ?? 5432;
+      return db?.type === 'rds' && (allTraffic || (from !== undefined && to !== undefined && from <= port && port <= to));
+    });
     const sources = (sgOwners.get(key(refOf(r.attrs.referenced_security_group_id))) ?? []).filter((n) =>
       ['ec2', 'lambda', 'ecs'].includes(nodes.find((x) => x.id === n)?.type ?? ''),
     );

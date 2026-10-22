@@ -1,6 +1,7 @@
 import { DB_PORTS, forwardPort, resolveEdges, type ResolvedEdge } from './edges';
 import { vpcOf } from './graph';
-import { parsePorts } from './ports';
+import { HAS_SG, sgAssignments } from './sg';
+import { expandRule, sgIdOfPeer, sgRules, type RuleSegment, type SgDirection } from './sg-rules';
 import type { Graph, GraphNode } from './types';
 
 type Attr = [key: string, value: string] | null;
@@ -45,8 +46,6 @@ class Labels {
     return this.byId.get(node.id)!;
   }
 }
-
-const HAS_SG = new Set(['ec2', 'lambda', 'ecs', 'rds', 'alb']);
 
 /** AWS rejects security group names that start with "sg-" (it reserves them for ids). */
 const sgName = (n: GraphNode) => {
@@ -104,9 +103,13 @@ export function generateTerraform(graph: Graph, opts: { region: string }): Recor
   const vpcs = ofType('vpc');
   const subnets = ofType('subnet');
   const sgRef = (n: GraphNode) => `aws_security_group.${L(n)}.id`;
-  /** The security group av2i manages for a resource, plus any explicit security groups attached to it. */
-  const sgList = (n: GraphNode) =>
-    `[${[sgRef(n), ...edgesOf('sg-attach').filter((r) => r.to.id === n.id).map((r) => sgRef(r.from))].join(', ')}]`;
+  const assigned = sgAssignments(nodes, resolved);
+  /** Explicit groups (drawn, or the VPC default) a resource uses; empty means av2i manages one just for it. */
+  const explicitOf = (n: GraphNode) => assigned.get(n.id) ?? [];
+  const refsOf = (n: GraphNode) => (explicitOf(n).length > 0 ? explicitOf(n).map(sgRef) : [sgRef(n)]);
+  const sgList = (n: GraphNode) => `[${refsOf(n).join(', ')}]`;
+  /** Connection rules go on one group of the receiving resource and name one group of the sending one; any group of an interface grants access. */
+  const primaryRef = (n: GraphNode) => refsOf(n)[0];
 
   // --- Network --------------------------------------------------------------
   for (const vpc of vpcs) {
@@ -201,8 +204,9 @@ export function generateTerraform(graph: Graph, opts: { region: string }): Recor
     );
   }
 
-  // --- Security groups: one per instance / database / load balancer ---------
-  const sgOwners = nodes.filter((n) => HAS_SG.has(n.type) && vpcOf(nodes, n));
+  // --- Security groups ------------------------------------------------------
+  // A resource with no explicit group gets one of its own; otherwise it uses the groups drawn for it.
+  const sgOwners = nodes.filter((n) => HAS_SG.has(n.type) && vpcOf(nodes, n) && explicitOf(n).length === 0);
   for (const n of sgOwners) {
     add(
       `sg.${n.id}`,
@@ -215,39 +219,41 @@ export function generateTerraform(graph: Graph, opts: { region: string }): Recor
     );
   }
 
-  const ingress = (
+  type Peer = { sgRef: string } | { cidr: string };
+  /** Rules are deduplicated by content: AWS rejects the same rule twice, e.g. when resources share a group. */
+  const ruleKeys = new Set<string>();
+  const rule = (
+    dir: SgDirection,
     label: string,
-    owner: GraphNode,
-    source: { sg: GraphNode } | { cidr: string },
-    port: number,
-    description: string,
-  ) =>
+    ownerRef: string,
+    peer: Peer,
+    seg: RuleSegment,
+    description?: string,
+  ) => {
+    const key = [dir, ownerRef, seg.protocol, seg.from, seg.to, 'sgRef' in peer ? peer.sgRef : peer.cidr].join('|');
+    if (ruleKeys.has(key)) return;
+    ruleKeys.add(key);
     add(
-      `rule.${label}`,
-      block(`resource "aws_vpc_security_group_ingress_rule" "${label}"`, [
-        ['security_group_id', sgRef(owner)],
-        'sg' in source
-          ? ['referenced_security_group_id', sgRef(source.sg)]
-          : ['cidr_ipv4', str(source.cidr)],
-        ['ip_protocol', '"tcp"'],
-        ['from_port', String(port)],
-        ['to_port', String(port)],
-        ['description', str(description)],
+      `rule.${dir}.${label}`,
+      block(`resource "aws_vpc_security_group_${dir}_rule" "${label}"`, [
+        ['security_group_id', ownerRef],
+        'sgRef' in peer ? ['referenced_security_group_id', peer.sgRef] : ['cidr_ipv4', str(peer.cidr)],
+        ['ip_protocol', str(seg.protocol)],
+        seg.from === undefined ? null : ['from_port', String(seg.from)],
+        seg.to === undefined ? null : ['to_port', String(seg.to)],
+        description ? ['description', str(description)] : null,
       ]),
     );
+  };
+  const tcp = (port: number): RuleSegment => ({ protocol: 'tcp', from: port, to: port });
+  const allTraffic: RuleSegment = { protocol: '-1' };
 
-  for (const n of sgOwners.filter((x) => x.type === 'ec2' || x.type === 'lambda' || x.type === 'ecs' || x.type === 'alb')) {
-    add(
-      `rule.${L(n)}_egress`,
-      block(`resource "aws_vpc_security_group_egress_rule" "${L(n)}_all"`, [
-        ['security_group_id', sgRef(n)],
-        ['ip_protocol', '"-1"'],
-        ['cidr_ipv4', '"0.0.0.0/0"'],
-      ]),
-    );
+  for (const n of sgOwners.filter((x) => x.type !== 'rds')) {
+    rule('egress', `${L(n)}_all`, sgRef(n), { cidr: '0.0.0.0/0' }, allTraffic);
   }
 
-  // Explicit security groups: their own rules, from the node's fields.
+  // Explicit security groups: their own rules, one Terraform rule per port range.
+  const spanOf = (seg: RuleSegment) => (seg.from === undefined || seg.from < 0 ? 'all' : seg.from === seg.to ? `${seg.from}` : `${seg.from}_${seg.to}`);
   for (const sg of ofType('sg')) {
     const vpc = vpcOf(nodes, sg);
     if (!vpc) continue;
@@ -261,49 +267,43 @@ export function generateTerraform(graph: Graph, opts: { region: string }): Recor
         tags(sg.name),
       ]),
     );
-    const cidr = String(sg.props.ingress_cidr).trim();
-    for (const range of cidr ? (parsePorts(String(sg.props.ingress_ports)) ?? []) : []) {
-      const span = range.from === range.to ? `${range.from}` : `${range.from}_${range.to}`;
-      add(
-        `rule.${L(sg)}_in_${span}`,
-        block(`resource "aws_vpc_security_group_ingress_rule" "${L(sg)}_${span}"`, [
-          ['security_group_id', sgRef(sg)],
-          ['cidr_ipv4', str(cidr)],
-          ['ip_protocol', '"tcp"'],
-          ['from_port', String(range.from)],
-          ['to_port', String(range.to)],
-        ]),
-      );
-    }
-    if (sg.props.egress_all !== false) {
-      add(
-        `rule.${L(sg)}_egress`,
-        block(`resource "aws_vpc_security_group_egress_rule" "${L(sg)}_all"`, [
-          ['security_group_id', sgRef(sg)],
-          ['ip_protocol', '"-1"'],
-          ['cidr_ipv4', '"0.0.0.0/0"'],
-        ]),
-      );
+    for (const dir of ['ingress', 'egress'] as const) {
+      for (const r of sgRules(sg, dir)) {
+        const segments = expandRule(r);
+        const peerId = sgIdOfPeer(r.peer);
+        const peerNode = peerId ? byId.get(peerId) : undefined;
+        const cidr = r.peer.trim();
+        if (!segments || (peerId ? peerNode?.type !== 'sg' || vpcOf(nodes, peerNode)?.id !== vpc.id : !cidr)) continue;
+        const peer: Peer = peerNode ? { sgRef: sgRef(peerNode) } : { cidr };
+        const peerLabel = peerNode ? L(peerNode) : cidr.replace(/[^a-zA-Z0-9]/g, '_');
+        for (const seg of segments) {
+          const proto = seg.protocol === '-1' ? 'all' : seg.protocol;
+          rule(dir, `${L(sg)}_${dir === 'ingress' ? 'in' : 'out'}_${proto}_${spanOf(seg)}_${peerLabel}`, sgRef(sg), peer, seg, r.description.trim());
+        }
+      }
     }
   }
 
+  // Rules that connections imply.
   for (const r of edgesOf('db-access')) {
     const port = DB_PORTS[String(r.to.props.engine)] ?? 5432;
-    ingress(`${L(r.to)}_from_${L(r.from)}`, r.to, { sg: r.from }, port, `${r.from.name} to ${r.to.name}`);
+    rule('ingress', `${L(r.to)}_from_${L(r.from)}`, primaryRef(r.to), { sgRef: primaryRef(r.from) }, tcp(port), `${r.from.name} to ${r.to.name}`);
   }
-  for (const alb of ofType('alb')) {
+  // The listener is opened to the world (or the VPC) only on a group av2i manages; a drawn group says for itself who may connect.
+  for (const alb of ofType('alb').filter((x) => explicitOf(x).length === 0)) {
     const vpc = vpcOf(nodes, alb);
     if (!vpc) continue;
-    const source = alb.props.internal ? { cidr: String(vpc.props.cidr_block) } : { cidr: '0.0.0.0/0' };
-    ingress(`${L(alb)}_listener`, alb, source, Number(alb.props.listener_port) || 80, 'Listener');
-    if (redirectsHttp(alb)) ingress(`${L(alb)}_http_redirect`, alb, source, 80, 'HTTP redirect');
+    const peer: Peer = { cidr: alb.props.internal ? String(vpc.props.cidr_block) : '0.0.0.0/0' };
+    rule('ingress', `${L(alb)}_listener`, sgRef(alb), peer, tcp(Number(alb.props.listener_port) || 80), 'Listener');
+    if (redirectsHttp(alb)) rule('ingress', `${L(alb)}_http_redirect`, sgRef(alb), peer, tcp(80), 'HTTP redirect');
   }
   for (const r of edgesOf('forward')) {
-    ingress(
+    rule(
+      'ingress',
       `${L(r.to)}_from_${L(r.from)}`,
-      r.to,
-      { sg: r.from },
-      forwardPort(r.from, r.to),
+      primaryRef(r.to),
+      { sgRef: primaryRef(r.from) },
+      tcp(forwardPort(r.from, r.to)),
       `Traffic from ${r.from.name}`,
     );
   }

@@ -3,15 +3,50 @@ import {
   EDGE_INFO,
   RESOURCES,
   S3_ACCESS_LEVELS,
+  vpcOf,
   type FieldDef,
+  type GraphNode,
   type Issue,
   type PropValue,
 } from '@av2i/core';
 import type { AlignMode } from '@av2i/core';
 import { useStore } from '../store';
+import { RulesEditor } from './RulesEditor';
 
-function Field({ def, value, onChange }: { def: FieldDef; value: PropValue; onChange: (v: PropValue) => void }) {
+function Field({
+  def,
+  value,
+  node,
+  nodes,
+  onChange,
+}: {
+  def: FieldDef;
+  value: PropValue;
+  node: GraphNode;
+  nodes: GraphNode[];
+  onChange: (v: PropValue) => void;
+}) {
   switch (def.type) {
+    case 'rules':
+      return <RulesEditor def={def} node={node} nodes={nodes} value={String(value)} onChange={onChange} />;
+    case 'ref': {
+      // Another node of `refType` that lives in the same VPC as this one (or is this VPC's child).
+      const choices = nodes.filter((n) => n.type === def.refType && vpcOf(nodes, n)?.id === (node.type === 'vpc' ? node.id : vpcOf(nodes, node)?.id));
+      return (
+        <label className="field">
+          <span>{def.label}</span>
+          <select value={String(value)} onChange={(e) => onChange(e.target.value)}>
+            <option value="">None: one per resource</option>
+            {choices.map((n) => (
+              <option key={n.id} value={n.id}>
+                {n.name}
+              </option>
+            ))}
+          </select>
+          {def.hint && <small>{def.hint}</small>}
+        </label>
+      );
+    }
     case 'boolean':
       return (
         <label className="field check">
@@ -197,6 +232,8 @@ export function PropertiesPanel({ issues }: { issues: Issue[] }) {
         <Field
           key={f.key}
           def={f}
+          node={node}
+          nodes={nodes}
           value={node.props[f.key] ?? f.default}
           onChange={(v) => updateNode(node.id, { props: { [f.key]: v } })}
         />

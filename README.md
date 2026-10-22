@@ -36,8 +36,14 @@ For PostgreSQL: `npm run db:up` and set `DATABASE_URL=postgres://av2i:av2i@local
 ## Sharing, import and the database
 
 - **Share:** the editor's Share button creates a secret read-only link (`/s/<token>`): viewers see the canvas, Terraform, issues and cost without signing in and cannot edit. Stop sharing revokes it.
-- **Import Terraform:** on the projects page. Paste or pick `.tf` files; av2i draws the AWS resources it understands and lists what it skipped. It reads literal values only (no variables, modules, `count`, `for_each`), puts Lambda functions outside a VPC aside, and keeps a security group's first source CIDR only. Round-tripping av2i's own output reproduces the same resources and connections (tested), except av2i's automatic per-resource security groups, which are regenerated.
+- **Import Terraform:** on the projects page. Paste or pick `.tf` files; av2i draws the AWS resources it understands and lists what it skipped. It reads literal values only (no variables, modules, `count`, `for_each`), and puts Lambda functions outside a VPC aside. Security groups come in with all their rules (IPv6 and prefix-list sources are skipped). Round-tripping av2i's own output reproduces the same resources and connections (tested), except av2i's automatic per-resource security groups, which are regenerated.
 - **Migrations:** the schema changes only through TypeORM migrations in `apps/api/src/migrations` (run on startup). After changing an entity: `npm run migration:generate -w @av2i/api -- src/migrations/Name`, then add the class to `src/database.ts`. A database created before migrations existed is adopted as is. `npm test -w @av2i/api` runs end-to-end API tests (auth, ownership, sharing) against a temporary database.
+
+## Security groups
+
+- **Rules:** a Security group node has any number of inbound and outbound rules. Each has a protocol (TCP, UDP, ICMP or all traffic), ports for TCP/UDP (`22, 443, 8000-8100`, empty = every port), a source or destination (anywhere, a CIDR, or another security group on the canvas) and an optional description. Terraform gets one `aws_vpc_security_group_*_rule` per port range. Groups saved with the older single-rule fields are read as the equivalent rules.
+- **How many groups AWS gets:** a resource with no group attached gets one of its own (`Managed by av2i for …`). Connect a Security group node to it and that group replaces the managed one; connect the same group to several resources and they share it (it is created once, and identical rules are emitted once because AWS rejects duplicates). A VPC's *Default security group* field does the same for every resource in the VPC that has none attached.
+- **Connection rules with drawn groups:** database access and load balancer targets add their rule to the first group of the receiving resource, naming the first group of the sending one, unless the group already has that exact rule. The load balancer's listener is opened to the internet automatically only on a managed group; with a drawn group, its own rules decide (the Issues tab warns when none allows the listener port).
 
 ## Canvas shortcuts
 

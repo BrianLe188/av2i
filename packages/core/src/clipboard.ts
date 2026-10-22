@@ -1,5 +1,6 @@
 import { nextSubnetCidr } from './cidr';
 import { autoResize, isDescendant, newId } from './graph';
+import { remapReferences } from './sg-rules';
 import type { Graph, GraphEdge, GraphNode, Point } from './types';
 
 /** Selected nodes, everything nested inside them, and the edges between those nodes. */
@@ -73,10 +74,9 @@ export function pasteFragment(graph: Graph, fragment: Fragment, offset: Point): 
       if (next) props.cidr_block = next;
     }
     added.push({
-      ...n,
+      ...remapReferences({ ...n, props }, idMap),
       id,
       name,
-      props,
       parentId: isRoot ? n.parentId : idMap.get(n.parentId!),
       position: isRoot ? { x: n.position.x + offset.x, y: n.position.y + offset.y } : n.position,
     });

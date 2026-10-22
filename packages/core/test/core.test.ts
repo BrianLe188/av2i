@@ -19,9 +19,12 @@ import {
   pasteFragment,
   TEMPLATES,
   validateGraph,
+  parseRules,
+  sgRules,
+  serializeRules,
   type GraphNode,
 } from '../src';
-import { build, edge, region, scenario } from './fixtures';
+import { addSg, build, edge, ingressProps, region, rule, scenario } from './fixtures';
 
 describe('cidr', () => {
   it('parses and rejects', () => {
@@ -430,37 +433,206 @@ describe('lambda', () => {
 });
 
 describe('explicit security group', () => {
-  function withSg(patch: Record<string, string | boolean> = {}) {
+  const office = [{ ports: '22, 8000-8100', peer: '10.0.0.0/8' }];
+  function withSg(rules: Partial<Parameters<typeof rule>[0] & object>[] = office) {
     const k = scenario();
-    const r = addNode(k.nodes, 'sg', { region, parentId: k.vpc.id });
-    const sg = { ...r.node, name: 'web-access', props: { ...r.node.props, ingress_cidr: '10.0.0.0/8', ingress_ports: '22, 8000-8100', ...patch } };
-    return { ...k, sg, nodes: r.nodes.map((n) => (n.id === sg.id ? sg : n)) };
+    const r = addSg(k.nodes, k.vpc.id, 'web-access', rules);
+    return { ...k, sg: r.sg, nodes: r.nodes };
   }
+  const tf = (k: { nodes: GraphNode[] }, edges: ReturnType<typeof edge>[] = []) =>
+    generateTerraform({ nodes: k.nodes, edges }, { region })['main.tf'];
 
-  it('creates the group and its rules, and attaches it next to the managed one', () => {
+  it('creates the group and one rule per port range, and uses it instead of a managed group', () => {
     const k = withSg();
-    const main = generateTerraform({ nodes: k.nodes, edges: [edge(k.sg.id, k.ec2.id)] }, { region })['main.tf'];
+    const main = tf(k, [edge(k.sg.id, k.ec2.id)]);
     expect(main).toContain('resource "aws_security_group" "web_access"');
-    expect(main).toContain('"web_access_22"');
-    expect(main).toContain('"web_access_8000_8100"');
+    expect(main).toContain('"web_access_in_tcp_22_10_0_0_0_8"');
+    expect(main).toContain('"web_access_in_tcp_8000_8100_10_0_0_0_8"');
     expect(main).toMatch(/from_port\s+= 8000/);
-    expect(main).toMatch(/vpc_security_group_ids = \[aws_security_group\.ec2_1\.id, aws_security_group\.web_access\.id\]/);
+    expect(main).toMatch(/vpc_security_group_ids = \[aws_security_group\.web_access\.id\]/);
+    expect(main).not.toContain('resource "aws_security_group" "ec2_1"');
+  });
+
+  it('keeps the managed group for resources with nothing attached', () => {
+    const k = withSg();
+    const main = tf(k, [edge(k.sg.id, k.ec2.id)]);
+    expect(main).toContain('resource "aws_security_group" "rds_1"');
+  });
+
+  it('supports several rules with different sources, protocols and descriptions', () => {
+    const k = withSg([
+      { ports: '22', peer: '203.0.113.0/24', description: 'office' },
+      { ports: '443', peer: '0.0.0.0/0' },
+      { protocol: 'udp', ports: '53', peer: '10.0.0.0/16' },
+      { protocol: 'icmp', peer: '10.0.0.0/16' },
+      { protocol: 'all', peer: '10.1.0.0/16' },
+    ]);
+    const main = tf(k, [edge(k.sg.id, k.ec2.id)]);
+    expect(main).toContain('"web_access_in_tcp_22_203_0_113_0_24"');
+    expect(main).toContain('"web_access_in_tcp_443_0_0_0_0_0"');
+    expect(main).toContain('"web_access_in_udp_53_10_0_0_0_16"');
+    expect(main).toMatch(/ip_protocol\s+= "icmp"\n\s+from_port\s+= -1/);
+    const all = main.slice(main.indexOf('"web_access_in_all_all_'));
+    expect(all.slice(0, all.indexOf('}'))).not.toContain('from_port');
+    expect(main).toContain('description       = "office"');
+  });
+
+  it('writes outbound rules, and none when the list is empty', () => {
+    const k = withSg();
+    expect(tf(k)).toContain('"web_access_out_all_all_0_0_0_0_0"');
+    const closed = { ...k, nodes: k.nodes.map((n) => (n.id === k.sg.id ? { ...n, props: { ...n.props, egress_rules: '[]' } } : n)) };
+    expect(tf(closed)).not.toContain('web_access_out_');
+  });
+
+  it('lets a group name another group as the source', () => {
+    const k = withSg([]);
+    const db = addSg(k.nodes, k.vpc.id, 'data', []);
+    const nodes = db.nodes.map((n) =>
+      n.id === db.sg.id ? { ...n, props: { ...n.props, ...ingressProps({ ports: '5432', peer: `sg:${k.sg.id}` }) } } : n,
+    );
+    const main = tf({ nodes });
+    expect(main).toContain('"data_in_tcp_5432_web_access"');
+    expect(main).toMatch(/referenced_security_group_id = aws_security_group\.web_access\.id/);
+    expect(validateGraph({ nodes, edges: [] }).filter((i) => i.severity === 'error')).toEqual([]);
+  });
+
+  it('flags rules that name a group in another VPC or a missing one', () => {
+    const k = withSg([]);
+    const vpc2 = addNode(k.nodes, 'vpc', { region, position: { x: 700, y: 0 } });
+    const other = addSg(vpc2.nodes, vpc2.node.id, 'elsewhere', []);
+    const mine = addSg(other.nodes, k.vpc.id, 'mine', [{ ports: '80', peer: `sg:${other.sg.id}` }, { ports: '80', peer: 'sg:gone' }]);
+    const errors = validateGraph({ nodes: mine.nodes, edges: [] }).filter((i) => i.severity === 'error').map((i) => i.message);
+    expect(errors.some((m) => /another VPC/.test(m))).toBe(true);
+    expect(errors.some((m) => /no longer exists/.test(m))).toBe(true);
+    expect(tf({ nodes: mine.nodes })).not.toContain('"mine_in_tcp_80_elsewhere"');
   });
 
   it('never starts a security group name with "sg-", which AWS reserves', () => {
     const k = withSg();
-    const main = generateTerraform({ nodes: k.nodes.map((n) => (n.id === k.sg.id ? { ...n, name: 'sg-1' } : n)), edges: [] }, { region })['main.tf'];
+    const main = tf({ nodes: k.nodes.map((n) => (n.id === k.sg.id ? { ...n, name: 'sg-1' } : n)) });
     expect(main).toContain('name        = "av2i-sg-1-sg"');
   });
 
   it('validates ports/CIDR and warns about world-open SSH and unattached groups', () => {
     const k = withSg();
     expect(validateGraph({ nodes: k.nodes, edges: [] }).some((i) => /Not attached/.test(i.message))).toBe(true);
-    const world = withSg({ ingress_cidr: '0.0.0.0/0' });
+    const world = withSg([{ ports: '22', peer: '0.0.0.0/0' }]);
     expect(validateGraph({ nodes: world.nodes, edges: [] }).some((i) => /SSH\/RDP/.test(i.message))).toBe(true);
-    const bad = withSg({ ingress_ports: '99999', ingress_cidr: 'nope' });
+    const bad = withSg([{ ports: '99999', peer: 'nope' }, { ports: '80', peer: '' }]);
     const errors = validateGraph({ nodes: bad.nodes, edges: [] }).filter((i) => i.severity === 'error');
-    expect(errors).toHaveLength(2);
+    expect(errors.map((i) => i.message).join('\n')).toMatch(/Inbound rule 1: ports[\s\S]*Inbound rule 1: invalid CIDR[\s\S]*Inbound rule 2: the source is empty/);
+  });
+
+  it('reads groups saved with the old single-rule props', () => {
+    const k = scenario();
+    const r = addNode(k.nodes, 'sg', { region, parentId: k.vpc.id });
+    const { ingress_rules, egress_rules, ...rest } = r.node.props;
+    const legacy = { ...r.node, props: { ...rest, ingress_cidr: '10.0.0.0/8', ingress_ports: '22, 8000-8100', egress_all: false } };
+    expect(sgRules(legacy, 'ingress')).toEqual([{ protocol: 'tcp', ports: '22, 8000-8100', peer: '10.0.0.0/8', description: '' }]);
+    expect(sgRules(legacy, 'egress')).toEqual([]);
+    expect(sgRules({ ...legacy, props: { ...rest } }, 'egress')).toHaveLength(1);
+  });
+
+  it('drops rules that name a deleted group, and survives copy/paste of groups that name each other', () => {
+    const k = withSg([]);
+    const b = addSg(k.nodes, k.vpc.id, 'b', [{ ports: '80', peer: `sg:${k.sg.id}` }]);
+    const after = removeNode({ nodes: b.nodes, edges: [] }, k.sg.id);
+    expect(sgRules(after.nodes.find((n) => n.id === b.sg.id)!, 'ingress')).toEqual([]);
+
+    const pair = addSg(b.nodes, k.vpc.id, 'c', [{ ports: '80', peer: `sg:${b.sg.id}` }]);
+    const graph = { nodes: pair.nodes, edges: [] };
+    const pasted = pasteFragment(graph, copySelection(graph, [b.sg.id, pair.sg.id]), { x: 20, y: 20 });
+    const copies = pasted.graph.nodes.filter((n) => n.type === 'sg' && /-copy/.test(n.name));
+    const copyB = copies.find((n) => n.name.startsWith('b'))!;
+    const copyC = copies.find((n) => n.name.startsWith('c'))!;
+    expect(sgRules(copyC, 'ingress')[0].peer).toBe(`sg:${copyB.id}`);
+  });
+});
+
+describe('shared and default security groups', () => {
+  const tf = (nodes: GraphNode[], edges: ReturnType<typeof edge>[]) => generateTerraform({ nodes, edges }, { region })['main.tf'];
+
+  it('one group on several resources is created once, with its rules once', () => {
+    const k = scenario();
+    const second = addNode(k.nodes, 'ec2', { region, parentId: k.s2.id });
+    const web = addSg(second.nodes, k.vpc.id, 'app', [{ ports: '8080', peer: '10.0.0.0/16' }]);
+    const main = tf(web.nodes, [edge(web.sg.id, k.ec2.id), edge(web.sg.id, second.node.id)]);
+    expect(main.match(/resource "aws_security_group" "app"/g)).toHaveLength(1);
+    expect(main.match(/"app_in_tcp_8080_10_0_0_0_16"/g)).toHaveLength(1);
+    expect(main.match(/vpc_security_group_ids = \[aws_security_group\.app\.id\]/g)).toHaveLength(2);
+  });
+
+  it('connection rules go on the drawn groups, once, even when resources share them', () => {
+    const k = scenario();
+    const second = addNode(k.nodes, 'ec2', { region, parentId: k.s2.id });
+    const app = addSg(second.nodes, k.vpc.id, 'app', []);
+    const data = addSg(app.nodes, k.vpc.id, 'data', []);
+    const main = tf(data.nodes, [
+      edge(app.sg.id, k.ec2.id),
+      edge(app.sg.id, second.node.id),
+      edge(data.sg.id, k.rds.id),
+      edge(k.ec2.id, k.rds.id),
+      edge(second.node.id, k.rds.id),
+    ]);
+    expect(main.match(/referenced_security_group_id/g)).toHaveLength(1);
+    expect(main).toMatch(/security_group_id\s+= aws_security_group\.data\.id\s+referenced_security_group_id = aws_security_group\.app\.id/);
+    expect(main).not.toContain('resource "aws_security_group" "rds_1"');
+    expect(main).not.toContain('resource "aws_security_group" "ec2_1"');
+  });
+
+  it('does not repeat a connection rule the group already has', () => {
+    const k = scenario();
+    const app = addSg(k.nodes, k.vpc.id, 'app', []);
+    const data = addSg(app.nodes, k.vpc.id, 'data', [{ ports: '5432', peer: `sg:${app.sg.id}` }]);
+    const main = tf(data.nodes, [edge(app.sg.id, k.ec2.id), edge(data.sg.id, k.rds.id), edge(k.ec2.id, k.rds.id)]);
+    expect(main.match(/referenced_security_group_id/g)).toHaveLength(1);
+  });
+
+  it('a load balancer with its own group gets no automatic world-open listener rule, but is warned when none allows it', () => {
+    const k = scenario();
+    const open = addSg(k.nodes, k.vpc.id, 'edge', []);
+    const edges = [edge(open.sg.id, k.alb.id)];
+    expect(tf(open.nodes, edges)).not.toContain(`"${'alb_1'}_listener"`);
+    expect(validateGraph({ nodes: open.nodes, edges }).some((i) => i.nodeId === k.alb.id && /listener port 80/.test(i.message))).toBe(true);
+    const ok = addSg(k.nodes, k.vpc.id, 'edge', [{ ports: '80' }]);
+    expect(validateGraph({ nodes: ok.nodes, edges: [edge(ok.sg.id, k.alb.id)] }).some((i) => i.nodeId === k.alb.id && /listener port/.test(i.message))).toBe(false);
+    expect(tf(k.nodes, [])).toContain('"alb_1_listener"');
+  });
+
+  it('the VPC default group replaces the per-resource ones', () => {
+    const k = scenario();
+    const shared = addSg(k.nodes, k.vpc.id, 'shared', [{ ports: '8080', peer: '10.0.0.0/16' }]);
+    const nodes = shared.nodes.map((n) => (n.id === k.vpc.id ? { ...n, props: { ...n.props, default_sg: shared.sg.id } } : n));
+    const main = tf(nodes, [edge(k.ec2.id, k.rds.id)]);
+    expect(main.match(/resource "aws_security_group"/g)).toHaveLength(1);
+    expect(main.match(/vpc_security_group_ids\s+= \[aws_security_group\.shared\.id\]/g)).toHaveLength(2);
+    expect(validateGraph({ nodes, edges: [] }).some((i) => /Not attached/.test(i.message))).toBe(false);
+    // an attached group still wins over the default
+    const own = addSg(nodes, k.vpc.id, 'own', []);
+    expect(tf(own.nodes, [edge(own.sg.id, k.ec2.id)])).toMatch(/vpc_security_group_ids\s+= \[aws_security_group\.own\.id\]/);
+  });
+
+  it('clears the default when its group is deleted, and rejects one from another VPC', () => {
+    const k = scenario();
+    const shared = addSg(k.nodes, k.vpc.id, 'shared', []);
+    const nodes = shared.nodes.map((n) => (n.id === k.vpc.id ? { ...n, props: { ...n.props, default_sg: shared.sg.id } } : n));
+    const after = removeNode({ nodes, edges: [] }, shared.sg.id);
+    expect(after.nodes.find((n) => n.id === k.vpc.id)!.props.default_sg).toBe('');
+    const vpc2 = addNode(nodes, 'vpc', { region, position: { x: 700, y: 0 } });
+    const foreign = addSg(vpc2.nodes, vpc2.node.id, 'foreign', []);
+    const bad = foreign.nodes.map((n) => (n.id === k.vpc.id ? { ...n, props: { ...n.props, default_sg: foreign.sg.id } } : n));
+    expect(validateGraph({ nodes: bad, edges: [] }).some((i) => i.nodeId === k.vpc.id && /default security group/.test(i.message))).toBe(true);
+  });
+
+  it('copying a VPC repoints its default group at the copy', () => {
+    const k = scenario();
+    const shared = addSg(k.nodes, k.vpc.id, 'shared', []);
+    const nodes = shared.nodes.map((n) => (n.id === k.vpc.id ? { ...n, props: { ...n.props, default_sg: shared.sg.id } } : n));
+    const graph = { nodes, edges: [] };
+    const pasted = pasteFragment(graph, copySelection(graph, [k.vpc.id]), { x: 600, y: 0 });
+    const copyVpc = pasted.graph.nodes.find((n) => n.id === pasted.newIds[0])!;
+    const copySg = pasted.graph.nodes.find((n) => n.type === 'sg' && n.id !== shared.sg.id)!;
+    expect(copyVpc.props.default_sg).toBe(copySg.id);
   });
 });
 
@@ -551,29 +723,36 @@ describe('cloudfront', () => {
 });
 
 describe('security', () => {
-  const sgWith = (k: ReturnType<typeof scenario>, patch: Record<string, string>) => {
-    const r = addNode(k.nodes, 'sg', { region, parentId: k.vpc.id });
-    const sg = { ...r.node, props: { ...r.node.props, ingress_cidr: '0.0.0.0/0', ...patch } };
-    return { sg, nodes: r.nodes.map((n) => (n.id === sg.id ? sg : n)) };
-  };
+  const sgWith = (k: ReturnType<typeof scenario>, ports: string, protocol: 'tcp' | 'udp' | 'all' = 'tcp') =>
+    addSg(k.nodes, k.vpc.id, 'open', [{ protocol, ports, peer: '0.0.0.0/0' }]);
   const security = (graph: Parameters<typeof validateGraph>[0], nodeId?: string) =>
     validateGraph(graph).filter((i) => i.category === 'security' && (!nodeId || i.nodeId === nodeId));
 
   it('flags world-open SSH, databases and odd ports but not web ports', () => {
     const k = scenario();
-    const web = sgWith(k, { ingress_ports: '80, 443' });
+    const web = sgWith(k, '80, 443');
     expect(security({ nodes: web.nodes, edges: [] }, web.sg.id)).toEqual([]);
-    const ssh = sgWith(k, { ingress_ports: '22' });
+    const ssh = sgWith(k, '22');
     expect(security({ nodes: ssh.nodes, edges: [] }, ssh.sg.id)[0]).toMatchObject({ severity: 'warning', category: 'security' });
-    const db = sgWith(k, { ingress_ports: '5432' });
+    const db = sgWith(k, '5432');
     expect(security({ nodes: db.nodes, edges: [] }, db.sg.id)[0]).toMatchObject({ severity: 'error' });
-    const odd = sgWith(k, { ingress_ports: '8080' });
+    const odd = sgWith(k, '8080');
     expect(security({ nodes: odd.nodes, edges: [] }, odd.sg.id)[0].message).toMatch(/8080/);
+  });
+
+  it('flags open-to-everything rules', () => {
+    const k = scenario();
+    const all = sgWith(k, '', 'all');
+    expect(security({ nodes: all.nodes, edges: [] }, all.sg.id)[0]).toMatchObject({ severity: 'error' });
+    const everyPort = sgWith(k, '');
+    expect(security({ nodes: everyPort.nodes, edges: [] }, everyPort.sg.id)[0].message).toMatch(/Every TCP port/);
+    const dns = sgWith(k, '53', 'udp');
+    expect(security({ nodes: dns.nodes, edges: [] }, dns.sg.id)[0].message).toMatch(/UDP port 53/);
   });
 
   it('errors when a world-open group is attached to a database', () => {
     const k = scenario();
-    const open = sgWith(k, { ingress_ports: '8080' });
+    const open = sgWith(k, '8080');
     const issues = security({ nodes: open.nodes, edges: [edge(open.sg.id, k.rds.id)] });
     expect(issues.some((i) => i.nodeId === k.rds.id && i.severity === 'error')).toBe(true);
   });
@@ -804,7 +983,7 @@ describe('terraform import', () => {
     expect(result.report.skipped).toMatchObject({ aws_sqs_queue: 1, aws_subnet: 1 });
     expect(result.report.warnings.join(' ')).toMatch(/orphan/);
     const sg = result.graph.nodes.find((n) => n.type === 'sg')!;
-    expect(sg.props).toMatchObject({ ingress_cidr: '203.0.113.0/24', ingress_ports: '22' });
+    expect(sgRules(sg, 'ingress')).toEqual([{ protocol: 'tcp', ports: '22', peer: '203.0.113.0/24', description: '' }]);
     expect(result.graph.nodes.find((n) => n.type === 'ec2')!.props).toMatchObject({ instance_type: 't3.small', ami: 'ami-123' });
     expect(result.graph.edges).toHaveLength(0); // the group isn't attached to anything
     expect(result.graph.nodes.some((n) => n.type === 'vpc' && n.name === 'main')).toBe(true);
@@ -812,17 +991,33 @@ describe('terraform import', () => {
 
   it('imports explicit security groups, Lambda and CloudFront from generated output', () => {
     const k = scenario();
-    const sg = addNode(k.nodes, 'sg', { region, parentId: k.vpc.id });
-    const sgNode = { ...sg.node, name: 'office', props: { ...sg.node.props, ingress_cidr: '10.0.0.0/8', ingress_ports: '22, 8000-8100' } };
-    const fn = addNode(sg.nodes.map((n) => (n.id === sgNode.id ? sgNode : n)), 'lambda', { region, parentId: k.priv.id });
+    const sg = addSg(k.nodes, k.vpc.id, 'office', [
+      { ports: '22, 8000-8100', peer: '10.0.0.0/8', description: 'office' },
+      { protocol: 'udp', ports: '53', peer: '10.0.0.0/16' },
+      { protocol: 'icmp', peer: '10.0.0.0/16' },
+      { protocol: 'all', peer: '10.2.0.0/16' },
+    ]);
+    const sgNode = sg.sg;
+    const peerSg = addSg(sg.nodes, k.vpc.id, 'peer', [{ ports: '8080', peer: `sg:${sgNode.id}` }]);
+    const fn = addNode(peerSg.nodes, 'lambda', { region, parentId: k.priv.id });
     const cdn = addNode(fn.nodes, 'cdn', { region });
     const graph = {
       nodes: cdn.nodes,
-      edges: [edge(sgNode.id, k.ec2.id), edge(fn.node.id, k.rds.id), edge(fn.node.id, k.bucket.id), edge(cdn.node.id, k.bucket.id)],
+      edges: [edge(sgNode.id, k.ec2.id), edge(peerSg.sg.id, k.rds.id), edge(fn.node.id, k.rds.id), edge(fn.node.id, k.bucket.id), edge(cdn.node.id, k.bucket.id)],
     };
     const { graph: back } = roundTrip(graph);
     expect(tally(back)).toEqual(tally(graph));
-    expect(back.nodes.find((n) => n.type === 'sg')!.props).toMatchObject({ ingress_cidr: '10.0.0.0/8', ingress_ports: '22, 8000-8100' });
+    const backOffice = back.nodes.find((n) => n.name === 'office')!;
+    const backPeer = back.nodes.find((n) => n.name === 'peer')!;
+    // Terraform has one rule per port range, so "22, 8000-8100" comes back as two rules.
+    const [ssh, ...others] = sgRules(sgNode, 'ingress');
+    expect(sgRules(backOffice, 'ingress')).toEqual([
+      { ...ssh, ports: '22' },
+      { ...ssh, ports: '8000-8100' },
+      ...others,
+    ]);
+    expect(sgRules(backOffice, 'egress')).toEqual(sgRules(sgNode, 'egress'));
+    expect(sgRules(backPeer, 'ingress')).toEqual([{ protocol: 'tcp', ports: '8080', peer: `sg:${backOffice.id}`, description: '' }]);
   });
 });
 
