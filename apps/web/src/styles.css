@@ -122,6 +122,8 @@ button.danger { color: var(--danger); }
 .react-flow__edge.edge-route .react-flow__edge-path { stroke: #0d9488; }
 .react-flow__edge.edge-nat-route .react-flow__edge-path { stroke: #475569; }
 .react-flow__edge.edge-dns-alias .react-flow__edge-path { stroke: #0284c7; }
+.react-flow__edge.edge-sg-attach .react-flow__edge-path { stroke: #b91c1c; stroke-dasharray: 2 3; }
+.react-flow__edge.edge-cdn-origin .react-flow__edge-path { stroke: #7e22ce; }
 .react-flow__edge.edge-association .react-flow__edge-path { stroke: #a16207; stroke-dasharray: 2 4; }
 .react-flow__edge.edge-db-access .react-flow__edge-path { stroke: #0891b2; }
 .react-flow__edge.edge-forward .react-flow__edge-path { stroke: #db2777; }

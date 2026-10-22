@@ -7,8 +7,11 @@ export const TYPE_COLORS: Record<ResourceType, string> = {
   subnet: '#2563eb',
   igw: '#0d9488',
   nat: '#475569',
+  sg: '#b91c1c',
   dns: '#0284c7',
   lambda: '#d97706',
+  ecs: '#4f46e5',
+  cdn: '#7e22ce',
   route_table: '#a16207',
   alb: '#db2777',
   ec2: '#ea580c',
@@ -16,7 +19,7 @@ export const TYPE_COLORS: Record<ResourceType, string> = {
   s3: '#16a34a',
 };
 
-const BADGES: Partial<Record<ResourceType, string>> = { route_table: 'RTB', nat: 'NAT', dns: 'DNS', lambda: 'FN' };
+const BADGES: Partial<Record<ResourceType, string>> = { route_table: 'RTB', nat: 'NAT', sg: 'SG', dns: 'DNS', lambda: 'FN', ecs: 'ECS', cdn: 'CDN' };
 
 export interface ResourceData extends Record<string, unknown> {
   resource: GraphNode;
@@ -34,6 +37,8 @@ function summary(n: GraphNode): string {
       return `${n.props.cidr_block} · ${String(n.props.availability_zone).slice(-2) || '—'}${n.props.public ? ' · public' : ''}`;
     case 'igw':
       return 'internet gateway';
+    case 'sg':
+      return String(n.props.ingress_ports).trim() ? `in: ${n.props.ingress_ports}` : 'no inbound';
     case 'nat':
       return 'outbound only';
     case 'route_table':
@@ -46,6 +51,10 @@ function summary(n: GraphNode): string {
       return `${n.props.engine} · ${n.props.instance_class}`;
     case 'lambda':
       return `${n.props.runtime} · ${n.props.memory_size} MB`;
+    case 'ecs':
+      return `${n.props.desired_count}× · ${n.props.cpu}/${n.props.memory}`;
+    case 'cdn':
+      return String(n.props.aliases).trim() || 'CloudFront';
     case 'dns':
       return String(n.props.record_name);
     case 's3':

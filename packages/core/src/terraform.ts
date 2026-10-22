@@ -1,5 +1,6 @@
-import { DB_PORTS, resolveEdges, type ResolvedEdge } from './edges';
+import { DB_PORTS, forwardPort, resolveEdges, type ResolvedEdge } from './edges';
 import { vpcOf } from './graph';
+import { parsePorts } from './ports';
 import type { Graph, GraphNode } from './types';
 
 type Attr = [key: string, value: string] | null;
@@ -45,7 +46,13 @@ class Labels {
   }
 }
 
-const HAS_SG = new Set(['ec2', 'lambda', 'rds', 'alb']);
+const HAS_SG = new Set(['ec2', 'lambda', 'ecs', 'rds', 'alb']);
+
+/** AWS rejects security group names that start with "sg-" (it reserves them for ids). */
+const sgName = (n: GraphNode) => {
+  const name = `${slug(n.name, 240)}-sg`;
+  return /^sg-/i.test(name) ? `av2i-${name}` : name;
+};
 
 const hasCertificate = (alb: GraphNode) => String(alb.props.certificate_arn ?? '').trim() !== '';
 /** With a certificate on a non-80 port, plain HTTP on 80 redirects to HTTPS (unless switched off). */
@@ -97,6 +104,9 @@ export function generateTerraform(graph: Graph, opts: { region: string }): Recor
   const vpcs = ofType('vpc');
   const subnets = ofType('subnet');
   const sgRef = (n: GraphNode) => `aws_security_group.${L(n)}.id`;
+  /** The security group av2i manages for a resource, plus any explicit security groups attached to it. */
+  const sgList = (n: GraphNode) =>
+    `[${[sgRef(n), ...edgesOf('sg-attach').filter((r) => r.to.id === n.id).map((r) => sgRef(r.from))].join(', ')}]`;
 
   // --- Network --------------------------------------------------------------
   for (const vpc of vpcs) {
@@ -197,7 +207,7 @@ export function generateTerraform(graph: Graph, opts: { region: string }): Recor
     add(
       `sg.${n.id}`,
       block(`resource "aws_security_group" "${L(n)}"`, [
-        ['name', str(`${slug(n.name, 240)}-sg`)],
+        ['name', str(sgName(n))],
         ['description', str(`Managed by av2i for ${n.name}`)],
         ['vpc_id', `aws_vpc.${L(vpcOf(nodes, n)!)}.id`],
         tags(`${n.name}-sg`),
@@ -226,7 +236,7 @@ export function generateTerraform(graph: Graph, opts: { region: string }): Recor
       ]),
     );
 
-  for (const n of sgOwners.filter((x) => x.type === 'ec2' || x.type === 'lambda' || x.type === 'alb')) {
+  for (const n of sgOwners.filter((x) => x.type === 'ec2' || x.type === 'lambda' || x.type === 'ecs' || x.type === 'alb')) {
     add(
       `rule.${L(n)}_egress`,
       block(`resource "aws_vpc_security_group_egress_rule" "${L(n)}_all"`, [
@@ -235,6 +245,45 @@ export function generateTerraform(graph: Graph, opts: { region: string }): Recor
         ['cidr_ipv4', '"0.0.0.0/0"'],
       ]),
     );
+  }
+
+  // Explicit security groups: their own rules, from the node's fields.
+  for (const sg of ofType('sg')) {
+    const vpc = vpcOf(nodes, sg);
+    if (!vpc) continue;
+    add(
+      `sg.${sg.id}`,
+      block(`resource "aws_security_group" "${L(sg)}"`, [
+        ['name', str(sgName(sg))],
+        ['description', str(`Managed by av2i for ${sg.name}`)],
+        ['vpc_id', `aws_vpc.${L(vpc)}.id`],
+        tags(sg.name),
+      ]),
+    );
+    const cidr = String(sg.props.ingress_cidr).trim();
+    for (const range of cidr ? (parsePorts(String(sg.props.ingress_ports)) ?? []) : []) {
+      const span = range.from === range.to ? `${range.from}` : `${range.from}_${range.to}`;
+      add(
+        `rule.${L(sg)}_in_${span}`,
+        block(`resource "aws_vpc_security_group_ingress_rule" "${L(sg)}_${span}"`, [
+          ['security_group_id', sgRef(sg)],
+          ['cidr_ipv4', str(cidr)],
+          ['ip_protocol', '"tcp"'],
+          ['from_port', String(range.from)],
+          ['to_port', String(range.to)],
+        ]),
+      );
+    }
+    if (sg.props.egress_all !== false) {
+      add(
+        `rule.${L(sg)}_egress`,
+        block(`resource "aws_vpc_security_group_egress_rule" "${L(sg)}_all"`, [
+          ['security_group_id', sgRef(sg)],
+          ['ip_protocol', '"-1"'],
+          ['cidr_ipv4', '"0.0.0.0/0"'],
+        ]),
+      );
+    }
   }
 
   for (const r of edgesOf('db-access')) {
@@ -253,7 +302,7 @@ export function generateTerraform(graph: Graph, opts: { region: string }): Recor
       `${L(r.to)}_from_${L(r.from)}`,
       r.to,
       { sg: r.from },
-      Number(r.from.props.target_port) || 80,
+      forwardPort(r.from, r.to),
       `Traffic from ${r.from.name}`,
     );
   }
@@ -346,7 +395,7 @@ ${statements.map((x) => x.replace(/^/gm, '    ')).join(',\n')}
           ['ami', ami ? str(ami) : 'data.aws_ssm_parameter.al2023_ami.value'],
           ['instance_type', str(ec2.props.instance_type)],
           ['subnet_id', `aws_subnet.${L(subnet)}.id`],
-          ['vpc_security_group_ids', `[${sgRef(ec2)}]`],
+          ['vpc_security_group_ids', sgList(ec2)],
           profiles.has(ec2.id) ? ['iam_instance_profile', `aws_iam_instance_profile.${L(ec2)}.name`] : null,
           tags(ec2.name),
         ],
@@ -404,8 +453,107 @@ ${statements.map((x) => x.replace(/^/gm, '    ')).join(',\n')}
         [
           'vpc_config {',
           `  subnet_ids         = [aws_subnet.${L(subnet)}.id]`,
-          `  security_group_ids = [${sgRef(fn)}]`,
+          `  security_group_ids = ${sgList(fn)}`,
           '}',
+        ],
+      ),
+    );
+  }
+
+  // --- ECS on Fargate -----------------------------------------------------------
+  for (const svc of ofType('ecs').filter((s) => s.parentId && byId.get(s.parentId)?.type === 'subnet')) {
+    const subnet = byId.get(svc.parentId!)!;
+    const name = slug(svc.name, 63);
+    const alb = edgesOf('forward').find((r) => r.to.id === svc.id)?.from;
+    add(`ecs-cluster.${svc.id}`, block(`resource "aws_ecs_cluster" "${L(svc)}"`, [['name', str(name)], tags(svc.name)]));
+    add(
+      `ecs-logs.${svc.id}`,
+      block(`resource "aws_cloudwatch_log_group" "${L(svc)}"`, [
+        ['name', str(`/ecs/${name}`)],
+        ['retention_in_days', '14'],
+      ]),
+    );
+    add(
+      `ecs-exec-role.${svc.id}`,
+      block(`resource "aws_iam_role" "${L(svc)}_exec"`, [
+        ['name', str(`${slug(svc.name, 50)}-exec-role`)],
+        [
+          'assume_role_policy',
+          `jsonencode({
+  Version = "2012-10-17"
+  Statement = [{
+    Effect    = "Allow"
+    Action    = "sts:AssumeRole"
+    Principal = { Service = "ecs-tasks.amazonaws.com" }
+  }]
+})`,
+        ],
+      ]),
+    );
+    add(
+      `ecs-exec-attach.${svc.id}`,
+      block(`resource "aws_iam_role_policy_attachment" "${L(svc)}_exec"`, [
+        ['role', `aws_iam_role.${L(svc)}_exec.name`],
+        ['policy_arn', '"arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"'],
+      ]),
+    );
+    add(
+      `ecs-task.${svc.id}`,
+      block(`resource "aws_ecs_task_definition" "${L(svc)}"`, [
+        ['family', str(name)],
+        ['requires_compatibilities', '["FARGATE"]'],
+        ['network_mode', '"awsvpc"'],
+        ['cpu', str(svc.props.cpu)],
+        ['memory', str(svc.props.memory)],
+        ['execution_role_arn', `aws_iam_role.${L(svc)}_exec.arn`],
+        [
+          'container_definitions',
+          `jsonencode([{
+  name         = ${str(name)}
+  image        = ${str(String(svc.props.image).trim())}
+  essential    = true
+  portMappings = [{ containerPort = ${Number(svc.props.container_port) || 80}, protocol = "tcp" }]
+  logConfiguration = {
+    logDriver = "awslogs"
+    options = {
+      "awslogs-group"         = aws_cloudwatch_log_group.${L(svc)}.name
+      "awslogs-region"        = ${str(opts.region)}
+      "awslogs-stream-prefix" = "ecs"
+    }
+  }
+}])`,
+        ],
+      ]),
+    );
+    add(
+      `ecs-service.${svc.id}`,
+      block(
+        `resource "aws_ecs_service" "${L(svc)}"`,
+        [
+          ['name', str(name)],
+          ['cluster', `aws_ecs_cluster.${L(svc)}.id`],
+          ['task_definition', `aws_ecs_task_definition.${L(svc)}.arn`],
+          ['desired_count', String(Math.max(0, Number(svc.props.desired_count) || 0))],
+          ['launch_type', '"FARGATE"'],
+          alb ? ['depends_on', `[aws_lb_listener.${L(alb)}]`] : null,
+          tags(svc.name),
+        ],
+        [
+          'network_configuration {',
+          `  subnets          = [aws_subnet.${L(subnet)}.id]`,
+          `  security_groups  = ${sgList(svc)}`,
+          // Tasks in a public subnet need a public IP to pull their image; private ones go through NAT.
+          `  assign_public_ip = ${Boolean(subnet.props.public)}`,
+          '}',
+          ...(alb
+            ? [
+                'load_balancer {',
+                `  target_group_arn = aws_lb_target_group.${L(alb)}.arn`,
+                `  container_name   = ${str(name)}`,
+                `  container_port   = ${Number(svc.props.container_port) || 80}`,
+                '}',
+              ]
+            : []),
         ],
       ),
     );
@@ -440,7 +588,7 @@ ${statements.map((x) => x.replace(/^/gm, '    ')).join(',\n')}
         ['username', str(db.props.username)],
         ['manage_master_user_password', 'true'],
         ['db_subnet_group_name', `aws_db_subnet_group.${L(vpc)}.name`],
-        ['vpc_security_group_ids', `[${sgRef(db)}]`],
+        ['vpc_security_group_ids', sgList(db)],
         ['multi_az', String(Boolean(db.props.multi_az))],
         ['publicly_accessible', 'false'],
         ['skip_final_snapshot', 'true'],
@@ -463,7 +611,7 @@ ${statements.map((x) => x.replace(/^/gm, '    ')).join(',\n')}
         ['name', str(lbName)],
         ['load_balancer_type', '"application"'],
         ['internal', String(Boolean(alb.props.internal))],
-        ['security_groups', `[${sgRef(alb)}]`],
+        ['security_groups', sgList(alb)],
         ['subnets', `[${pool.map((s) => `aws_subnet.${L(s)}.id`).join(', ')}]`],
         tags(alb.name),
       ]),
@@ -471,7 +619,10 @@ ${statements.map((x) => x.replace(/^/gm, '    ')).join(',\n')}
 
     const targets = edgesOf('forward').filter((r) => r.from.id === alb.id);
     if (targets.length === 0) continue;
-    const targetPort = Number(alb.props.target_port) || 80;
+    // ECS tasks register by IP, EC2 instances by id; one target group can't mix both.
+    const ec2Targets = targets.filter((r) => r.to.type !== 'ecs');
+    const useIp = ec2Targets.length === 0;
+    const targetPort = forwardPort(alb, targets[0].to);
     add(
       `tg.${alb.id}`,
       block(
@@ -480,12 +631,13 @@ ${statements.map((x) => x.replace(/^/gm, '    ')).join(',\n')}
           ['name', str(slug(`${alb.name}-tg`, 32))],
           ['port', String(targetPort)],
           ['protocol', '"HTTP"'],
+          useIp ? ['target_type', '"ip"'] : null,
           ['vpc_id', `aws_vpc.${L(vpc)}.id`],
         ],
         ['health_check {', `  path = ${str(alb.props.health_check_path || '/')}`, '}'],
       ),
     );
-    for (const r of targets) {
+    for (const r of ec2Targets) {
       add(
         `tgattach.${alb.id}.${r.to.id}`,
         block(`resource "aws_lb_target_group_attachment" "${L(alb)}_${L(r.to)}"`, [
@@ -540,6 +692,132 @@ ${statements.map((x) => x.replace(/^/gm, '    ')).join(',\n')}
     }
   }
 
+  // --- CloudFront ---------------------------------------------------------------
+  for (const cdn of ofType('cdn')) {
+    const origin = edgesOf('cdn-origin').find((r) => r.from.id === cdn.id)?.to;
+    if (!origin) continue;
+    const isS3 = origin.type === 's3';
+    const originId = `${isS3 ? 's3' : 'alb'}-${L(origin)}`;
+    const cert = String(cdn.props.certificate_arn).trim();
+    const aliases = String(cdn.props.aliases).split(',').map((a) => a.trim()).filter(Boolean);
+    const root = String(cdn.props.default_root_object).trim();
+
+    add(
+      `cdn-cache.${cdn.id}`,
+      block(`data "aws_cloudfront_cache_policy" "${L(cdn)}"`, [
+        ['name', str(isS3 ? 'Managed-CachingOptimized' : 'Managed-CachingDisabled')],
+      ]),
+    );
+    if (!isS3) {
+      add(
+        `cdn-orp.${cdn.id}`,
+        block(`data "aws_cloudfront_origin_request_policy" "${L(cdn)}"`, [['name', str('Managed-AllViewer')]]),
+      );
+    }
+    if (isS3) {
+      add(
+        `cdn-oac.${cdn.id}`,
+        block(`resource "aws_cloudfront_origin_access_control" "${L(cdn)}"`, [
+          ['name', str(`${slug(cdn.name, 50)}-oac`)],
+          ['origin_access_control_origin_type', '"s3"'],
+          ['signing_behavior', '"always"'],
+          ['signing_protocol', '"sigv4"'],
+        ]),
+      );
+    }
+
+    const originBlock = isS3
+      ? [
+          'origin {',
+          `  domain_name              = aws_s3_bucket.${L(origin)}.bucket_regional_domain_name`,
+          `  origin_id                = ${str(originId)}`,
+          `  origin_access_control_id = aws_cloudfront_origin_access_control.${L(cdn)}.id`,
+          '}',
+        ]
+      : (() => {
+          const https = String(origin.props.certificate_arn ?? '').trim() !== '';
+          const port = Number(origin.props.listener_port) || (https ? 443 : 80);
+          return [
+            'origin {',
+            `  domain_name = aws_lb.${L(origin)}.dns_name`,
+            `  origin_id   = ${str(originId)}`,
+            '  custom_origin_config {',
+            `    http_port              = ${https ? 80 : port}`,
+            `    https_port             = ${https ? port : 443}`,
+            `    origin_protocol_policy = ${https ? '"https-only"' : '"http-only"'}`,
+            '    origin_ssl_protocols   = ["TLSv1.2"]',
+            '  }',
+            '}',
+          ];
+        })();
+
+    add(
+      `cdn.${cdn.id}`,
+      block(
+        `resource "aws_cloudfront_distribution" "${L(cdn)}"`,
+        [
+          ['enabled', 'true'],
+          ['is_ipv6_enabled', 'true'],
+          ['comment', str(cdn.name)],
+          ['price_class', str(cdn.props.price_class)],
+          isS3 && root ? ['default_root_object', str(root)] : null,
+          aliases.length ? ['aliases', `[${aliases.map(str).join(', ')}]`] : null,
+          tags(cdn.name),
+        ],
+        [
+          ...originBlock,
+          'default_cache_behavior {',
+          `  target_origin_id       = ${str(originId)}`,
+          '  viewer_protocol_policy = "redirect-to-https"',
+          isS3
+            ? '  allowed_methods        = ["GET", "HEAD"]'
+            : '  allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]',
+          '  cached_methods         = ["GET", "HEAD"]',
+          '  compress               = true',
+          `  cache_policy_id        = data.aws_cloudfront_cache_policy.${L(cdn)}.id`,
+          ...(isS3 ? [] : [`  origin_request_policy_id = data.aws_cloudfront_origin_request_policy.${L(cdn)}.id`]),
+          '}',
+          'restrictions {',
+          '  geo_restriction {',
+          '    restriction_type = "none"',
+          '  }',
+          '}',
+          'viewer_certificate {',
+          ...(cert
+            ? [
+                `  acm_certificate_arn      = ${str(cert)}`,
+                '  ssl_support_method       = "sni-only"',
+                '  minimum_protocol_version = "TLSv1.2_2021"',
+              ]
+            : ['  cloudfront_default_certificate = true']),
+          '}',
+        ],
+      ),
+    );
+    if (isS3) {
+      add(
+        `cdn-policy.${cdn.id}`,
+        block(`resource "aws_s3_bucket_policy" "${L(cdn)}"`, [
+          ['bucket', `aws_s3_bucket.${L(origin)}.id`],
+          [
+            'policy',
+            `jsonencode({
+  Version = "2012-10-17"
+  Statement = [{
+    Sid       = "AllowCloudFrontRead"
+    Effect    = "Allow"
+    Principal = { Service = "cloudfront.amazonaws.com" }
+    Action    = "s3:GetObject"
+    Resource  = "\${aws_s3_bucket.${L(origin)}.arn}/*"
+    Condition = { StringEquals = { "AWS:SourceArn" = aws_cloudfront_distribution.${L(cdn)}.arn } }
+  }]
+})`,
+          ],
+        ]),
+      );
+    }
+  }
+
   // --- Route 53 alias records -------------------------------------------------
   for (const r of edgesOf('dns-alias')) {
     const dns = r.from;
@@ -561,9 +839,13 @@ ${statements.map((x) => x.replace(/^/gm, '    ')).join(',\n')}
         ],
         [
           'alias {',
-          `  name                   = aws_lb.${L(r.to)}.dns_name`,
-          `  zone_id                = aws_lb.${L(r.to)}.zone_id`,
-          '  evaluate_target_health = true',
+          r.to.type === 'cdn'
+            ? `  name                   = aws_cloudfront_distribution.${L(r.to)}.domain_name`
+            : `  name                   = aws_lb.${L(r.to)}.dns_name`,
+          r.to.type === 'cdn'
+            ? `  zone_id                = aws_cloudfront_distribution.${L(r.to)}.hosted_zone_id`
+            : `  zone_id                = aws_lb.${L(r.to)}.zone_id`,
+          `  evaluate_target_health = ${r.to.type !== 'cdn'}`,
           '}',
         ],
       ),

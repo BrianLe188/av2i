@@ -421,6 +421,127 @@ describe('lambda', () => {
   });
 });
 
+describe('explicit security group', () => {
+  function withSg(patch: Record<string, string | boolean> = {}) {
+    const k = scenario();
+    const r = addNode(k.nodes, 'sg', { region, parentId: k.vpc.id });
+    const sg = { ...r.node, name: 'web-access', props: { ...r.node.props, ingress_cidr: '10.0.0.0/8', ingress_ports: '22, 8000-8100', ...patch } };
+    return { ...k, sg, nodes: r.nodes.map((n) => (n.id === sg.id ? sg : n)) };
+  }
+
+  it('creates the group and its rules, and attaches it next to the managed one', () => {
+    const k = withSg();
+    const main = generateTerraform({ nodes: k.nodes, edges: [edge(k.sg.id, k.ec2.id)] }, { region })['main.tf'];
+    expect(main).toContain('resource "aws_security_group" "web_access"');
+    expect(main).toContain('"web_access_22"');
+    expect(main).toContain('"web_access_8000_8100"');
+    expect(main).toMatch(/from_port\s+= 8000/);
+    expect(main).toMatch(/vpc_security_group_ids = \[aws_security_group\.ec2_1\.id, aws_security_group\.web_access\.id\]/);
+  });
+
+  it('never starts a security group name with "sg-", which AWS reserves', () => {
+    const k = withSg();
+    const main = generateTerraform({ nodes: k.nodes.map((n) => (n.id === k.sg.id ? { ...n, name: 'sg-1' } : n)), edges: [] }, { region })['main.tf'];
+    expect(main).toContain('name        = "av2i-sg-1-sg"');
+  });
+
+  it('validates ports/CIDR and warns about world-open SSH and unattached groups', () => {
+    const k = withSg();
+    expect(validateGraph({ nodes: k.nodes, edges: [] }).some((i) => /Not attached/.test(i.message))).toBe(true);
+    const world = withSg({ ingress_cidr: '0.0.0.0/0' });
+    expect(validateGraph({ nodes: world.nodes, edges: [] }).some((i) => /SSH\/RDP/.test(i.message))).toBe(true);
+    const bad = withSg({ ingress_ports: '99999', ingress_cidr: 'nope' });
+    const errors = validateGraph({ nodes: bad.nodes, edges: [] }).filter((i) => i.severity === 'error');
+    expect(errors).toHaveLength(2);
+  });
+});
+
+describe('ecs', () => {
+  function withEcs() {
+    const k = scenario();
+    const r = addNode(k.nodes, 'ecs', { region, parentId: k.s1.id });
+    return { ...k, nodes: r.nodes, svc: r.node };
+  }
+
+  it('generates cluster, task definition and service wired to the load balancer by IP', () => {
+    const k = withEcs();
+    const main = generateTerraform({ nodes: k.nodes, edges: [edge(k.alb.id, k.svc.id), edge(k.svc.id, k.rds.id)] }, { region })['main.tf'];
+    for (const needle of [
+      'resource "aws_ecs_cluster" "ecs_1"',
+      'resource "aws_ecs_task_definition" "ecs_1"',
+      'resource "aws_ecs_service" "ecs_1"',
+      'AmazonECSTaskExecutionRolePolicy',
+      'ecs-tasks.amazonaws.com',
+      'target_type = "ip"',
+      'container_port',
+      '"rds_1_from_ecs_1"',
+      '"ecs_1_from_alb_1"',
+    ]) {
+      expect(main).toContain(needle);
+    }
+    expect(main).not.toContain('aws_lb_target_group_attachment');
+    expect(main).toMatch(/assign_public_ip = true/); // s1 is a public subnet
+  });
+
+  it('rejects mixing EC2 and ECS targets and bad cpu/memory pairs', () => {
+    const k = withEcs();
+    const mixed = validateGraph({ nodes: k.nodes, edges: [edge(k.alb.id, k.svc.id), edge(k.alb.id, k.ec2.id)] });
+    expect(mixed.some((i) => /not both/.test(i.message))).toBe(true);
+    const bad = k.nodes.map((n) => (n.id === k.svc.id ? { ...n, props: { ...n.props, cpu: '256', memory: 8192 } } : n));
+    expect(validateGraph({ nodes: bad, edges: [] }).some((i) => /does not offer 8192 MB/.test(i.message))).toBe(true);
+  });
+});
+
+describe('cloudfront', () => {
+  function withCdn(patch: Record<string, string> = {}) {
+    const k = scenario();
+    const r = addNode(k.nodes, 'cdn', { region });
+    const cdn = { ...r.node, props: { ...r.node.props, ...patch } };
+    return { ...k, cdn, nodes: r.nodes.map((n) => (n.id === cdn.id ? cdn : n)) };
+  }
+
+  it('serves S3 through an origin access control and a bucket policy', () => {
+    const k = withCdn();
+    const main = generateTerraform({ nodes: k.nodes, edges: [edge(k.cdn.id, k.bucket.id)] }, { region })['main.tf'];
+    for (const needle of [
+      'resource "aws_cloudfront_distribution" "cdn_1"',
+      'aws_cloudfront_origin_access_control',
+      'resource "aws_s3_bucket_policy" "cdn_1"',
+      'AWS:SourceArn',
+      'Managed-CachingOptimized',
+      'default_root_object',
+      'cloudfront_default_certificate = true',
+    ]) {
+      expect(main).toContain(needle);
+    }
+  });
+
+  it('can front a load balancer, and a DNS record can alias the distribution', () => {
+    const k = withCdn({ aliases: 'www.example.com', certificate_arn: 'arn:aws:acm:us-east-1:123456789012:certificate/abc' });
+    const d = addNode(k.nodes, 'dns', { region });
+    const dns = { ...d.node, props: { ...d.node.props, zone_name: 'example.com', record_name: 'www.example.com' } };
+    const nodes = d.nodes.map((n) => (n.id === dns.id ? dns : n));
+    const edges = [edge(k.cdn.id, k.alb.id), edge(dns.id, k.cdn.id)];
+    const main = generateTerraform({ nodes, edges }, { region })['main.tf'];
+    expect(main).toContain('custom_origin_config');
+    expect(main).toContain('Managed-CachingDisabled');
+    expect(main).toContain('aws_cloudfront_distribution.cdn_1.hosted_zone_id');
+    expect(main).toMatch(/evaluate_target_health = false/);
+    expect(main).toContain('acm_certificate_arn');
+    expect(validateGraph({ nodes, edges }).filter((i) => i.severity === 'error')).toEqual([]);
+  });
+
+  it('validates aliases, certificate region and origins', () => {
+    const noCert = withCdn({ aliases: 'www.example.com' });
+    expect(validateGraph({ nodes: noCert.nodes, edges: [] }).some((i) => /need an ACM certificate/.test(i.message))).toBe(true);
+    const wrongRegion = withCdn({ certificate_arn: 'arn:aws:acm:eu-west-1:123456789012:certificate/abc' });
+    expect(validateGraph({ nodes: wrongRegion.nodes, edges: [] }).some((i) => /us-east-1/.test(i.message))).toBe(true);
+    const two = withCdn();
+    const issues = validateGraph({ nodes: two.nodes, edges: [edge(two.cdn.id, two.bucket.id), edge(two.cdn.id, two.alb.id)] });
+    expect(issues.some((i) => /one origin/.test(i.message))).toBe(true);
+  });
+});
+
 describe('templates', () => {
   for (const t of TEMPLATES) {
     it(`${t.id} has no errors and generates terraform`, () => {
@@ -428,7 +549,7 @@ describe('templates', () => {
       expect(graph.nodes.length).toBeGreaterThan(0);
       const errors = validateGraph(graph).filter((i) => i.severity === 'error');
       expect(errors, JSON.stringify(errors)).toEqual([]);
-      expect(generateTerraform(graph, { region })['main.tf']).toContain('aws_vpc');
+      expect(generateTerraform(graph, { region })['main.tf']).toContain('resource "aws_');
     });
   }
 });

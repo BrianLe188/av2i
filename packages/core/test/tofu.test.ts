@@ -95,6 +95,30 @@ describe.skipIf(!process.env.TOFU_VALIDATE)('tofu validate', () => {
       );
       return { nodes, edges: [edge(fn.node.id, k.rds.id), edge(fn.node.id, k.bucket.id)] };
     })(),
+    'security-group': (() => {
+      const r = addNode(k.nodes, 'sg', { region, parentId: k.vpc.id });
+      const nodes = r.nodes.map((n) =>
+        n.id === r.node.id ? { ...n, props: { ...n.props, ingress_cidr: '10.0.0.0/8', ingress_ports: '22, 8000-8100' } } : n,
+      );
+      return { nodes, edges: [edge(r.node.id, k.ec2.id), edge(r.node.id, k.rds.id), edge(r.node.id, k.alb.id)] };
+    })(),
+    'ecs-behind-alb': (() => {
+      const r = addNode(k.nodes, 'ecs', { region, parentId: k.s1.id });
+      return { nodes: r.nodes, edges: [edge(k.alb.id, r.node.id), edge(r.node.id, k.rds.id)] };
+    })(),
+    'cloudfront-s3': (() => {
+      const r = addNode(k.nodes, 'cdn', { region });
+      return { nodes: r.nodes, edges: [edge(r.node.id, k.bucket.id)] };
+    })(),
+    'cloudfront-alb-dns': (() => {
+      const r = addNode(k.nodes, 'cdn', { region });
+      const cdn = {
+        ...r.node,
+        props: { ...r.node.props, aliases: 'www.example.com', certificate_arn: 'arn:aws:acm:us-east-1:123456789012:certificate/abc' },
+      };
+      const d = addNode(r.nodes.map((n) => (n.id === cdn.id ? cdn : n)), 'dns', { region });
+      return { nodes: d.nodes, edges: [edge(cdn.id, k.alb.id), edge(d.node.id, cdn.id)] };
+    })(),
     'vpc-only': { nodes: k.nodes.filter((n) => n.type === 'vpc' || n.type === 'subnet'), edges: [] },
     ...Object.fromEntries(TEMPLATES.map((t) => [`template-${t.id}`, t.build(region)])),
   };

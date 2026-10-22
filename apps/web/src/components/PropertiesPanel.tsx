@@ -126,8 +126,8 @@ export function PropertiesPanel({ issues }: { issues: Issue[] }) {
         <p>Select a resource to edit its properties.</p>
         <p className="muted">
           {nodes.length} resource{nodes.length === 1 ? '' : 's'} on the canvas. Drag from one
-          resource's side handle to another to connect them: IGW ↔ Route table ↔ Subnet, NAT ↔ Route table, EC2/Lambda ↔ RDS,
-          Load balancer ↔ EC2, EC2/Lambda ↔ S3, DNS record ↔ Load balancer.
+          resource's side handle to another to connect them: IGW ↔ Route table ↔ Subnet, NAT ↔ Route table, Security group ↔ EC2/Lambda/RDS/ALB, EC2/Lambda/ECS ↔ RDS,
+          Load balancer ↔ EC2/ECS, EC2/Lambda ↔ S3, CloudFront ↔ S3/Load balancer, DNS record ↔ Load balancer/CloudFront.
         </p>
       </div>
     );

@@ -90,6 +90,38 @@ export const TEMPLATES: Template[] = [
     },
   },
   {
+    id: 'container-service',
+    name: 'Container service (Fargate)',
+    description: 'An ECS Fargate service behind a load balancer in two public subnets, with an internet gateway.',
+    build(region) {
+      const b = builder(region);
+      const vpc = b.add('vpc', { name: 'main' });
+      const a = b.add('subnet', { parent: vpc, name: 'public-a', at: [20, 44], props: { public: true } });
+      const c = b.add('subnet', { parent: vpc, name: 'public-b', at: [340, 44], props: { public: true } });
+      const igw = b.add('igw', { parent: vpc, at: [20, 250] });
+      const rt = b.add('route_table', { parent: vpc, name: 'public', at: [200, 250] });
+      const alb = b.add('alb', { parent: vpc, name: 'web', at: [380, 250] });
+      const svc = b.add('ecs', { parent: a, name: 'web' });
+      b.connect(igw, rt);
+      b.connect(rt, a);
+      b.connect(rt, c);
+      b.connect(alb, svc);
+      return b.finish();
+    },
+  },
+  {
+    id: 'static-site',
+    name: 'Static site (S3 + CloudFront)',
+    description: 'A private S3 bucket served through a CloudFront distribution over HTTPS.',
+    build(region) {
+      const b = builder(region);
+      const bucket = b.add('s3', { name: 'site' });
+      const cdn = b.add('cdn', { name: 'site-cdn' });
+      b.connect(cdn, bucket);
+      return b.finish();
+    },
+  },
+  {
     id: 'server-and-bucket',
     name: 'Server + bucket',
     description: 'One public EC2 instance with internet access and an S3 bucket it can read and write.',
