@@ -2,15 +2,23 @@ import { create } from 'zustand';
 import {
   absolutePosition,
   addNode,
+  alignNodes,
   ancestorsOf,
   autoResize,
   classifyEdge,
+  copySelection,
   defaultEdgeProps,
+  distributeNodes,
   findContainerAt,
+  isDescendant,
   newId,
+  pasteFragment,
   removeNode,
   reparent,
   RESOURCES,
+  type AlignMode,
+  type DistributeAxis,
+  type Fragment,
   type GraphEdge,
   type GraphNode,
   type Point,
@@ -32,8 +40,11 @@ interface State extends Snapshot {
   projectId: string | null;
   name: string;
   region: string;
+  /** The one selected node, or null when none or several are selected. */
   selectedId: string | null;
+  selectedIds: string[];
   selectedEdgeId: string | null;
+  clipboard: Fragment | null;
   past: Snapshot[];
   future: Snapshot[];
   dirty: boolean;
@@ -53,6 +64,13 @@ interface State extends Snapshot {
 
   notify(message: string): void;
   select(id: string | null): void;
+  setSelection(ids: string[]): void;
+  copy(): void;
+  paste(): void;
+  duplicate(): void;
+  removeMany(ids: string[]): void;
+  align(mode: AlignMode): void;
+  distribute(axis: DistributeAxis): void;
   selectEdge(id: string | null): void;
   beginChange(coalesceKey?: string): void;
   undo(): void;
@@ -63,7 +81,7 @@ interface State extends Snapshot {
   setPosition(id: string, position: Point): void;
   setSize(id: string, size: Size): void;
   beginDrag(id: string): void;
-  endDrag(id: string): void;
+  endDrag(ids: string[]): void;
   finishResize(): void;
   fit(id: string): void;
   updateNode(id: string, patch: { name?: string; props?: Record<string, PropValue> }): void;
@@ -78,6 +96,7 @@ const HISTORY_LIMIT = 100;
 let noticeTimer: ReturnType<typeof setTimeout> | undefined;
 let dragOrigin: Snapshot | null = null;
 let lastEdit = { key: '', at: 0 };
+let pasteCount = 0;
 
 export const useStore = create<State>((set, get) => {
   /** Apply a content change: bump rev, mark dirty, optionally record undo history. */
@@ -92,6 +111,7 @@ export const useStore = create<State>((set, get) => {
       nodes: p.graph.nodes,
       edges: p.graph.edges,
       selectedId: null,
+      selectedIds: [],
       selectedEdgeId: null,
       past: [],
       future: [],
@@ -122,7 +142,9 @@ export const useStore = create<State>((set, get) => {
     name: '',
     region: 'us-east-1',
     selectedId: null,
+    selectedIds: [],
     selectedEdgeId: null,
+    clipboard: null,
     past: [],
     future: [],
     dirty: false,
@@ -186,8 +208,74 @@ export const useStore = create<State>((set, get) => {
       noticeTimer = setTimeout(() => set({ notice: null }), 3500);
     },
 
-    select: (id) => set({ selectedId: id, selectedEdgeId: id ? null : get().selectedEdgeId }),
-    selectEdge: (id) => set({ selectedEdgeId: id, selectedId: id ? null : get().selectedId }),
+    select: (id) => get().setSelection(id ? [id] : []),
+    setSelection: (ids) =>
+      set({
+        selectedIds: ids,
+        selectedId: ids.length === 1 ? ids[0] : null,
+        selectedEdgeId: ids.length ? null : get().selectedEdgeId,
+      }),
+    selectEdge: (id) =>
+      set({ selectedEdgeId: id, ...(id ? { selectedId: null, selectedIds: [] } : {}) }),
+
+    copy: () => {
+      const { nodes, edges, selectedIds } = get();
+      if (selectedIds.length === 0) return;
+      const clipboard = copySelection({ nodes, edges }, selectedIds);
+      set({ clipboard });
+      pasteCount = 0;
+      get().notify(`Copied ${clipboard.nodes.length} resource${clipboard.nodes.length === 1 ? '' : 's'}`);
+    },
+
+    paste: () => {
+      const { nodes, edges, clipboard } = get();
+      if (!clipboard) return;
+      pasteCount++;
+      const result = pasteFragment({ nodes, edges }, clipboard, { x: 40 * pasteCount, y: 40 * pasteCount });
+      if (result.skipped) {
+        get().notify(`${result.skipped} resource${result.skipped === 1 ? '' : 's'} not pasted: the container no longer exists.`);
+      }
+      if (result.newIds.length === 0) return;
+      get().beginChange();
+      commit({ nodes: result.graph.nodes, edges: result.graph.edges });
+      get().setSelection(result.newIds);
+    },
+
+    duplicate: () => {
+      get().copy();
+      get().paste();
+    },
+
+    removeMany: (ids) => {
+      const { nodes, edges } = get();
+      const present = ids.filter((id) => nodes.some((n) => n.id === id));
+      if (present.length === 0) return;
+      get().beginChange();
+      let graph = { nodes, edges };
+      for (const id of present) graph = removeNode(graph, id);
+      const { selectedEdgeId } = get();
+      commit(graph, {
+        selectedId: null,
+        selectedIds: [],
+        selectedEdgeId: graph.edges.some((e) => e.id === selectedEdgeId) ? selectedEdgeId : null,
+      });
+    },
+
+    align: (mode) => {
+      const { nodes, selectedIds } = get();
+      const next = alignNodes(nodes, selectedIds, mode);
+      if (!next) return get().notify('Align needs two or more resources inside the same container.');
+      get().beginChange();
+      commit({ nodes: next });
+    },
+
+    distribute: (axis) => {
+      const { nodes, selectedIds } = get();
+      const next = distributeNodes(nodes, selectedIds, axis);
+      if (!next) return get().notify('Distribute needs three or more resources inside the same container.');
+      get().beginChange();
+      commit({ nodes: next });
+    },
 
     beginChange: (coalesceKey) => {
       const now = Date.now();
@@ -273,23 +361,26 @@ export const useStore = create<State>((set, get) => {
       const { nodes, edges } = get();
       dragOrigin = { nodes, edges };
       get().beginChange();
-      set({ selectedId: id });
+      // Dragging a node that's part of a multi-selection keeps the selection.
+      if (!get().selectedIds.includes(id)) get().setSelection([id]);
     },
 
-    endDrag: (id) => {
-      const { nodes } = get();
-      const node = nodes.find((n) => n.id === id);
+    endDrag: (ids) => {
       const origin = dragOrigin;
       dragOrigin = null;
-      if (!node) return;
-      const def = RESOURCES[node.type];
+      // A node dragged together with its container just rides along; only the outermost ones can change parent.
+      const movers = ids.filter((id) => !ids.some((other) => other !== id && isDescendant(get().nodes, id, other)));
 
-      let next = nodes;
-      let fit: string[] = [];
-      if (def.parents.length) {
-        const abs = absolutePosition(nodes, id);
+      let next = get().nodes;
+      const fit: string[] = [];
+      for (const id of movers) {
+        const node = next.find((n) => n.id === id);
+        if (!node) continue;
+        const def = RESOURCES[node.type];
+        if (!def.parents.length) continue;
+        const abs = absolutePosition(next, id);
         const center = { x: abs.x + node.size.width / 2, y: abs.y + node.size.height / 2 };
-        const container = findContainerAt(nodes, center, node.type, id);
+        const container = findContainerAt(next, center, node.type, id);
         if (!container) {
           // Dropped outside any valid parent: put everything back where it was.
           if (origin) {
@@ -301,11 +392,11 @@ export const useStore = create<State>((set, get) => {
           return;
         }
         if (container.id !== node.parentId) {
-          next = reparent(nodes, id, container.id, abs);
-          if (node.parentId) fit = [node.parentId];
+          next = reparent(next, id, container.id, abs);
+          if (node.parentId) fit.push(node.parentId);
         }
       }
-      commit({ nodes: autoResize(next, { fit, anchorId: id }) });
+      commit({ nodes: autoResize(next, { fit, anchorId: ids[0] }) });
     },
 
     finishResize: () =>
@@ -331,17 +422,7 @@ export const useStore = create<State>((set, get) => {
       });
     },
 
-    remove: (id) => {
-      const { nodes, edges, selectedId } = get();
-      if (!nodes.some((n) => n.id === id)) return;
-      get().beginChange();
-      const result = removeNode({ nodes, edges }, id);
-      const stillThere = result.nodes.some((n) => n.id === selectedId);
-      commit(result, {
-        selectedId: stillThere ? selectedId : null,
-        selectedEdgeId: result.edges.some((e) => e.id === get().selectedEdgeId) ? get().selectedEdgeId : null,
-      });
-    },
+    remove: (id) => get().removeMany([id]),
 
     connect: (source, target) => {
       const { nodes, edges } = get();

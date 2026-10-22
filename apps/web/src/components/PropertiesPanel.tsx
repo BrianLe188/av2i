@@ -7,6 +7,7 @@ import {
   type Issue,
   type PropValue,
 } from '@av2i/core';
+import type { AlignMode } from '@av2i/core';
 import { useStore } from '../store';
 
 function Field({ def, value, onChange }: { def: FieldDef; value: PropValue; onChange: (v: PropValue) => void }) {
@@ -109,6 +110,53 @@ function EdgePanel({ edgeId, issues }: { edgeId: string; issues: Issue[] }) {
   );
 }
 
+const ALIGNS: { mode: AlignMode; label: string }[] = [
+  { mode: 'left', label: 'Left' },
+  { mode: 'center', label: 'Center' },
+  { mode: 'right', label: 'Right' },
+  { mode: 'top', label: 'Top' },
+  { mode: 'middle', label: 'Middle' },
+  { mode: 'bottom', label: 'Bottom' },
+];
+
+function SelectionPanel() {
+  const count = useStore((s) => s.selectedIds.length);
+  const { align, distribute, copy, duplicate, removeMany } = useStore.getState();
+  return (
+    <div className="form">
+      <h3>{count} resources selected</h3>
+      <div className="field">
+        <span>Align</span>
+        <div className="button-row">
+          {ALIGNS.map((a) => (
+            <button key={a.mode} onClick={() => align(a.mode)}>
+              {a.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="field">
+        <span>Distribute evenly</span>
+        <div className="button-row">
+          <button onClick={() => distribute('horizontal')}>Horizontally</button>
+          <button onClick={() => distribute('vertical')}>Vertically</button>
+        </div>
+      </div>
+      <div className="actions">
+        <button onClick={copy}>Copy</button>
+        <button onClick={duplicate}>Duplicate</button>
+        <button className="danger" onClick={() => removeMany(useStore.getState().selectedIds)}>
+          Delete
+        </button>
+      </div>
+      <p className="muted">
+        Shift-drag on the canvas or Cmd/Ctrl-click to select several. Align and distribute work on resources
+        inside the same container.
+      </p>
+    </div>
+  );
+}
+
 export function PropertiesPanel({ issues }: { issues: Issue[] }) {
   const nodes = useStore((s) => s.nodes);
   const selectedId = useStore((s) => s.selectedId);
@@ -116,8 +164,10 @@ export function PropertiesPanel({ issues }: { issues: Issue[] }) {
   const remove = useStore((s) => s.remove);
   const fit = useStore((s) => s.fit);
   const selectedEdgeId = useStore((s) => s.selectedEdgeId);
+  const selectedIds = useStore((s) => s.selectedIds);
   const node = nodes.find((n) => n.id === selectedId);
 
+  if (selectedIds.length > 1) return <SelectionPanel />;
   if (!node && selectedEdgeId) return <EdgePanel edgeId={selectedEdgeId} issues={issues} />;
 
   if (!node) {

@@ -55,7 +55,19 @@ export function EditorPage() {
       const el = e.target as HTMLElement;
       if (el.closest('input, textarea, select')) return;
       const mod = e.metaKey || e.ctrlKey;
-      if (mod && e.key.toLowerCase() === 'z') {
+      if (mod && e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        useStore.getState().copy();
+      } else if (mod && e.key.toLowerCase() === 'v') {
+        e.preventDefault();
+        useStore.getState().paste();
+      } else if (mod && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        useStore.getState().duplicate();
+      } else if (e.key === 'Escape') {
+        useStore.getState().select(null);
+        useStore.getState().selectEdge(null);
+      } else if (mod && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         const s = useStore.getState();
         if (e.shiftKey) s.redo();

@@ -33,6 +33,10 @@ The first account to sign in inherits any projects created before auth existed.
 The API stores data in a local sql.js file (`apps/api/data/av2i.sqlite`) by default.
 For PostgreSQL: `npm run db:up` and set `DATABASE_URL=postgres://av2i:av2i@localhost:5432/av2i`.
 
+## Canvas shortcuts
+
+Shift-drag selects several resources (Cmd/Ctrl-click adds one). With several selected, the side panel aligns and distributes them (within one container). Cmd/Ctrl+C / V / D copy, paste and duplicate (nested resources and the connections between them come along; pasted subnets get a free CIDR, buckets a new name), Esc clears the selection, Cmd/Ctrl+Z / Shift+Z undo and redo. "Export PNG" (top right of the canvas) downloads the diagram, and the minimap sits bottom right.
+
 ## Cost and security
 
 - **Cost tab:** rough monthly cost from on-demand list prices (`packages/core/src/cost.ts`, us-east-1 with a coarse regional factor). Usage-based services (S3, Lambda, CloudFront, data transfer) are listed but not priced. Prices are hard-coded and will drift.

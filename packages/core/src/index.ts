@@ -9,3 +9,5 @@ export * from './templates';
 export * from './ports';
 export * from './security';
 export * from './cost';
+export * from './clipboard';
+export * from './align';

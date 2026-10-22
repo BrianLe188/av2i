@@ -1,25 +1,58 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { toPng } from 'html-to-image';
 import {
   Background,
   Controls,
   ConnectionMode,
+  MiniMap,
+  Panel,
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
   type Edge,
   type NodeChange,
 } from '@xyflow/react';
-import { resolveEdges, sortNodes, type Issue, type ResourceType } from '@av2i/core';
+import { absolutePosition, resolveEdges, sortNodes, type Issue, type ResourceType } from '@av2i/core';
 import { useStore } from '../store';
 import { DRAG_MIME } from './Palette';
-import { ResourceNode, type ResourceFlowNode } from './ResourceNode';
+import { ResourceNode, TYPE_COLORS, type ResourceFlowNode } from './ResourceNode';
 
 const nodeTypes = { resource: ResourceNode };
+
+/** Renders the diagram (nodes and edges, not the controls) to a PNG and downloads it. */
+async function exportPng() {
+  const s = useStore.getState();
+  if (s.nodes.length === 0) return s.notify('Nothing to export yet.');
+  const viewport = document.querySelector<HTMLElement>('.react-flow__viewport');
+  const flow = document.querySelector<HTMLElement>('.react-flow');
+  if (!viewport || !flow) return;
+  const boxes = s.nodes.map((n) => ({ ...absolutePosition(s.nodes, n.id), w: n.size.width, h: n.size.height }));
+  const x = Math.min(...boxes.map((b) => b.x));
+  const y = Math.min(...boxes.map((b) => b.y));
+  const pad = 40;
+  const width = Math.ceil(Math.max(...boxes.map((b) => b.x + b.w)) - x + pad * 2);
+  const height = Math.ceil(Math.max(...boxes.map((b) => b.y + b.h)) - y + pad * 2);
+  try {
+    const url = await toPng(viewport, {
+      width,
+      height,
+      pixelRatio: 2,
+      backgroundColor: getComputedStyle(flow).backgroundColor,
+      style: { width: `${width}px`, height: `${height}px`, transform: `translate(${pad - x}px, ${pad - y}px) scale(1)` },
+    });
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${s.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'diagram'}.png`;
+    a.click();
+  } catch (e) {
+    s.notify(`Export failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
 
 function Flow({ issues }: { issues: Issue[] }) {
   const nodes = useStore((s) => s.nodes);
   const edges = useStore((s) => s.edges);
-  const selectedId = useStore((s) => s.selectedId);
+  const selectedIds = useStore((s) => s.selectedIds);
   const selectedEdgeId = useStore((s) => s.selectedEdgeId);
   const loadedAt = useStore((s) => s.loadedAt);
   const { screenToFlowPosition, fitView } = useReactFlow();
@@ -40,13 +73,13 @@ function Flow({ issues }: { issues: Issue[] }) {
       type: 'resource',
       position: n.position,
       parentId: n.parentId,
-      selected: n.id === selectedId,
+      selected: selectedIds.includes(n.id),
       // Size lives on the node's own element, not `style`/`width`/`height`: those make React
       // Flow think the node is already measured, so it never registers its handles.
       measured: measured[n.id],
       data: { resource: n, errors: count.get(n.id)?.errors ?? 0, warnings: count.get(n.id)?.warnings ?? 0 },
     }));
-  }, [nodes, issues, selectedId, measured]);
+  }, [nodes, issues, selectedIds, measured]);
 
   const flowEdges = useMemo<Edge[]>(
     () =>
@@ -70,18 +103,27 @@ function Flow({ issues }: { issues: Issue[] }) {
   const onNodesChange = useCallback((changes: NodeChange<ResourceFlowNode>[]) => {
     const s = useStore.getState();
     const seen: Record<string, { width: number; height: number }> = {};
+    const removed: string[] = [];
     for (const c of changes) {
       if (c.type === 'position' && c.position) s.setPosition(c.id, c.position);
       else if (c.type === 'dimensions' && c.dimensions) {
         if (c.setAttributes) s.setSize(c.id, c.dimensions);
         else seen[c.id] = c.dimensions;
-      } else if (c.type === 'remove') s.remove(c.id);
+      } else if (c.type === 'remove') removed.push(c.id);
     }
+    if (removed.length) s.removeMany(removed);
     if (Object.keys(seen).length) setMeasured((prev) => ({ ...prev, ...seen }));
     const selects = changes.filter((c) => c.type === 'select');
-    const picked = selects.find((c) => c.selected);
-    if (picked) s.select(picked.id);
-    else if (selects.some((c) => c.id === s.selectedId)) s.select(null);
+    if (selects.length) {
+      const next = new Set(s.selectedIds);
+      for (const c of selects) {
+        if (c.selected) next.add(c.id);
+        else next.delete(c.id);
+      }
+      if (next.size !== s.selectedIds.length || [...next].some((id) => !s.selectedIds.includes(id))) {
+        s.setSelection([...next]);
+      }
+    }
   }, []);
 
   const onDrop = (e: React.DragEvent) => {
@@ -108,7 +150,7 @@ function Flow({ issues }: { issues: Issue[] }) {
       }}
       onConnect={(c) => useStore.getState().connect(c.source, c.target)}
       onNodeDragStart={(_, n) => useStore.getState().beginDrag(n.id)}
-      onNodeDragStop={(_, n) => useStore.getState().endDrag(n.id)}
+      onNodeDragStop={(_, n, dragged) => useStore.getState().endDrag(dragged.length ? dragged.map((d) => d.id) : [n.id])}
       onPaneClick={() => {
         useStore.getState().select(null);
         useStore.getState().selectEdge(null);
@@ -125,6 +167,21 @@ function Flow({ issues }: { issues: Issue[] }) {
     >
       <Background gap={20} />
       <Controls showInteractive={false} />
+      <MiniMap
+        pannable
+        zoomable
+        nodeColor={(n) => {
+          const type = (n.data as ResourceFlowNode['data']).resource.type;
+          // Containers are drawn pale so the resources inside them stay visible.
+          return type === 'vpc' ? '#e9e2fb' : type === 'subnet' ? '#dbe7fc' : TYPE_COLORS[type];
+        }}
+        nodeStrokeWidth={2}
+      />
+      <Panel position="top-right">
+        <button onClick={() => void exportPng()} title="Download the diagram as a PNG">
+          Export PNG
+        </button>
+      </Panel>
     </ReactFlow>
   );
 }

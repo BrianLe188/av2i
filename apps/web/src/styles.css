@@ -169,3 +169,6 @@ code { font: 12px ui-monospace, Menlo, monospace; }
 .cost-list li { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; cursor: pointer; }
 .cost-list li:hover { border-color: var(--accent); }
 .cost-row { display: flex; justify-content: space-between; gap: 8px; }
+
+.button-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.react-flow__minimap { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; }

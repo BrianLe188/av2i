@@ -9,7 +9,11 @@ import {
   parseCidr,
   removeNode,
   reparent,
+  alignNodes,
+  copySelection,
+  distributeNodes,
   estimateCost,
+  pasteFragment,
   TEMPLATES,
   validateGraph,
   type GraphNode,
@@ -622,6 +626,88 @@ describe('cost estimate', () => {
     expect(base.total).toBeCloseTo(base.items.reduce((s, i) => s + i.monthly, 0), 8);
     expect(base.items.some((i) => i.type === 'vpc' || i.type === 'subnet')).toBe(false);
     expect(cost(k.nodes, [], 'ap-southeast-1').total).toBeCloseTo(base.total * 1.25, 5);
+  });
+});
+
+describe('copy and paste', () => {
+  it('copies nested nodes and the edges between them, with new ids and names', () => {
+    const k = scenario();
+    const graph = { nodes: k.nodes, edges: [edge(k.igw.id, k.rt.id), edge(k.ec2.id, k.rds.id)] };
+    const fragment = copySelection(graph, [k.s1.id, k.igw.id, k.rt.id]);
+    expect(fragment.rootIds).toHaveLength(3);
+    expect(fragment.nodes.some((n) => n.id === k.ec2.id)).toBe(true); // child of s1 rides along
+    expect(fragment.edges.map((e) => e.id)).toEqual([`${k.igw.id}-${k.rt.id}`]); // ec2-rds crosses the selection
+    const pasted = pasteFragment(graph, fragment, { x: 40, y: 40 });
+    expect(pasted.graph.nodes).toHaveLength(graph.nodes.length + fragment.nodes.length);
+    expect(new Set(pasted.graph.nodes.map((n) => n.id)).size).toBe(pasted.graph.nodes.length);
+    expect(pasted.graph.edges).toHaveLength(graph.edges.length + 1);
+    const names = pasted.graph.nodes.map((n) => n.name);
+    expect(new Set(names).size).toBe(names.length);
+    expect(names).toContain('igw-1-copy');
+    expect(pasted.newIds).toHaveLength(3);
+  });
+
+  it('gives pasted subnets a free CIDR and pasted buckets a new name', () => {
+    const k = scenario();
+    const graph = { nodes: k.nodes, edges: [] };
+    const sub = pasteFragment(graph, copySelection(graph, [k.s1.id]), { x: 0, y: 200 });
+    const cidrs = sub.graph.nodes.filter((n) => n.type === 'subnet').map((n) => n.props.cidr_block);
+    expect(new Set(cidrs).size).toBe(cidrs.length);
+    const bucket = pasteFragment(graph, copySelection(graph, [k.bucket.id]), { x: 40, y: 40 });
+    const buckets = bucket.graph.nodes.filter((n) => n.type === 's3').map((n) => n.props.bucket);
+    expect(new Set(buckets).size).toBe(2);
+    expect(validateGraph(sub.graph).filter((i) => i.severity === 'error' && /overlaps/.test(i.message))).toEqual([]);
+  });
+
+  it('skips nodes whose container is gone and keeps pasted containers valid', () => {
+    const k = scenario();
+    const graph = { nodes: k.nodes, edges: [] };
+    const fragment = copySelection(graph, [k.ec2.id]);
+    const without = removeNode(graph, k.s1.id);
+    const pasted = pasteFragment(without, fragment, { x: 40, y: 40 });
+    expect(pasted.skipped).toBe(1);
+    expect(pasted.graph.nodes).toHaveLength(without.nodes.length);
+    const whole = pasteFragment(graph, copySelection(graph, [k.vpc.id]), { x: 600, y: 0 });
+    const vpcs = whole.graph.nodes.filter((n) => n.type === 'vpc');
+    expect(vpcs).toHaveLength(2);
+    expect(validateGraph(whole.graph).filter((i) => /must be placed inside/.test(i.message))).toEqual([]);
+  });
+});
+
+describe('align and distribute', () => {
+  function row() {
+    const k = scenario();
+    const place = (id: string, x: number, y: number) =>
+      k.nodes.map((n) => (n.id === id ? { ...n, position: { x, y } } : n));
+    return { k, place };
+  }
+
+  it('aligns siblings and refuses mixed containers', () => {
+    const { k } = row();
+    const nodes = k.nodes.map((n) =>
+      n.id === k.igw.id ? { ...n, position: { x: 30, y: 400 } } : n.id === k.alb.id ? { ...n, position: { x: 90, y: 440 } } : n,
+    );
+    const left = alignNodes(nodes, [k.igw.id, k.alb.id], 'left')!;
+    expect(left.find((n) => n.id === k.igw.id)!.position.x).toBe(30);
+    expect(left.find((n) => n.id === k.alb.id)!.position.x).toBe(30);
+    const bottom = alignNodes(nodes, [k.igw.id, k.alb.id], 'bottom')!;
+    const [a, b] = [k.igw.id, k.alb.id].map((id) => bottom.find((n) => n.id === id)!);
+    expect(a.position.y + a.size.height).toBe(b.position.y + b.size.height);
+    expect(alignNodes(nodes, [k.igw.id, k.ec2.id], 'left')).toBeNull(); // different parents
+    expect(alignNodes(nodes, [k.igw.id], 'left')).toBeNull();
+  });
+
+  it('spreads three nodes with equal gaps and keeps the outer two in place', () => {
+    const { k } = row();
+    const ids = [k.igw.id, k.rt.id, k.alb.id];
+    const xs = [20, 60, 400];
+    const nodes = k.nodes.map((n) => (ids.includes(n.id) ? { ...n, position: { x: xs[ids.indexOf(n.id)], y: 420 } } : n));
+    const out = distributeNodes(nodes, ids, 'horizontal')!;
+    const [a, b, c] = ids.map((id) => out.find((n) => n.id === id)!);
+    expect(a.position.x).toBe(20);
+    expect(c.position.x).toBe(400);
+    expect(b.position.x - (a.position.x + a.size.width)).toBeCloseTo(c.position.x - (b.position.x + b.size.width), 0);
+    expect(distributeNodes(nodes, ids.slice(0, 2), 'horizontal')).toBeNull();
   });
 });
 
