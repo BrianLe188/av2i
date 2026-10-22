@@ -2,7 +2,7 @@ import { vpcOf } from './graph';
 import { RESOURCES } from './resources';
 import type { Graph, GraphEdge, GraphNode, ResourceType } from './types';
 
-export type EdgeKind = 'route' | 'nat-route' | 'association' | 'db-access' | 'forward' | 's3-access';
+export type EdgeKind = 'route' | 'nat-route' | 'dns-alias' | 'association' | 'db-access' | 'forward' | 's3-access';
 
 export const DB_PORTS: Record<string, number> = { postgres: 5432, mysql: 3306, mariadb: 3306 };
 
@@ -16,10 +16,13 @@ interface Pair {
 const PAIRS: Pair[] = [
   { kind: 'route', from: 'igw', to: 'route_table' },
   { kind: 'nat-route', from: 'nat', to: 'route_table' },
+  { kind: 'dns-alias', from: 'dns', to: 'alb' },
   { kind: 'association', from: 'route_table', to: 'subnet' },
   { kind: 'db-access', from: 'ec2', to: 'rds' },
+  { kind: 'db-access', from: 'lambda', to: 'rds' },
   { kind: 'forward', from: 'alb', to: 'ec2' },
   { kind: 's3-access', from: 'ec2', to: 's3' },
+  { kind: 's3-access', from: 'lambda', to: 's3' },
 ];
 
 export const EDGE_INFO: Record<EdgeKind, { title: string; generates: string }> = {
@@ -32,6 +35,10 @@ export const EDGE_INFO: Record<EdgeKind, { title: string; generates: string }> =
     generates:
       'An Elastic IP and NAT Gateway, and a 0.0.0.0/0 route through it in the Route Table (outbound-only internet for private subnets).',
   },
+  'dns-alias': {
+    title: 'DNS alias to load balancer',
+    generates: 'A Route 53 A (alias) record pointing the record name at the load balancer.',
+  },
   association: {
     title: 'Route table association',
     generates: 'Associates the Subnet with the Route Table.',
@@ -39,7 +46,7 @@ export const EDGE_INFO: Record<EdgeKind, { title: string; generates: string }> =
   'db-access': {
     title: 'Database access',
     generates:
-      'A security group rule on the database allowing its port from the EC2 instance\'s security group.',
+      'A security group rule on the database allowing its port from the instance\'s or function\'s security group.',
   },
   forward: {
     title: 'Load balancer target',
@@ -49,7 +56,7 @@ export const EDGE_INFO: Record<EdgeKind, { title: string; generates: string }> =
   's3-access': {
     title: 'S3 access',
     generates:
-      'An IAM role, instance profile and least-privilege policy so the instance can use the bucket.',
+      'A least-privilege IAM policy (plus an instance profile for EC2) so the instance or function can use the bucket.',
   },
 };
 
@@ -102,6 +109,9 @@ export function classifyEdge(nodes: GraphNode[], edge: GraphEdge): ResolvedEdge 
     case 'nat-route':
       label = '0.0.0.0/0 via NAT';
       break;
+    case 'dns-alias':
+      label = 'alias';
+      break;
     case 'association':
       label = 'associated';
       break;
@@ -115,8 +125,8 @@ export function classifyEdge(nodes: GraphNode[], edge: GraphEdge): ResolvedEdge 
       label = edge.props?.access === 'readwrite' ? 'read/write' : 'read';
       break;
   }
-  // S3 buckets live outside any VPC, so only the other kinds need a shared VPC.
-  if (pair.kind !== 's3-access' && (!vFrom || !vTo || vFrom.id !== vTo.id)) {
+  // S3 buckets and DNS records live outside any VPC, so only the other kinds need a shared VPC.
+  if (pair.kind !== 's3-access' && pair.kind !== 'dns-alias' && (!vFrom || !vTo || vFrom.id !== vTo.id)) {
     return {
       ...base,
       label,

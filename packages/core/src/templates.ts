@@ -63,6 +63,33 @@ export const TEMPLATES: Template[] = [
     },
   },
   {
+    id: 'function-and-database',
+    name: 'Function + database',
+    description: 'A Lambda function in a private subnet that uses a Postgres database and an S3 bucket (outbound through a NAT Gateway).',
+    build(region) {
+      const b = builder(region);
+      const vpc = b.add('vpc', { name: 'main' });
+      const pub = b.add('subnet', { parent: vpc, name: 'public', at: [20, 44], props: { public: true } });
+      const privA = b.add('subnet', { parent: vpc, name: 'private-a', at: [340, 44] });
+      const privB = b.add('subnet', { parent: vpc, name: 'private-b', at: [340, 250] });
+      const igw = b.add('igw', { parent: vpc, at: [20, 250] });
+      const pubRt = b.add('route_table', { parent: vpc, name: 'public', at: [20, 340] });
+      const privRt = b.add('route_table', { parent: vpc, name: 'private', at: [200, 340] });
+      const nat = b.add('nat', { parent: pub });
+      const fn = b.add('lambda', { parent: privA, name: 'worker' });
+      const db = b.add('rds', { parent: privB, name: 'db' });
+      const bucket = b.add('s3', { name: 'data' });
+      b.connect(igw, pubRt);
+      b.connect(pubRt, pub);
+      b.connect(nat, privRt);
+      b.connect(privRt, privA);
+      b.connect(privRt, privB);
+      b.connect(fn, db);
+      b.connect(fn, bucket, { access: 'readwrite' });
+      return b.finish();
+    },
+  },
+  {
     id: 'server-and-bucket',
     name: 'Server + bucket',
     description: 'One public EC2 instance with internet access and an S3 bucket it can read and write.',

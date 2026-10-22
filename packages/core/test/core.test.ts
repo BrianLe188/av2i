@@ -302,6 +302,125 @@ describe('nat gateway', () => {
   });
 });
 
+const CERT = 'arn:aws:acm:us-east-1:123456789012:certificate/abc-123';
+
+describe('https + dns', () => {
+  function https() {
+    const k = scenario();
+    const alb = { ...k.alb, props: { ...k.alb.props, listener_port: 443, certificate_arn: CERT } };
+    const d = addNode(k.nodes.map((n) => (n.id === alb.id ? alb : n)), 'dns', { region });
+    const dns = {
+      ...d.node,
+      props: { ...d.node.props, zone_name: 'example.com', record_name: 'app.example.com' },
+    };
+    const nodes = d.nodes.map((n) => (n.id === dns.id ? dns : n));
+    return { ...k, nodes, alb, dns, edges: [edge(k.alb.id, k.ec2.id), edge(dns.id, k.alb.id)] };
+  }
+
+  it('turns the listener into HTTPS with an HTTP redirect', () => {
+    const k = https();
+    const main = generateTerraform({ nodes: k.nodes, edges: k.edges }, { region })['main.tf'];
+    expect(main).toMatch(/protocol\s+= "HTTPS"/);
+    expect(main).toContain('certificate_arn');
+    expect(main).toContain('ssl_policy');
+    expect(main).toContain('"aws_lb_listener" "alb_1_http_redirect"');
+    expect(main).toContain('type = "redirect"');
+    expect(main).toContain('"alb_1_http_redirect"'); // ingress rule for port 80
+  });
+
+  it('keeps plain HTTP and no redirect without a certificate', () => {
+    const k = scenario();
+    const main = generateTerraform({ nodes: k.nodes, edges: [edge(k.alb.id, k.ec2.id)] }, { region })['main.tf'];
+    expect(main).toMatch(/protocol\s+= "HTTP"/);
+    expect(main).not.toContain('HTTPS');
+    expect(main).not.toContain('redirect');
+  });
+
+  it('generates a Route 53 alias record from a DNS ↔ ALB edge', () => {
+    const k = https();
+    const main = generateTerraform({ nodes: k.nodes, edges: k.edges }, { region })['main.tf'];
+    expect(main).toContain('data "aws_route53_zone" "dns_1"');
+    expect(main).toContain('resource "aws_route53_record" "dns_1"');
+    expect(main).toContain('aws_lb.alb_1.dns_name');
+    expect(classifyEdge(k.nodes, edge(k.alb.id, k.dns.id)).kind).toBe('dns-alias');
+  });
+
+  it('validates certificate, record name and connections', () => {
+    const k = https();
+    const bad = (patch: Record<string, string>, which: 'alb' | 'dns') =>
+      validateGraph({
+        nodes: k.nodes.map((n) => (n.id === k[which].id ? { ...n, props: { ...n.props, ...patch } } : n)),
+        edges: k.edges,
+      }).filter((i) => i.severity === 'error');
+    expect(bad({}, 'dns')).toEqual([]);
+    expect(bad({ certificate_arn: 'not-an-arn' }, 'alb').map((i) => i.message).join()).toMatch(/ACM ARN/);
+    expect(bad({ record_name: 'app.other.org' }, 'dns').map((i) => i.message).join()).toMatch(/end with \.example\.com/);
+    const orphan = validateGraph({ nodes: k.nodes, edges: [] }).filter((i) => i.nodeId === k.dns.id);
+    expect(orphan.map((i) => i.message).join()).toMatch(/Not connected/);
+  });
+});
+
+describe('lambda', () => {
+  function withFn() {
+    const k = scenario();
+    const fn = addNode(k.nodes, 'lambda', { region, parentId: k.priv.id });
+    return { ...k, nodes: fn.nodes, fn: fn.node };
+  }
+
+  it('connects to RDS and S3 like an instance', () => {
+    const k = withFn();
+    expect(classifyEdge(k.nodes, edge(k.fn.id, k.rds.id)).kind).toBe('db-access');
+    expect(classifyEdge(k.nodes, edge(k.bucket.id, k.fn.id)).kind).toBe('s3-access');
+  });
+
+  it('generates a VPC function with role, security group and a db rule', () => {
+    const k = withFn();
+    const files = generateTerraform(
+      { nodes: k.nodes, edges: [edge(k.fn.id, k.rds.id), edge(k.fn.id, k.bucket.id, { access: 'readwrite' })] },
+      { region },
+    );
+    const main = files['main.tf'];
+    expect(files['providers.tf']).toContain('hashicorp/archive');
+    for (const needle of [
+      'resource "aws_lambda_function" "lambda_1"',
+      'AWSLambdaVPCAccessExecutionRole',
+      'lambda.amazonaws.com',
+      'resource "aws_vpc_security_group_ingress_rule" "rds_1_from_lambda_1"',
+      'data "archive_file" "lambda_1"',
+      's3:PutObject',
+      'vpc_config',
+    ]) {
+      expect(main).toContain(needle);
+    }
+    expect(main).not.toContain('aws_iam_instance_profile" "lambda');
+  });
+
+  it('only pulls in the archive provider when there is a function', () => {
+    const k = scenario();
+    expect(generateTerraform({ nodes: k.nodes, edges: [] }, { region })['providers.tf']).not.toContain('archive');
+  });
+
+  it('uses the handler to name the placeholder file', () => {
+    const k = withFn();
+    const nodes = k.nodes.map((n) =>
+      n.id === k.fn.id ? { ...n, props: { ...n.props, runtime: 'nodejs20.x', handler: 'app.run' } } : n,
+    );
+    const main = generateTerraform({ nodes, edges: [] }, { region })['main.tf'];
+    expect(main).toContain('filename = "app.js"');
+    expect(main).toContain('exports.run');
+  });
+
+  it('validates limits and warns about S3 without a NAT route', () => {
+    const k = withFn();
+    const edges = [edge(k.fn.id, k.bucket.id)];
+    const warn = validateGraph({ nodes: k.nodes, edges }).filter((i) => i.nodeId === k.fn.id);
+    expect(warn.map((i) => i.message).join()).toMatch(/NAT Gateway/);
+    const bad = k.nodes.map((n) => (n.id === k.fn.id ? { ...n, props: { ...n.props, timeout: 5000, handler: 'nodot' } } : n));
+    const errors = validateGraph({ nodes: bad, edges: [] }).filter((i) => i.nodeId === k.fn.id && i.severity === 'error');
+    expect(errors).toHaveLength(2);
+  });
+});
+
 describe('templates', () => {
   for (const t of TEMPLATES) {
     it(`${t.id} has no errors and generates terraform`, () => {

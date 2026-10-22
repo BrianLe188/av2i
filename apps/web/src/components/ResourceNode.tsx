@@ -7,6 +7,8 @@ export const TYPE_COLORS: Record<ResourceType, string> = {
   subnet: '#2563eb',
   igw: '#0d9488',
   nat: '#475569',
+  dns: '#0284c7',
+  lambda: '#d97706',
   route_table: '#a16207',
   alb: '#db2777',
   ec2: '#ea580c',
@@ -14,7 +16,7 @@ export const TYPE_COLORS: Record<ResourceType, string> = {
   s3: '#16a34a',
 };
 
-const BADGES: Partial<Record<ResourceType, string>> = { route_table: 'RTB', nat: 'NAT' };
+const BADGES: Partial<Record<ResourceType, string>> = { route_table: 'RTB', nat: 'NAT', dns: 'DNS', lambda: 'FN' };
 
 export interface ResourceData extends Record<string, unknown> {
   resource: GraphNode;
@@ -37,11 +39,15 @@ function summary(n: GraphNode): string {
     case 'route_table':
       return 'routes';
     case 'alb':
-      return `${n.props.internal ? 'internal' : 'public'} · :${n.props.listener_port}`;
+      return `${n.props.internal ? 'internal' : 'public'} · ${String(n.props.certificate_arn ?? '').trim() ? 'https' : 'http'} :${n.props.listener_port}`;
     case 'ec2':
       return String(n.props.instance_type);
     case 'rds':
       return `${n.props.engine} · ${n.props.instance_class}`;
+    case 'lambda':
+      return `${n.props.runtime} · ${n.props.memory_size} MB`;
+    case 'dns':
+      return String(n.props.record_name);
     case 's3':
       return String(n.props.bucket);
   }

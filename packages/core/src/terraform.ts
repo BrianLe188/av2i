@@ -45,7 +45,12 @@ class Labels {
   }
 }
 
-const HAS_SG = new Set(['ec2', 'rds', 'alb']);
+const HAS_SG = new Set(['ec2', 'lambda', 'rds', 'alb']);
+
+const hasCertificate = (alb: GraphNode) => String(alb.props.certificate_arn ?? '').trim() !== '';
+/** With a certificate on a non-80 port, plain HTTP on 80 redirects to HTTPS (unless switched off). */
+const redirectsHttp = (alb: GraphNode) =>
+  hasCertificate(alb) && alb.props.redirect_http !== false && (Number(alb.props.listener_port) || 80) !== 80;
 
 /** Returns `{ filename: contents }` for a Terraform root module. */
 export function generateTerraform(graph: Graph, opts: { region: string }): Record<string, string> {
@@ -67,6 +72,13 @@ export function generateTerraform(graph: Graph, opts: { region: string }): Recor
   );
   const edgesOf = (kind: string) => resolved.filter((r) => r.kind === kind);
 
+  const archiveProvider = nodes.some((n) => n.type === 'lambda')
+    ? `
+    archive = {
+      source  = "hashicorp/archive"
+      version = ">= 2.0"
+    }`
+    : '';
   const providers = [
     `terraform {
   required_version = ">= 1.5.0"
@@ -75,7 +87,7 @@ export function generateTerraform(graph: Graph, opts: { region: string }): Recor
     aws = {
       source  = "hashicorp/aws"
       version = ">= 5.0"
-    }
+    }${archiveProvider}
   }
 }`,
     block('provider "aws"', [['region', str(opts.region)]]),
@@ -214,7 +226,7 @@ export function generateTerraform(graph: Graph, opts: { region: string }): Recor
       ]),
     );
 
-  for (const n of sgOwners.filter((x) => x.type === 'ec2' || x.type === 'alb')) {
+  for (const n of sgOwners.filter((x) => x.type === 'ec2' || x.type === 'lambda' || x.type === 'alb')) {
     add(
       `rule.${L(n)}_egress`,
       block(`resource "aws_vpc_security_group_egress_rule" "${L(n)}_all"`, [
@@ -234,6 +246,7 @@ export function generateTerraform(graph: Graph, opts: { region: string }): Recor
     if (!vpc) continue;
     const source = alb.props.internal ? { cidr: String(vpc.props.cidr_block) } : { cidr: '0.0.0.0/0' };
     ingress(`${L(alb)}_listener`, alb, source, Number(alb.props.listener_port) || 80, 'Listener');
+    if (redirectsHttp(alb)) ingress(`${L(alb)}_http_redirect`, alb, source, 80, 'HTTP redirect');
   }
   for (const r of edgesOf('forward')) {
     ingress(
@@ -245,12 +258,29 @@ export function generateTerraform(graph: Graph, opts: { region: string }): Recor
     );
   }
 
-  // --- IAM: instance role per EC2 that has S3 edges -------------------------
-  const profiles = new Set<string>();
-  for (const ec2 of ofType('ec2')) {
-    const access = edgesOf('s3-access').filter((r) => r.from.id === ec2.id);
-    if (access.length === 0) continue;
-    profiles.add(ec2.id);
+  // --- IAM: roles for EC2 (with S3 edges) and Lambda (always) -----------------
+  const addRole = (owner: GraphNode, service: string) =>
+    add(
+      `role.${owner.id}`,
+      block(`resource "aws_iam_role" "${L(owner)}"`, [
+        ['name', str(`${slug(owner.name, 56)}-role`)],
+        [
+          'assume_role_policy',
+          `jsonencode({
+  Version = "2012-10-17"
+  Statement = [{
+    Effect    = "Allow"
+    Action    = "sts:AssumeRole"
+    Principal = { Service = "${service}" }
+  }]
+})`,
+        ],
+      ]),
+    );
+  /** Least-privilege S3 policy for everything `owner` is connected to. */
+  const addS3Policy = (owner: GraphNode) => {
+    const access = edgesOf('s3-access').filter((r) => r.from.id === owner.id);
+    if (access.length === 0) return;
     const readBuckets = access.filter((r) => r.edge.props?.access !== 'readwrite').map((r) => r.to);
     const writeBuckets = access.filter((r) => r.edge.props?.access === 'readwrite').map((r) => r.to);
     const arn = (b: GraphNode) => `aws_s3_bucket.${L(b)}.arn`;
@@ -263,38 +293,29 @@ export function generateTerraform(graph: Graph, opts: { region: string }): Recor
       );
     }
     add(
-      `role.${ec2.id}`,
-      block(`resource "aws_iam_role" "${L(ec2)}"`, [
-        ['name', str(`${slug(ec2.name, 56)}-role`)],
-        [
-          'assume_role_policy',
-          `jsonencode({
-  Version = "2012-10-17"
-  Statement = [{
-    Effect    = "Allow"
-    Action    = "sts:AssumeRole"
-    Principal = { Service = "ec2.amazonaws.com" }
-  }]
-})`,
-        ],
-      ]),
-    );
-    add(
-      `rolepolicy.${ec2.id}`,
-      block(`resource "aws_iam_role_policy" "${L(ec2)}_s3"`, [
+      `rolepolicy.${owner.id}`,
+      block(`resource "aws_iam_role_policy" "${L(owner)}_s3"`, [
         ['name', '"s3-access"'],
-        ['role', `aws_iam_role.${L(ec2)}.id`],
+        ['role', `aws_iam_role.${L(owner)}.id`],
         [
           'policy',
           `jsonencode({
   Version = "2012-10-17"
   Statement = [
-${statements.map((s) => s.replace(/^/gm, '    ')).join(',\n')}
+${statements.map((x) => x.replace(/^/gm, '    ')).join(',\n')}
   ]
 })`,
         ],
       ]),
     );
+  };
+
+  const profiles = new Set<string>();
+  for (const ec2 of ofType('ec2')) {
+    if (!edgesOf('s3-access').some((r) => r.from.id === ec2.id)) continue;
+    profiles.add(ec2.id);
+    addRole(ec2, 'ec2.amazonaws.com');
+    addS3Policy(ec2);
     add(
       `profile.${ec2.id}`,
       block(`resource "aws_iam_instance_profile" "${L(ec2)}"`, [
@@ -330,6 +351,62 @@ ${statements.map((s) => s.replace(/^/gm, '    ')).join(',\n')}
           tags(ec2.name),
         ],
         ['root_block_device {', `  volume_size = ${Number(ec2.props.root_volume_size) || 8}`, '}'],
+      ),
+    );
+  }
+
+  for (const fn of ofType('lambda').filter((f) => f.parentId && byId.get(f.parentId)?.type === 'subnet')) {
+    const subnet = byId.get(fn.parentId!)!;
+    const runtime = String(fn.props.runtime);
+    const handler = String(fn.props.handler).trim() || 'index.handler';
+    const dot = handler.lastIndexOf('.');
+    const moduleName = dot > 0 ? handler.slice(0, dot) : 'index';
+    const functionName = dot > 0 ? handler.slice(dot + 1) : handler;
+    const node = runtime.startsWith('nodejs');
+    const file = `${moduleName}.${node ? 'js' : 'py'}`;
+    const source = node
+      ? `exports.${functionName} = async () => ({ statusCode: 200, body: "Hello from ${fn.name}" });\n`
+      : `def ${functionName}(event, context):\n    return {"statusCode": 200, "body": "Hello from ${fn.name}"}\n`;
+
+    addRole(fn, 'lambda.amazonaws.com');
+    add(
+      `lambda-vpc.${fn.id}`,
+      block(`resource "aws_iam_role_policy_attachment" "${L(fn)}_vpc"`, [
+        ['role', `aws_iam_role.${L(fn)}.name`],
+        ['policy_arn', '"arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"'],
+      ]),
+    );
+    addS3Policy(fn);
+    add(
+      `lambda-src.${fn.id}`,
+      `# Placeholder handler so this applies out of the box: replace it with your own code or package.\n` +
+        block(`data "archive_file" "${L(fn)}"`, [
+          ['type', '"zip"'],
+          ['output_path', `"\${path.module}/.build/${L(fn)}.zip"`],
+        ], [`source {`, `  content  = ${str(source)}`, `  filename = ${str(file)}`, `}`]),
+    );
+    add(
+      `lambda.${fn.id}`,
+      block(
+        `resource "aws_lambda_function" "${L(fn)}"`,
+        [
+          ['function_name', str(slug(fn.name, 64))],
+          ['role', `aws_iam_role.${L(fn)}.arn`],
+          ['runtime', str(runtime)],
+          ['handler', str(handler)],
+          ['filename', `data.archive_file.${L(fn)}.output_path`],
+          ['source_code_hash', `data.archive_file.${L(fn)}.output_base64sha256`],
+          ['memory_size', String(Number(fn.props.memory_size) || 128)],
+          ['timeout', String(Number(fn.props.timeout) || 10)],
+          ['depends_on', `[aws_iam_role_policy_attachment.${L(fn)}_vpc]`],
+          tags(fn.name),
+        ],
+        [
+          'vpc_config {',
+          `  subnet_ids         = [aws_subnet.${L(subnet)}.id]`,
+          `  security_group_ids = [${sgRef(fn)}]`,
+          '}',
+        ],
       ),
     );
   }
@@ -418,6 +495,7 @@ ${statements.map((s) => s.replace(/^/gm, '    ')).join(',\n')}
         ]),
       );
     }
+    const https = hasCertificate(alb);
     add(
       `listener.${alb.id}`,
       block(
@@ -425,12 +503,67 @@ ${statements.map((s) => s.replace(/^/gm, '    ')).join(',\n')}
         [
           ['load_balancer_arn', `aws_lb.${L(alb)}.arn`],
           ['port', String(Number(alb.props.listener_port) || 80)],
-          ['protocol', '"HTTP"'],
+          ['protocol', https ? '"HTTPS"' : '"HTTP"'],
+          https ? ['ssl_policy', '"ELBSecurityPolicy-TLS13-1-2-2021-06"'] : null,
+          https ? ['certificate_arn', str(String(alb.props.certificate_arn).trim())] : null,
         ],
         [
           'default_action {',
           '  type             = "forward"',
           `  target_group_arn = aws_lb_target_group.${L(alb)}.arn`,
+          '}',
+        ],
+      ),
+    );
+    if (redirectsHttp(alb)) {
+      add(
+        `listener-redirect.${alb.id}`,
+        block(
+          `resource "aws_lb_listener" "${L(alb)}_http_redirect"`,
+          [
+            ['load_balancer_arn', `aws_lb.${L(alb)}.arn`],
+            ['port', '80'],
+            ['protocol', '"HTTP"'],
+          ],
+          [
+            'default_action {',
+            '  type = "redirect"',
+            '  redirect {',
+            `    port        = "${Number(alb.props.listener_port) || 443}"`,
+            '    protocol    = "HTTPS"',
+            '    status_code = "HTTP_301"',
+            '  }',
+            '}',
+          ],
+        ),
+      );
+    }
+  }
+
+  // --- Route 53 alias records -------------------------------------------------
+  for (const r of edgesOf('dns-alias')) {
+    const dns = r.from;
+    add(
+      `zone.${dns.id}`,
+      block(`data "aws_route53_zone" "${L(dns)}"`, [
+        ['name', str(String(dns.props.zone_name).trim())],
+        ['private_zone', 'false'],
+      ]),
+    );
+    add(
+      `dns.${dns.id}`,
+      block(
+        `resource "aws_route53_record" "${L(dns)}"`,
+        [
+          ['zone_id', `data.aws_route53_zone.${L(dns)}.zone_id`],
+          ['name', str(String(dns.props.record_name).trim())],
+          ['type', '"A"'],
+        ],
+        [
+          'alias {',
+          `  name                   = aws_lb.${L(r.to)}.dns_name`,
+          `  zone_id                = aws_lb.${L(r.to)}.zone_id`,
+          '  evaluate_target_health = true',
           '}',
         ],
       ),

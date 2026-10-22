@@ -101,6 +101,20 @@ export const RESOURCES: Record<ResourceType, ResourceDef> = {
       { key: 'listener_port', label: 'Listener port', type: 'number', default: 80 },
       { key: 'target_port', label: 'Target port', type: 'number', default: 80 },
       { key: 'health_check_path', label: 'Health check path', type: 'text', default: '/' },
+      {
+        key: 'certificate_arn',
+        label: 'ACM certificate ARN',
+        type: 'text',
+        default: '',
+        hint: 'Set to serve HTTPS on the listener port (usually 443). The certificate must be in the same region.',
+      },
+      {
+        key: 'redirect_http',
+        label: 'Redirect HTTP to HTTPS',
+        type: 'boolean',
+        default: true,
+        hint: 'Adds a port 80 listener that redirects. Only applies with a certificate and a listener port other than 80.',
+      },
     ],
   },
   ec2: {
@@ -126,6 +140,26 @@ export const RESOURCES: Record<ResourceType, ResourceDef> = {
         default: '',
         hint: 'Empty = latest Amazon Linux 2023',
       },
+    ],
+  },
+  lambda: {
+    type: 'lambda',
+    label: 'Lambda function',
+    kind: 'placed',
+    parents: ['subnet'],
+    defaultSize: { width: 140, height: 64 },
+    minSize: { width: 140, height: 64 },
+    fields: [
+      { key: 'runtime', label: 'Runtime', type: 'select', options: ['python3.12', 'nodejs20.x'], default: 'python3.12' },
+      {
+        key: 'handler',
+        label: 'Handler',
+        type: 'text',
+        default: 'index.handler',
+        hint: 'file.function. A placeholder handler is generated; replace it with your code.',
+      },
+      { key: 'memory_size', label: 'Memory (MB)', type: 'number', default: 128 },
+      { key: 'timeout', label: 'Timeout (s)', type: 'number', default: 10 },
     ],
   },
   rds: {
@@ -167,6 +201,24 @@ export const RESOURCES: Record<ResourceType, ResourceDef> = {
       { key: 'versioning', label: 'Versioning', type: 'boolean', default: false },
     ],
   },
+  dns: {
+    type: 'dns',
+    label: 'DNS record',
+    kind: 'free',
+    parents: [],
+    defaultSize: { width: 140, height: 64 },
+    minSize: { width: 140, height: 64 },
+    fields: [
+      {
+        key: 'zone_name',
+        label: 'Hosted zone',
+        type: 'text',
+        default: 'example.com',
+        hint: 'An existing Route 53 public hosted zone, looked up by name.',
+      },
+      { key: 'record_name', label: 'Record name', type: 'text', default: 'app.example.com' },
+    ],
+  },
 };
 
 export const RESOURCE_ORDER: ResourceType[] = [
@@ -177,8 +229,10 @@ export const RESOURCE_ORDER: ResourceType[] = [
   'route_table',
   'alb',
   'ec2',
+  'lambda',
   'rds',
   's3',
+  'dns',
 ];
 
 export function availabilityZones(region: string): string[] {

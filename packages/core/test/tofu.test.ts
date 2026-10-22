@@ -21,7 +21,10 @@ function validateAll(cases: Record<string, Graph>) {
   const env = names.flatMap((name, i) => [
     '-e', `MAIN_${i}=${Buffer.from(generateTerraform(cases[name], { region })['main.tf']).toString('base64')}`,
   ]);
-  const providers = generateTerraform(cases[names[0]], { region })['providers.tf'];
+  // One init for all cases, so use the providers.tf that declares the most providers (e.g. with archive).
+  const providers = names
+    .map((n) => generateTerraform(cases[n], { region })['providers.tf'])
+    .reduce((a, b) => (b.length > a.length ? b : a));
   const script = [
     'mkdir /w && cd /w',
     'echo "$PROVIDERS" | base64 -d > providers.tf',
@@ -79,6 +82,18 @@ describe.skipIf(!process.env.TOFU_VALIDATE)('tofu validate', () => {
         nodes: rt2.nodes,
         edges: [edge(k.igw.id, k.rt.id), edge(k.rt.id, k.s1.id), edge(nat.node.id, rt2.node.id), edge(rt2.node.id, k.priv.id)],
       };
+    })(),
+    'https-dns': (() => {
+      const alb = { ...k.alb, props: { ...k.alb.props, listener_port: 443, certificate_arn: 'arn:aws:acm:us-east-1:123456789012:certificate/abc-123' } };
+      const d = addNode(k.nodes.map((n) => (n.id === alb.id ? alb : n)), 'dns', { region });
+      return { nodes: d.nodes, edges: [edge(k.alb.id, k.ec2.id), edge(d.node.id, k.alb.id)] };
+    })(),
+    'lambda-nodejs': (() => {
+      const fn = addNode(k.nodes, 'lambda', { region, parentId: k.priv.id });
+      const nodes = fn.nodes.map((n) =>
+        n.id === fn.node.id ? { ...n, props: { ...n.props, runtime: 'nodejs20.x', handler: 'app.run' } } : n,
+      );
+      return { nodes, edges: [edge(fn.node.id, k.rds.id), edge(fn.node.id, k.bucket.id)] };
     })(),
     'vpc-only': { nodes: k.nodes.filter((n) => n.type === 'vpc' || n.type === 'subnet'), edges: [] },
     ...Object.fromEntries(TEMPLATES.map((t) => [`template-${t.id}`, t.build(region)])),

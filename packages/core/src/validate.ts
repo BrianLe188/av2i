@@ -142,6 +142,42 @@ function validateConnections(graph: Graph, issues: Issue[]): void {
     }
   }
 
+  for (const fn of nodes.filter((n) => n.type === 'lambda')) {
+    const timeout = Number(fn.props.timeout);
+    const memory = Number(fn.props.memory_size);
+    if (!(timeout >= 1 && timeout <= 900)) add(fn.id, 'error', 'Timeout must be between 1 and 900 seconds.');
+    if (!(memory >= 128 && memory <= 10240)) add(fn.id, 'error', 'Memory must be between 128 and 10240 MB.');
+    if (!/^[\w-]+(\.[\w-]+)+$/.test(String(fn.props.handler).trim())) {
+      add(fn.id, 'error', 'Handler must look like file.function, for example index.handler.');
+    }
+    // A function in a VPC has no public IP, so reaching S3 needs a NAT route (or a VPC endpoint, not modelled yet).
+    const usesS3 = of('s3-access').some((r) => r.from!.id === fn.id);
+    const hasNatRoute = of('association').some(
+      (r) => r.to!.id === fn.parentId && of('nat-route').some((x) => x.to!.id === r.from!.id),
+    );
+    if (usesS3 && !hasNatRoute) {
+      add(
+        fn.id,
+        'warning',
+        'A function in a VPC reaches S3 only through a NAT Gateway: connect its subnet to a Route Table that routes through one.',
+      );
+    }
+  }
+
+  for (const dns of nodes.filter((n) => n.type === 'dns')) {
+    const zone = String(dns.props.zone_name).trim().toLowerCase();
+    const record = String(dns.props.record_name).trim().toLowerCase();
+    const host = /^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/;
+    if (!host.test(zone)) add(dns.id, 'error', `"${dns.props.zone_name}" is not a valid domain name.`);
+    if (!host.test(record)) add(dns.id, 'error', `"${dns.props.record_name}" is not a valid host name.`);
+    else if (host.test(zone) && record !== zone && !record.endsWith(`.${zone}`)) {
+      add(dns.id, 'error', `Record name must be ${zone} or end with .${zone}.`);
+    }
+    const aliases = of('dns-alias').filter((r) => r.from!.id === dns.id);
+    if (aliases.length === 0) add(dns.id, 'warning', 'Not connected to a load balancer, so it creates no record.');
+    if (aliases.length > 1) add(dns.id, 'error', 'A DNS record can point to only one load balancer.');
+  }
+
   for (const alb of nodes.filter((n) => n.type === 'alb')) {
     const vpc = vpcOf(nodes, alb);
     if (vpc) {
@@ -158,6 +194,10 @@ function validateConnections(graph: Graph, issues: Issue[]): void {
             : 'An internet-facing load balancer needs public subnets in at least 2 availability zones.',
         );
       }
+    }
+    const arn = String(alb.props.certificate_arn ?? '').trim();
+    if (arn && !/^arn:aws[a-z-]*:acm:[a-z0-9-]+:\d{12}:certificate\/[\w-]+$/.test(arn)) {
+      add(alb.id, 'error', 'Certificate must be an ACM ARN: arn:aws:acm:<region>:<account>:certificate/<id>.');
     }
     if (!of('forward').some((r) => r.from!.id === alb.id)) {
       add(alb.id, 'warning', 'No targets: connect it to an EC2 instance.');
