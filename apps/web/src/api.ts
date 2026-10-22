@@ -14,6 +14,14 @@ export interface Project {
   region: string;
   graph: Graph;
   updatedAt: string;
+  shareToken?: string | null;
+}
+
+export interface SharedProject {
+  name: string;
+  region: string;
+  graph: Graph;
+  updatedAt: string;
 }
 
 export interface VersionSummary {
@@ -86,6 +94,9 @@ export const api = {
     request<VersionSummary>(`/projects/${id}/versions`, json('POST', { label })),
   restore: (id: string, versionId: string) =>
     request<Project>(`/projects/${id}/versions/${versionId}/restore`, json('POST')),
+  shareProject: (id: string) => request<{ token: string }>(`/projects/${id}/share`, json('POST')),
+  unshareProject: (id: string) => request<void>(`/projects/${id}/share`, json('DELETE')),
+  getShared: (token: string) => request<SharedProject>(`/shared/${token}`),
   exportProject: (id: string) =>
     request<{ files: Record<string, string>; issues: Issue[] }>(`/projects/${id}/export`),
 };

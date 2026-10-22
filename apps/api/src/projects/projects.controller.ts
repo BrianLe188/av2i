@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put } from '@nestjs/common';
-import { CurrentUser } from '../auth/decorators';
+import { CurrentUser, Public } from '../auth/decorators';
 import { CreateProjectDto, CreateVersionDto, UpdateProjectDto } from './dto';
 import type { User } from '../auth/user.entity';
 import { ProjectsService } from './projects.service';
@@ -34,6 +34,17 @@ export class ProjectsController {
     return this.service.remove(user.id, id);
   }
 
+  @Post(':id/share')
+  share(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string) {
+    return this.service.enableShare(user.id, id);
+  }
+
+  @Delete(':id/share')
+  @HttpCode(204)
+  unshare(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string) {
+    return this.service.disableShare(user.id, id);
+  }
+
   @Get(':id/export')
   export(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string) {
     return this.service.export(user.id, id);
@@ -56,5 +67,17 @@ export class ProjectsController {
     @Param('versionId', ParseUUIDPipe) versionId: string,
   ) {
     return this.service.restore(user.id, id, versionId);
+  }
+}
+
+/** Read-only access by share token; no sign-in required. */
+@Controller('shared')
+export class SharedController {
+  constructor(private readonly service: ProjectsService) {}
+
+  @Public()
+  @Get(':token')
+  get(@Param('token') token: string) {
+    return this.service.getShared(token);
   }
 }

@@ -255,7 +255,8 @@ export function generateTerraform(graph: Graph, opts: { region: string }): Recor
       `sg.${sg.id}`,
       block(`resource "aws_security_group" "${L(sg)}"`, [
         ['name', str(sgName(sg))],
-        ['description', str(`Managed by av2i for ${sg.name}`)],
+        // Not "Managed by av2i for ...": that prefix marks the groups av2i creates per resource, which import skips.
+        ['description', str(`Security group ${sg.name} (av2i)`)],
         ['vpc_id', `aws_vpc.${L(vpc)}.id`],
         tags(sg.name),
       ]),

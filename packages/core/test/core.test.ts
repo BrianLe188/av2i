@@ -13,6 +13,9 @@ import {
   copySelection,
   distributeNodes,
   estimateCost,
+  importTerraform,
+  parseHcl,
+  resolveEdges,
   pasteFragment,
   TEMPLATES,
   validateGraph,
@@ -708,6 +711,118 @@ describe('align and distribute', () => {
     expect(c.position.x).toBe(400);
     expect(b.position.x - (a.position.x + a.size.width)).toBeCloseTo(c.position.x - (b.position.x + b.size.width), 0);
     expect(distributeNodes(nodes, ids.slice(0, 2), 'horizontal')).toBeNull();
+  });
+});
+
+describe('terraform import', () => {
+  const tally = (graph: Parameters<typeof resolveEdges>[0]) => ({
+    nodes: graph.nodes.map((n) => n.type).sort(),
+    edges: resolveEdges(graph).map((r) => r.kind).sort(),
+  });
+  const roundTrip = (graph: Parameters<typeof resolveEdges>[0]) =>
+    importTerraform(Object.values(generateTerraform(graph, { region })).join('\n'));
+
+  it('parses what the generator writes', () => {
+    for (const t of TEMPLATES) {
+      for (const text of Object.values(generateTerraform(t.build(region), { region }))) {
+        const blocks = parseHcl(text);
+        expect(blocks.filter((b) => b.type === 'resource')).toHaveLength((text.match(/^resource "/gm) ?? []).length);
+      }
+    }
+  });
+
+  it('round-trips every template: same resources, same connections', () => {
+    for (const t of TEMPLATES) {
+      const original = t.build(region);
+      const result = roundTrip(original);
+      expect(tally(result.graph), t.id).toEqual(tally(original));
+      expect(result.region).toBe(region);
+      expect(result.report.skipped, t.id).toEqual({});
+      const errors = validateGraph(result.graph).filter((i) => i.severity === 'error');
+      expect(errors, `${t.id}: ${JSON.stringify(errors)}`).toEqual([]);
+    }
+  });
+
+  it('keeps settings and names through a round trip', () => {
+    const k = scenario();
+    const graph = {
+      nodes: k.nodes.map((n) =>
+        n.id === k.ec2.id ? { ...n, name: 'app-server', props: { ...n.props, instance_type: 't3.medium', root_volume_size: 30 } }
+        : n.id === k.rds.id ? { ...n, props: { ...n.props, engine: 'mysql', multi_az: true, allocated_storage: 50 } }
+        : n.id === k.alb.id ? { ...n, props: { ...n.props, listener_port: 443, certificate_arn: CERT } }
+        : n),
+      edges: [edge(k.igw.id, k.rt.id), edge(k.rt.id, k.s1.id), edge(k.alb.id, k.ec2.id), edge(k.ec2.id, k.rds.id), edge(k.ec2.id, k.bucket.id, { access: 'readwrite' })],
+    };
+    const { graph: back } = roundTrip(graph);
+    const ec2 = back.nodes.find((n) => n.type === 'ec2')!;
+    expect(ec2.name).toBe('app-server');
+    expect(ec2.props).toMatchObject({ instance_type: 't3.medium', root_volume_size: 30 });
+    expect(back.nodes.find((n) => n.type === 'rds')!.props).toMatchObject({ engine: 'mysql', multi_az: true, allocated_storage: 50 });
+    expect(back.nodes.find((n) => n.type === 'alb')!.props).toMatchObject({ listener_port: 443, certificate_arn: CERT, redirect_http: true });
+    expect(back.edges.find((e) => resolveEdges(back).find((r) => r.edge.id === e.id)?.kind === 's3-access')!.props).toEqual({ access: 'readwrite' });
+    expect(back.nodes.filter((n) => n.type === 'subnet').map((n) => n.props.cidr_block).sort()).toEqual(
+      k.nodes.filter((n) => n.type === 'subnet').map((n) => n.props.cidr_block).sort(),
+    );
+  });
+
+  it('imports hand-written Terraform, ignoring comments, variables and what it cannot draw', () => {
+    const result = importTerraform(`
+      # networking
+      variable "env" { default = "dev" }
+      provider "aws" { region = "eu-west-1" }
+      resource "aws_vpc" "main" {
+        cidr_block = var.cidr
+        tags = { Name = "prod-${'$'}{var.env}" }
+      }
+      resource "aws_vpc" "lab" { cidr_block = "172.16.0.0/16" }
+      resource "aws_subnet" "a" {
+        vpc_id = aws_vpc.lab.id
+        cidr_block = "172.16.1.0/24"
+        availability_zone = "eu-west-1a"
+        map_public_ip_on_launch = true
+      }
+      resource "aws_subnet" "orphan" { vpc_id = aws_vpc.elsewhere.id cidr_block = "10.9.0.0/24" }
+      resource "aws_instance" "web" {
+        subnet_id = aws_subnet.a.id
+        instance_type = "t3.small"
+        ami = "ami-123"
+      }
+      resource "aws_security_group" "ssh" {
+        vpc_id = aws_vpc.lab.id
+        description = "office ssh"
+        ingress {
+          from_port = 22
+          to_port = 22
+          protocol = "tcp"
+          cidr_blocks = ["203.0.113.0/24"]
+        }
+      }
+      resource "aws_sqs_queue" "jobs" { name = "jobs" }
+    `);
+    expect(result.region).toBe('eu-west-1');
+    expect(result.report.imported).toMatchObject({ vpc: 2, subnet: 1, ec2: 1, sg: 1 });
+    expect(result.report.skipped).toMatchObject({ aws_sqs_queue: 1, aws_subnet: 1 });
+    expect(result.report.warnings.join(' ')).toMatch(/orphan/);
+    const sg = result.graph.nodes.find((n) => n.type === 'sg')!;
+    expect(sg.props).toMatchObject({ ingress_cidr: '203.0.113.0/24', ingress_ports: '22' });
+    expect(result.graph.nodes.find((n) => n.type === 'ec2')!.props).toMatchObject({ instance_type: 't3.small', ami: 'ami-123' });
+    expect(result.graph.edges).toHaveLength(0); // the group isn't attached to anything
+    expect(result.graph.nodes.some((n) => n.type === 'vpc' && n.name === 'main')).toBe(true);
+  });
+
+  it('imports explicit security groups, Lambda and CloudFront from generated output', () => {
+    const k = scenario();
+    const sg = addNode(k.nodes, 'sg', { region, parentId: k.vpc.id });
+    const sgNode = { ...sg.node, name: 'office', props: { ...sg.node.props, ingress_cidr: '10.0.0.0/8', ingress_ports: '22, 8000-8100' } };
+    const fn = addNode(sg.nodes.map((n) => (n.id === sgNode.id ? sgNode : n)), 'lambda', { region, parentId: k.priv.id });
+    const cdn = addNode(fn.nodes, 'cdn', { region });
+    const graph = {
+      nodes: cdn.nodes,
+      edges: [edge(sgNode.id, k.ec2.id), edge(fn.node.id, k.rds.id), edge(fn.node.id, k.bucket.id), edge(cdn.node.id, k.bucket.id)],
+    };
+    const { graph: back } = roundTrip(graph);
+    expect(tally(back)).toEqual(tally(graph));
+    expect(back.nodes.find((n) => n.type === 'sg')!.props).toMatchObject({ ingress_cidr: '10.0.0.0/8', ingress_ports: '22, 8000-8100' });
   });
 });
 

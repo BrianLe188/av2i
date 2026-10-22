@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, type ProjectSummary } from '../api';
 import { useAuth } from '../auth';
-import { REGIONS, TEMPLATES } from '@av2i/core';
+import { ImportDialog } from '../components/ImportDialog';
+import { REGIONS, TEMPLATES, type ImportResult } from '@av2i/core';
 
 export function DashboardPage() {
   const { user, logout } = useAuth();
@@ -10,6 +11,7 @@ export function DashboardPage() {
   const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
   const [name, setName] = useState('');
   const [templateId, setTemplateId] = useState('');
+  const [importing, setImporting] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -26,6 +28,16 @@ export function DashboardPage() {
       navigate(`/projects/${p.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const createFromImport = async (projectName: string, result: ImportResult) => {
+    try {
+      const p = await api.createProject(projectName, result.region, result.graph);
+      navigate(`/projects/${p.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setImporting(false);
     }
   };
 
@@ -70,6 +82,9 @@ export function DashboardPage() {
           <button className="primary" disabled={!name.trim()}>
             Create
           </button>
+          <button type="button" onClick={() => setImporting(true)}>
+            Import Terraform…
+          </button>
         </form>
         {templateId && <p className="muted">{TEMPLATES.find((t) => t.id === templateId)?.description}</p>}
         {projects === null ? (
@@ -95,6 +110,7 @@ export function DashboardPage() {
           </ul>
         )}
       </main>
+      {importing && <ImportDialog onClose={() => setImporting(false)} onCreate={createFromImport} />}
     </div>
   );
 }

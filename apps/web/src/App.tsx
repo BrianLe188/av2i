@@ -3,6 +3,7 @@ import { AuthProvider, RequireAuth } from './auth';
 import { DashboardPage } from './pages/DashboardPage';
 import { EditorPage } from './pages/EditorPage';
 import { LoginPage } from './pages/LoginPage';
+import { SharedPage } from './pages/SharedPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
 export function App() {
@@ -10,6 +11,7 @@ export function App() {
     <AuthProvider>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/s/:token" element={<SharedPage />} />
         <Route element={<RequireAuth />}>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/projects" element={<Navigate to="/" replace />} />

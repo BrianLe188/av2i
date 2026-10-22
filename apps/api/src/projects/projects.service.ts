@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -111,6 +112,36 @@ export class ProjectsService {
     project.graph = version.graph;
     project.region = version.region;
     return this.projects.save(project);
+  }
+
+  /** Turn on the read-only link (idempotent: an existing link keeps its token). */
+  async enableShare(ownerId: string, id: string) {
+    const project = await this.get(ownerId, id);
+    if (!project.shareToken) {
+      project.shareToken = randomBytes(18).toString('base64url');
+      await this.projects.save(project);
+    }
+    return { token: project.shareToken };
+  }
+
+  async disableShare(ownerId: string, id: string) {
+    const project = await this.get(ownerId, id);
+    if (project.shareToken) {
+      project.shareToken = null;
+      await this.projects.save(project);
+    }
+  }
+
+  /** Public, read-only view for anyone holding the token. Exposes the design, never the owner. */
+  async getShared(token: string) {
+    const project = /^[\w-]{20,64}$/.test(token) ? await this.projects.findOneBy({ shareToken: token }) : null;
+    if (!project) throw new NotFoundException('This link is invalid or sharing was turned off');
+    return {
+      name: project.name,
+      region: project.region,
+      graph: project.graph,
+      updatedAt: project.updatedAt,
+    };
   }
 
   async export(ownerId: string, id: string) {

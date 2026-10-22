@@ -172,3 +172,16 @@ code { font: 12px ui-monospace, Menlo, monospace; }
 
 .button-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .react-flow__minimap { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; }
+
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: grid; place-items: center; z-index: 60; }
+.modal { width: 440px; max-width: calc(100vw - 32px); display: flex; flex-direction: column; gap: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+.modal h3 { margin: 0; text-transform: none; font-size: 16px; color: var(--text); letter-spacing: 0; }
+.modal p { margin: 0; }
+.modal input { width: 100%; }
+.workspace.shared { grid-template-columns: 1fr 340px; }
+
+.modal.wide { width: 640px; }
+.modal textarea { width: 100%; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px; resize: vertical; }
+.modal .actions input { flex: 1; max-width: 260px; }
+.import-report { display: flex; flex-direction: column; gap: 4px; }
+.banner.warn { background: color-mix(in srgb, var(--warn) 12%, transparent); color: var(--warn); padding: 6px 8px; border-radius: 6px; font-size: 12px; }

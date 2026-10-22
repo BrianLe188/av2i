@@ -20,6 +20,11 @@ export class Project {
   @Column({ type: 'varchar', nullable: true })
   ownerId: string | null;
 
+  /** Secret for the read-only share link; null when sharing is off. */
+  @Index({ unique: true })
+  @Column({ type: 'varchar', nullable: true })
+  shareToken: string | null;
+
   @Column()
   name: string;
 

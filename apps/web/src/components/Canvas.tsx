@@ -49,7 +49,7 @@ async function exportPng() {
   }
 }
 
-function Flow({ issues }: { issues: Issue[] }) {
+function Flow({ issues, readOnly }: { issues: Issue[]; readOnly: boolean }) {
   const nodes = useStore((s) => s.nodes);
   const edges = useStore((s) => s.edges);
   const selectedIds = useStore((s) => s.selectedIds);
@@ -160,7 +160,9 @@ function Flow({ issues }: { issues: Issue[] }) {
         e.dataTransfer.dropEffect = 'copy';
       }}
       onDrop={onDrop}
-      deleteKeyCode={['Backspace', 'Delete']}
+      deleteKeyCode={readOnly ? null : ['Backspace', 'Delete']}
+      nodesDraggable={!readOnly}
+      nodesConnectable={!readOnly}
       minZoom={0.2}
       maxZoom={1.5}
       proOptions={{ hideAttribution: true }}
@@ -186,11 +188,11 @@ function Flow({ issues }: { issues: Issue[] }) {
   );
 }
 
-export function Canvas({ issues }: { issues: Issue[] }) {
+export function Canvas({ issues, readOnly = false }: { issues: Issue[]; readOnly?: boolean }) {
   return (
     <main className="canvas">
       <ReactFlowProvider>
-        <Flow issues={issues} />
+        <Flow issues={issues} readOnly={readOnly} />
       </ReactFlowProvider>
     </main>
   );

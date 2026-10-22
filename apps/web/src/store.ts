@@ -40,6 +40,8 @@ interface State extends Snapshot {
   projectId: string | null;
   name: string;
   region: string;
+  /** Secret of the read-only link, when sharing is on. */
+  shareToken: string | null;
   /** The one selected node, or null when none or several are selected. */
   selectedId: string | null;
   selectedIds: string[];
@@ -56,6 +58,9 @@ interface State extends Snapshot {
 
   /** Load a project into the editor. Resolves false when it can't be loaded (missing, not yours). */
   openProject(id: string): Promise<boolean>;
+  /** Load a project by share token for the read-only viewer (nothing is ever saved). */
+  openShared(token: string): Promise<boolean>;
+  setShareToken(token: string | null): void;
   save(): Promise<void>;
   setName(name: string): void;
   setRegion(region: string): void;
@@ -103,9 +108,10 @@ export const useStore = create<State>((set, get) => {
   const commit = (patch: Partial<Snapshot>, extra: Partial<State> = {}) =>
     set((s) => ({ ...patch, ...extra, dirty: true, rev: s.rev + 1, saveState: 'idle' }));
 
-  const loadProject = (p: { id: string; name: string; region: string; graph: Snapshot }) => {
+  const loadProject = (p: { id: string; name: string; region: string; graph: Snapshot; shareToken?: string | null }) => {
     set({
       projectId: p.id,
+      shareToken: p.shareToken ?? null,
       name: p.name,
       region: p.region,
       nodes: p.graph.nodes,
@@ -141,6 +147,7 @@ export const useStore = create<State>((set, get) => {
     projectId: null,
     name: '',
     region: 'us-east-1',
+    shareToken: null,
     selectedId: null,
     selectedIds: [],
     selectedEdgeId: null,
@@ -164,6 +171,34 @@ export const useStore = create<State>((set, get) => {
         return false;
       }
     },
+
+    openShared: async (token) => {
+      try {
+        const p = await api.getShared(token);
+        set({
+          projectId: null,
+          shareToken: null,
+          name: p.name,
+          region: p.region,
+          nodes: p.graph.nodes,
+          edges: p.graph.edges,
+          selectedId: null,
+          selectedIds: [],
+          selectedEdgeId: null,
+          past: [],
+          future: [],
+          versions: [],
+          dirty: false,
+          saveState: 'idle',
+          loadedAt: Date.now(),
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+
+    setShareToken: (shareToken) => set({ shareToken }),
 
     save: async () => {
       const { projectId, dirty, name, region, nodes, edges, rev } = get();

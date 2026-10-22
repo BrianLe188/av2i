@@ -1,11 +1,14 @@
 import { REGIONS } from '@av2i/core';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { ShareDialog } from './ShareDialog';
 import { useStore } from '../store';
 
 const SAVE_LABEL = { idle: '', saving: 'Saving…', saved: 'Saved', error: 'Save failed' } as const;
 
 export function ProjectBar() {
   const s = useStore();
+  const [sharing, setSharing] = useState(false);
 
   return (
     <header className="bar">
@@ -31,6 +34,9 @@ export function ProjectBar() {
       <button onClick={s.redo} disabled={s.future.length === 0} title="Redo (Cmd/Ctrl+Shift+Z)">
         Redo
       </button>
+      <button onClick={() => setSharing(true)} title="Create a read-only link">
+        {s.shareToken ? 'Shared' : 'Share'}
+      </button>
       <button onClick={() => void s.snapshot(window.prompt('Snapshot label (optional)') || undefined)}>
         Snapshot
       </button>
@@ -51,6 +57,7 @@ export function ProjectBar() {
         ))}
       </select>
       <span className={`save ${s.saveState}`}>{s.dirty && s.saveState !== 'saving' ? 'Unsaved…' : SAVE_LABEL[s.saveState]}</span>
+      {sharing && <ShareDialog onClose={() => setSharing(false)} />}
     </header>
   );
 }
