@@ -10,6 +10,7 @@ export function IssuesPanel({ issues }: { issues: Issue[] }) {
     <ul className="issue-list">
       {issues.map((i, k) => (
         <li key={k} className={`${i.severity} clickable`} onClick={() => (i.edgeId ? selectEdge(i.edgeId) : select(i.nodeId))}>
+          {i.category === 'security' && <span className="tag-security">Security</span>}
           <strong>{nodes.find((n) => n.id === i.nodeId)?.name ?? i.nodeId}{i.edgeId ? ' (connection)' : ''}</strong>
           <br />
           {i.message}

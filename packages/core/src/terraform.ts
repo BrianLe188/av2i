@@ -399,7 +399,17 @@ ${statements.map((x) => x.replace(/^/gm, '    ')).join(',\n')}
           profiles.has(ec2.id) ? ['iam_instance_profile', `aws_iam_instance_profile.${L(ec2)}.name`] : null,
           tags(ec2.name),
         ],
-        ['root_block_device {', `  volume_size = ${Number(ec2.props.root_volume_size) || 8}`, '}'],
+        [
+          // Secure defaults: IMDSv2 only, encrypted root volume.
+          'metadata_options {',
+          '  http_endpoint = "enabled"',
+          '  http_tokens   = "required"',
+          '}',
+          'root_block_device {',
+          `  volume_size = ${Number(ec2.props.root_volume_size) || 8}`,
+          '  encrypted   = true',
+          '}',
+        ],
       ),
     );
   }
@@ -591,6 +601,8 @@ ${statements.map((x) => x.replace(/^/gm, '    ')).join(',\n')}
         ['vpc_security_group_ids', sgList(db)],
         ['multi_az', String(Boolean(db.props.multi_az))],
         ['publicly_accessible', 'false'],
+        ['storage_encrypted', 'true'],
+        ['backup_retention_period', '7'],
         ['skip_final_snapshot', 'true'],
         tags(db.name),
       ]),
@@ -799,6 +811,8 @@ ${statements.map((x) => x.replace(/^/gm, '    ')).join(',\n')}
         `cdn-policy.${cdn.id}`,
         block(`resource "aws_s3_bucket_policy" "${L(cdn)}"`, [
           ['bucket', `aws_s3_bucket.${L(origin)}.id`],
+          // Applying a policy while the public access block is being created can fail; order them.
+          ['depends_on', `[aws_s3_bucket_public_access_block.${L(origin)}]`],
           [
             'policy',
             `jsonencode({
@@ -859,6 +873,16 @@ ${statements.map((x) => x.replace(/^/gm, '    ')).join(',\n')}
       block(`resource "aws_s3_bucket" "${L(bucket)}"`, [
         ['bucket', str(bucket.props.bucket)],
         tags(bucket.name),
+      ]),
+    );
+    add(
+      `s3pab.${bucket.id}`,
+      block(`resource "aws_s3_bucket_public_access_block" "${L(bucket)}"`, [
+        ['bucket', `aws_s3_bucket.${L(bucket)}.id`],
+        ['block_public_acls', 'true'],
+        ['block_public_policy', 'true'],
+        ['ignore_public_acls', 'true'],
+        ['restrict_public_buckets', 'true'],
       ]),
     );
     if (bucket.props.versioning) {

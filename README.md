@@ -33,6 +33,11 @@ The first account to sign in inherits any projects created before auth existed.
 The API stores data in a local sql.js file (`apps/api/data/av2i.sqlite`) by default.
 For PostgreSQL: `npm run db:up` and set `DATABASE_URL=postgres://av2i:av2i@localhost:5432/av2i`.
 
+## Cost and security
+
+- **Cost tab:** rough monthly cost from on-demand list prices (`packages/core/src/cost.ts`, us-east-1 with a coarse regional factor). Usage-based services (S3, Lambda, CloudFront, data transfer) are listed but not priced. Prices are hard-coded and will drift.
+- **Security:** generated Terraform defaults to IMDSv2, encrypted EC2 root volumes and RDS storage, 7-day RDS backups, and blocked public access on S3. `packages/core/src/security.ts` flags what it can't fix: world-open ports (databases are errors), databases in public subnets, plain-HTTP public load balancers and CloudFront origins. Findings show a "Security" tag in the Issues tab.
+
 ## Known gaps (prototype)
 
 - Auth is GitHub-only with a signed 7-day cookie (no revocation). The OAuth scope is `read:user`; repo access for opening PRs will need a wider scope. Not tested against real GitHub yet (no OAuth app was available).

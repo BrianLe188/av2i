@@ -2,6 +2,7 @@ import { cidrContains, cidrOverlaps, parseCidr } from './cidr';
 import { resolveEdges } from './edges';
 import { vpcOf } from './graph';
 import { parsePorts } from './ports';
+import { securityChecks } from './security';
 import { RESOURCES } from './resources';
 import type { Graph, Issue } from './types';
 
@@ -78,6 +79,7 @@ export function validateGraph(graph: Graph): Issue[] {
   }
 
   validateConnections(graph, issues);
+  issues.push(...securityChecks(graph));
   return issues;
 }
 
@@ -148,9 +150,6 @@ function validateConnections(graph: Graph, issues: Issue[]): void {
     const ports = parsePorts(String(sg.props.ingress_ports));
     if (cidr && !parseCidr(cidr)) add(sg.id, 'error', `Invalid CIDR "${cidr}".`);
     if (!ports) add(sg.id, 'error', 'Ports must look like 22, 443, 8000-8100 (1 to 65535).');
-    if (cidr === '0.0.0.0/0' && ports?.some((p) => [22, 3389].some((x) => p.from <= x && x <= p.to))) {
-      add(sg.id, 'warning', 'SSH/RDP is open to the whole internet. Restrict the source CIDR.');
-    }
     if (ports?.length && !cidr) add(sg.id, 'warning', 'Ports are set but there is no source CIDR, so no inbound rule is created.');
     if (!of('sg-attach').some((r) => r.from!.id === sg.id)) {
       add(sg.id, 'warning', 'Not attached to anything: connect it to an EC2 instance, function, database or load balancer.');

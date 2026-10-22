@@ -44,4 +44,6 @@ export interface Issue {
   edgeId?: string;
   severity: Severity;
   message: string;
+  /** Set for security findings so the UI can label them. */
+  category?: 'security';
 }

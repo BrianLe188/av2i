@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { validateGraph } from '@av2i/core';
 import { Canvas } from '../components/Canvas';
 import { CodePanel } from '../components/CodePanel';
+import { CostPanel } from '../components/CostPanel';
 import { IssuesPanel } from '../components/IssuesPanel';
 import { Palette } from '../components/Palette';
 import { ProjectBar } from '../components/ProjectBar';
@@ -10,7 +11,7 @@ import { PropertiesPanel } from '../components/PropertiesPanel';
 import { useStore } from '../store';
 import { NotFoundPage } from './NotFoundPage';
 
-type Tab = 'properties' | 'code' | 'issues';
+type Tab = 'properties' | 'code' | 'issues' | 'cost';
 
 export function EditorPage() {
   const [tab, setTab] = useState<Tab>('properties');
@@ -82,9 +83,9 @@ export function EditorPage() {
         <Canvas issues={issues} />
         <aside className="side">
           <div className="tabs">
-            {(['properties', 'code', 'issues'] as Tab[]).map((t) => (
+            {(['properties', 'code', 'issues', 'cost'] as Tab[]).map((t) => (
               <button key={t} className={tab === t ? 'tab active' : 'tab'} onClick={() => setTab(t)}>
-                {t === 'properties' ? 'Properties' : t === 'code' ? 'Terraform' : 'Issues'}
+                {t === 'properties' ? 'Properties' : t === 'code' ? 'Terraform' : t === 'issues' ? 'Issues' : 'Cost'}
                 {t === 'issues' && issues.length > 0 && (
                   <span className={errorCount ? 'pill error' : 'pill warning'}>{issues.length}</span>
                 )}
@@ -95,6 +96,7 @@ export function EditorPage() {
             {tab === 'properties' && <PropertiesPanel issues={issues} />}
             {tab === 'code' && <CodePanel errorCount={errorCount} />}
             {tab === 'issues' && <IssuesPanel issues={issues} />}
+            {tab === 'cost' && <CostPanel />}
           </div>
         </aside>
       </div>

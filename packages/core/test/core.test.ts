@@ -9,6 +9,7 @@ import {
   parseCidr,
   removeNode,
   reparent,
+  estimateCost,
   TEMPLATES,
   validateGraph,
   type GraphNode,
@@ -242,7 +243,7 @@ describe('connection validation', () => {
       edge(k.alb.id, k.ec2.id),
     ];
     const issues = validateGraph({ nodes: k.nodes, edges });
-    expect(issues.filter((i) => /route|Route|No targets|associated|facing/.test(i.message))).toEqual([]);
+    expect(issues.filter((i) => !i.category && /route|Route|No targets|associated|facing/.test(i.message))).toEqual([]);
   });
 
   it('requires two public azs for an internet-facing alb and one igw per vpc', () => {
@@ -539,6 +540,88 @@ describe('cloudfront', () => {
     const two = withCdn();
     const issues = validateGraph({ nodes: two.nodes, edges: [edge(two.cdn.id, two.bucket.id), edge(two.cdn.id, two.alb.id)] });
     expect(issues.some((i) => /one origin/.test(i.message))).toBe(true);
+  });
+});
+
+describe('security', () => {
+  const sgWith = (k: ReturnType<typeof scenario>, patch: Record<string, string>) => {
+    const r = addNode(k.nodes, 'sg', { region, parentId: k.vpc.id });
+    const sg = { ...r.node, props: { ...r.node.props, ingress_cidr: '0.0.0.0/0', ...patch } };
+    return { sg, nodes: r.nodes.map((n) => (n.id === sg.id ? sg : n)) };
+  };
+  const security = (graph: Parameters<typeof validateGraph>[0], nodeId?: string) =>
+    validateGraph(graph).filter((i) => i.category === 'security' && (!nodeId || i.nodeId === nodeId));
+
+  it('flags world-open SSH, databases and odd ports but not web ports', () => {
+    const k = scenario();
+    const web = sgWith(k, { ingress_ports: '80, 443' });
+    expect(security({ nodes: web.nodes, edges: [] }, web.sg.id)).toEqual([]);
+    const ssh = sgWith(k, { ingress_ports: '22' });
+    expect(security({ nodes: ssh.nodes, edges: [] }, ssh.sg.id)[0]).toMatchObject({ severity: 'warning', category: 'security' });
+    const db = sgWith(k, { ingress_ports: '5432' });
+    expect(security({ nodes: db.nodes, edges: [] }, db.sg.id)[0]).toMatchObject({ severity: 'error' });
+    const odd = sgWith(k, { ingress_ports: '8080' });
+    expect(security({ nodes: odd.nodes, edges: [] }, odd.sg.id)[0].message).toMatch(/8080/);
+  });
+
+  it('errors when a world-open group is attached to a database', () => {
+    const k = scenario();
+    const open = sgWith(k, { ingress_ports: '8080' });
+    const issues = security({ nodes: open.nodes, edges: [edge(open.sg.id, k.rds.id)] });
+    expect(issues.some((i) => i.nodeId === k.rds.id && i.severity === 'error')).toBe(true);
+  });
+
+  it('warns about databases in public subnets and plain-HTTP public load balancers', () => {
+    const k = scenario();
+    const pub = addNode(k.nodes, 'rds', { region, parentId: k.s1.id });
+    expect(security({ nodes: pub.nodes, edges: [] }).some((i) => i.nodeId === pub.node.id && /public subnet/.test(i.message))).toBe(true);
+    expect(security({ nodes: k.nodes, edges: [] }).some((i) => i.nodeId === k.alb.id && /plain HTTP/.test(i.message))).toBe(true);
+    const https = k.nodes.map((n) => (n.id === k.alb.id ? { ...n, props: { ...n.props, certificate_arn: 'arn:aws:acm:us-east-1:123456789012:certificate/x' } } : n));
+    expect(security({ nodes: https, edges: [] }).some((i) => i.nodeId === k.alb.id)).toBe(false);
+  });
+
+  it('generates hardened defaults: IMDSv2, encryption, blocked public S3 access', () => {
+    const k = scenario();
+    const main = generateTerraform({ nodes: k.nodes, edges: [] }, { region })['main.tf'];
+    expect(main).toContain('http_tokens   = "required"');
+    expect(main).toMatch(/encrypted\s+= true/);
+    expect(main).toMatch(/storage_encrypted\s+= true/);
+    expect(main).toContain('aws_s3_bucket_public_access_block');
+  });
+});
+
+describe('cost estimate', () => {
+  const cost = (nodes: GraphNode[], edges = [] as ReturnType<typeof edge>[], r = region) =>
+    estimateCost({ nodes, edges }, { region: r });
+
+  it('prices gateways, load balancers and instances', () => {
+    const k = scenario();
+    const nat = addNode(k.nodes, 'nat', { region, parentId: k.s1.id });
+    const byName = Object.fromEntries(cost(nat.nodes).items.map((i) => [i.type, i]));
+    expect(byName.nat.monthly).toBeCloseTo(36.5, 1); // 32.85 NAT + 3.65 Elastic IP
+    expect(byName.alb.monthly).toBeCloseTo(16.43, 1);
+    expect(byName.ec2.monthly).toBeCloseTo(7.59 + 0.64 + 3.65, 1); // t3.micro + 8 GiB + public IPv4 (s1 is public)
+    expect(byName.s3.monthly).toBe(0);
+    expect(byName.s3.usage).toBeTruthy();
+  });
+
+  it('doubles RDS for Multi-AZ and scales ECS by task count', () => {
+    const k = scenario();
+    const single = cost(k.nodes).items.find((i) => i.type === 'rds')!.monthly;
+    const multi = cost(k.nodes.map((n) => (n.id === k.rds.id ? { ...n, props: { ...n.props, multi_az: true } } : n))).items.find((i) => i.type === 'rds')!.monthly;
+    expect(multi).toBeCloseTo(single * 2, 5);
+    const one = addNode(k.nodes, 'ecs', { region, parentId: k.s1.id });
+    const per = cost(one.nodes).items.find((i) => i.type === 'ecs')!.monthly;
+    const three = one.nodes.map((n) => (n.id === one.node.id ? { ...n, props: { ...n.props, desired_count: 3 } } : n));
+    expect(cost(three).items.find((i) => i.type === 'ecs')!.monthly).toBeCloseTo(per * 3, 5);
+  });
+
+  it('totals the items, applies a regional factor, and ignores free resources', () => {
+    const k = scenario();
+    const base = cost(k.nodes);
+    expect(base.total).toBeCloseTo(base.items.reduce((s, i) => s + i.monthly, 0), 8);
+    expect(base.items.some((i) => i.type === 'vpc' || i.type === 'subnet')).toBe(false);
+    expect(cost(k.nodes, [], 'ap-southeast-1').total).toBeCloseTo(base.total * 1.25, 5);
   });
 });
 
