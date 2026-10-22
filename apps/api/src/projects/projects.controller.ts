@@ -1,5 +1,7 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put } from '@nestjs/common';
+import { CurrentUser } from '../auth/decorators';
 import { CreateProjectDto, CreateVersionDto, UpdateProjectDto } from './dto';
+import type { User } from '../auth/user.entity';
 import { ProjectsService } from './projects.service';
 
 @Controller('projects')
@@ -7,51 +9,52 @@ export class ProjectsController {
   constructor(private readonly service: ProjectsService) {}
 
   @Get()
-  list() {
-    return this.service.list();
+  list(@CurrentUser() user: User) {
+    return this.service.list(user.id);
   }
 
   @Post()
-  create(@Body() dto: CreateProjectDto) {
-    return this.service.create(dto);
+  create(@CurrentUser() user: User, @Body() dto: CreateProjectDto) {
+    return this.service.create(user.id, dto);
   }
 
   @Get(':id')
-  get(@Param('id', ParseUUIDPipe) id: string) {
-    return this.service.get(id);
+  get(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string) {
+    return this.service.get(user.id, id);
   }
 
   @Put(':id')
-  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateProjectDto) {
-    return this.service.update(id, dto);
+  update(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateProjectDto) {
+    return this.service.update(user.id, id, dto);
   }
 
   @Delete(':id')
   @HttpCode(204)
-  remove(@Param('id', ParseUUIDPipe) id: string) {
-    return this.service.remove(id);
+  remove(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string) {
+    return this.service.remove(user.id, id);
   }
 
   @Get(':id/export')
-  export(@Param('id', ParseUUIDPipe) id: string) {
-    return this.service.export(id);
+  export(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string) {
+    return this.service.export(user.id, id);
   }
 
   @Get(':id/versions')
-  versions(@Param('id', ParseUUIDPipe) id: string) {
-    return this.service.listVersions(id);
+  versions(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string) {
+    return this.service.listVersions(user.id, id);
   }
 
   @Post(':id/versions')
-  snapshot(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateVersionDto) {
-    return this.service.snapshot(id, dto.label);
+  snapshot(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateVersionDto) {
+    return this.service.snapshot(user.id, id, dto.label);
   }
 
   @Post(':id/versions/:versionId/restore')
   restore(
+    @CurrentUser() user: User,
     @Param('id', ParseUUIDPipe) id: string,
     @Param('versionId', ParseUUIDPipe) versionId: string,
   ) {
-    return this.service.restore(id, versionId);
+    return this.service.restore(user.id, id, versionId);
   }
 }

@@ -1,4 +1,5 @@
 import { REGIONS } from '@av2i/core';
+import { Link } from 'react-router-dom';
 import { useStore } from '../store';
 
 const SAVE_LABEL = { idle: '', saving: 'Saving…', saved: 'Saved', error: 'Save failed' } as const;
@@ -9,39 +10,15 @@ export function ProjectBar() {
   return (
     <header className="bar">
       <strong className="logo">av2i</strong>
-      <select
-        value={s.projectId ?? ''}
-        onChange={(e) => void s.openProject(e.target.value)}
-        aria-label="Project"
-      >
-        {s.projects.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.name}
-          </option>
-        ))}
-      </select>
+      <Link to="/" className="btn" title="All projects">
+        ← Projects
+      </Link>
       <input
         className="name"
         value={s.name}
         onChange={(e) => s.setName(e.target.value)}
         aria-label="Project name"
       />
-      <button
-        onClick={() => {
-          const name = window.prompt('Project name');
-          if (name?.trim()) void s.createProject(name.trim());
-        }}
-      >
-        New
-      </button>
-      <button
-        className="danger"
-        onClick={() => {
-          if (window.confirm(`Delete project "${s.name}"? This cannot be undone.`)) void s.deleteProject();
-        }}
-      >
-        Delete
-      </button>
       <select value={s.region} onChange={(e) => s.setRegion(e.target.value)} aria-label="Region">
         {REGIONS.map((r) => (
           <option key={r}>{r}</option>

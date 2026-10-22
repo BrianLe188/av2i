@@ -3,6 +3,13 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 
+// Load apps/api/.env when present (Node's built-in loader; real env vars win).
+try {
+  process.loadEnvFile();
+} catch {
+  /* no .env file */
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { cors: true });
   app.setGlobalPrefix('api');

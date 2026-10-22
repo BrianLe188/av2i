@@ -18,7 +18,7 @@ import {
   type ResourceType,
   type Size,
 } from '@av2i/core';
-import { api, type ProjectSummary, type VersionSummary } from './api';
+import { api, type VersionSummary } from './api';
 
 interface Snapshot {
   nodes: GraphNode[];
@@ -28,7 +28,6 @@ interface Snapshot {
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 interface State extends Snapshot {
-  projects: ProjectSummary[];
   versions: VersionSummary[];
   projectId: string | null;
   name: string;
@@ -44,10 +43,8 @@ interface State extends Snapshot {
   /** Bumped when a project is loaded so the canvas can re-fit the view. */
   loadedAt: number;
 
-  init(): Promise<void>;
-  openProject(id: string): Promise<void>;
-  createProject(name: string): Promise<void>;
-  deleteProject(): Promise<void>;
+  /** Load a project into the editor. Resolves false when it can't be loaded (missing, not yours). */
+  openProject(id: string): Promise<boolean>;
   save(): Promise<void>;
   setName(name: string): void;
   setRegion(region: string): void;
@@ -77,7 +74,6 @@ interface State extends Snapshot {
 }
 
 const HISTORY_LIMIT = 100;
-const LAST_PROJECT_KEY = 'av2i:lastProject';
 
 let noticeTimer: ReturnType<typeof setTimeout> | undefined;
 let dragOrigin: Snapshot | null = null;
@@ -89,11 +85,6 @@ export const useStore = create<State>((set, get) => {
     set((s) => ({ ...patch, ...extra, dirty: true, rev: s.rev + 1, saveState: 'idle' }));
 
   const loadProject = (p: { id: string; name: string; region: string; graph: Snapshot }) => {
-    try {
-      localStorage.setItem(LAST_PROJECT_KEY, p.id);
-    } catch {
-      /* storage unavailable */
-    }
     set({
       projectId: p.id,
       name: p.name,
@@ -110,13 +101,9 @@ export const useStore = create<State>((set, get) => {
     });
   };
 
-  const refreshLists = async () => {
+  const refreshVersions = async () => {
     const { projectId } = get();
-    const [projects, versions] = await Promise.all([
-      api.listProjects(),
-      projectId ? api.listVersions(projectId) : Promise.resolve([]),
-    ]);
-    set({ projects, versions });
+    set({ versions: projectId ? await api.listVersions(projectId) : [] });
   };
 
   const guard = async (fn: () => Promise<void>) => {
@@ -130,7 +117,6 @@ export const useStore = create<State>((set, get) => {
   return {
     nodes: [],
     edges: [],
-    projects: [],
     versions: [],
     projectId: null,
     name: '',
@@ -145,46 +131,17 @@ export const useStore = create<State>((set, get) => {
     notice: null,
     loadedAt: 0,
 
-    init: () =>
-      guard(async () => {
-        let projects = await api.listProjects();
-        if (projects.length === 0) {
-          await api.createProject('My first project');
-          projects = await api.listProjects();
-        }
-        let last: string | null = null;
-        try {
-          last = localStorage.getItem(LAST_PROJECT_KEY);
-        } catch {
-          /* storage unavailable */
-        }
-        const id = projects.find((p) => p.id === last)?.id ?? projects[0].id;
-        loadProject(await api.getProject(id));
-        await refreshLists();
-      }),
-
-    openProject: (id) =>
-      guard(async () => {
+    openProject: async (id) => {
+      try {
         await get().save();
         loadProject(await api.getProject(id));
-        await refreshLists();
-      }),
-
-    createProject: (name) =>
-      guard(async () => {
-        await get().save();
-        loadProject(await api.createProject(name, get().region));
-        await refreshLists();
-      }),
-
-    deleteProject: () =>
-      guard(async () => {
-        const { projectId } = get();
-        if (!projectId) return;
-        await api.deleteProject(projectId);
-        set({ projectId: null, dirty: false });
-        await get().init();
-      }),
+        await refreshVersions();
+        return true;
+      } catch (e) {
+        get().notify(e instanceof Error ? e.message : String(e));
+        return false;
+      }
+    },
 
     save: async () => {
       const { projectId, dirty, name, region, nodes, edges, rev } = get();
@@ -194,8 +151,6 @@ export const useStore = create<State>((set, get) => {
         await api.updateProject(projectId, { name, region, graph: { nodes, edges } });
         // Edits made while the request was in flight stay dirty for the next save.
         set((s) => ({ saveState: 'saved', dirty: s.rev !== rev }));
-        const projects = await api.listProjects();
-        set({ projects });
       } catch (e) {
         set({ saveState: 'error' });
         get().notify(`Save failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -211,7 +166,7 @@ export const useStore = create<State>((set, get) => {
         if (!projectId) return;
         await get().save();
         await api.snapshot(projectId, label);
-        await refreshLists();
+        await refreshVersions();
         get().notify('Snapshot saved');
       }),
 
@@ -221,7 +176,7 @@ export const useStore = create<State>((set, get) => {
         if (!projectId) return;
         await get().save();
         loadProject(await api.restore(projectId, versionId));
-        await refreshLists();
+        await refreshVersions();
         get().notify('Version restored (previous state kept as a snapshot)');
       }),
 

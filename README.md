@@ -19,12 +19,23 @@ npm run dev        # core (watch) + api :3000 + web :5173
 npm test           # core unit tests
 ```
 
+### Sign-in (GitHub)
+
+Routes: `/login`, `/` (project dashboard), `/projects/:id` (canvas). Everything but `/login` needs a session.
+
+1. Create a GitHub OAuth app (Settings → Developers → New OAuth App) with callback URL
+   `http://localhost:5173/api/auth/github/callback`.
+2. `cp apps/api/.env.example apps/api/.env` and fill `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `SESSION_SECRET`.
+3. Optional, local review only: `DEV_LOGIN=true` adds a "Continue as dev user" button (ignored in production).
+
+The first account to sign in inherits any projects created before auth existed.
+
 The API stores data in a local sql.js file (`apps/api/data/av2i.sqlite`) by default.
 For PostgreSQL: `npm run db:up` and set `DATABASE_URL=postgres://av2i:av2i@localhost:5432/av2i`.
 
 ## Known gaps (prototype)
 
-- No auth yet (GitHub login is planned); every project is visible to anyone who can reach the API.
+- Auth is GitHub-only with a signed 7-day cookie (no revocation). The OAuth scope is `read:user`; repo access for opening PRs will need a wider scope. Not tested against real GitHub yet (no OAuth app was available).
 - `synchronize: true` creates the schema; switch to migrations before deploying.
 - Connections have meaning for five pairs only (IGW↔Route table, Route table↔Subnet, EC2↔RDS, Load balancer↔EC2, EC2↔S3); anything else is rejected. ALB is HTTP-only, and generated Terraform has not been run through `terraform validate`.
 - Palette HTML5 drag-and-drop was verified by dispatching drop events, not with a real mouse drag.

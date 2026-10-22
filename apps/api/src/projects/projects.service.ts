@@ -30,8 +30,8 @@ export class ProjectsService {
     @InjectRepository(ProjectVersion) private readonly versions: Repository<ProjectVersion>,
   ) {}
 
-  async list() {
-    const rows = await this.projects.find({ order: { updatedAt: 'DESC' } });
+  async list(ownerId: string) {
+    const rows = await this.projects.find({ where: { ownerId }, order: { updatedAt: 'DESC' } });
     return rows.map((p) => ({
       id: p.id,
       name: p.name,
@@ -41,22 +41,22 @@ export class ProjectsService {
     }));
   }
 
-  async get(id: string) {
-    const project = await this.projects.findOneBy({ id });
+  async get(ownerId: string, id: string) {
+    const project = await this.projects.findOneBy({ id, ownerId });
     if (!project) throw new NotFoundException('Project not found');
     return project;
   }
 
-  create(dto: CreateProjectDto) {
+  create(ownerId: string, dto: CreateProjectDto) {
     const graph = dto.graph ?? { nodes: [], edges: [] };
     assertGraph(graph);
     return this.projects.save(
-      this.projects.create({ name: dto.name, region: dto.region ?? 'us-east-1', graph }),
+      this.projects.create({ ownerId, name: dto.name, region: dto.region ?? 'us-east-1', graph }),
     );
   }
 
-  async update(id: string, dto: UpdateProjectDto) {
-    const project = await this.get(id);
+  async update(ownerId: string, id: string, dto: UpdateProjectDto) {
+    const project = await this.get(ownerId, id);
     if (dto.graph !== undefined) {
       assertGraph(dto.graph);
       project.graph = dto.graph;
@@ -66,14 +66,14 @@ export class ProjectsService {
     return this.projects.save(project);
   }
 
-  async remove(id: string) {
-    const project = await this.get(id);
+  async remove(ownerId: string, id: string) {
+    const project = await this.get(ownerId, id);
     await this.versions.delete({ projectId: id });
     await this.projects.remove(project);
   }
 
-  async listVersions(projectId: string) {
-    await this.get(projectId);
+  async listVersions(ownerId: string, projectId: string) {
+    await this.get(ownerId, projectId);
     const rows = await this.versions.find({
       where: { projectId },
       order: { createdAt: 'DESC' },
@@ -87,8 +87,8 @@ export class ProjectsService {
     }));
   }
 
-  async snapshot(projectId: string, label?: string) {
-    const project = await this.get(projectId);
+  async snapshot(ownerId: string, projectId: string, label?: string) {
+    const project = await this.get(ownerId, projectId);
     const saved = await this.versions.save(
       this.versions.create({
         projectId,
@@ -102,19 +102,19 @@ export class ProjectsService {
     return { id: saved.id, label: saved.label, createdAt: saved.createdAt };
   }
 
-  async restore(projectId: string, versionId: string) {
-    const project = await this.get(projectId);
+  async restore(ownerId: string, projectId: string, versionId: string) {
+    const project = await this.get(ownerId, projectId);
     const version = await this.versions.findOneBy({ id: versionId, projectId });
     if (!version) throw new NotFoundException('Version not found');
     // Keep what we're about to overwrite so a restore can itself be undone.
-    await this.snapshot(projectId, 'Before restore');
+    await this.snapshot(ownerId, projectId, 'Before restore');
     project.graph = version.graph;
     project.region = version.region;
     return this.projects.save(project);
   }
 
-  async export(id: string) {
-    const project = await this.get(id);
+  async export(ownerId: string, id: string) {
+    const project = await this.get(ownerId, id);
     return {
       files: generateTerraform(project.graph, { region: project.region }),
       issues: validateGraph(project.graph),

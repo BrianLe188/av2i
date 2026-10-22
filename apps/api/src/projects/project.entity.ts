@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
@@ -13,6 +14,11 @@ import { ProjectVersion } from './project-version.entity';
 export class Project {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  /** Null only for projects created before auth existed; claimed by the first user to sign in. */
+  @Index()
+  @Column({ type: 'varchar', nullable: true })
+  ownerId: string | null;
 
   @Column()
   name: string;
