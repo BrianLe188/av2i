@@ -19,7 +19,11 @@ import {
   pasteFragment,
   TEMPLATES,
   validateGraph,
+  labelPoint,
   parseRules,
+  pathFromPoints,
+  routeEdges,
+  routerNodes,
   sgRules,
   serializeRules,
   type GraphNode,
@@ -1031,4 +1035,82 @@ describe('templates', () => {
       expect(generateTerraform(graph, { region })['main.tf']).toContain('resource "aws_');
     });
   }
+});
+
+describe('edge routing', () => {
+  const box = (id: string, x: number, y: number, w = 140, h = 64, container = false) => ({ id, rect: { x, y, width: w, height: h }, container });
+  type Pt = { x: number; y: number };
+  /** Does the axis-aligned segment a-b pass through the rectangle (shrunk by 1px)? */
+  const hits = (a: Pt, b: Pt, r: { x: number; y: number; width: number; height: number }) => {
+    const x0 = Math.min(a.x, b.x);
+    const x1 = Math.max(a.x, b.x);
+    const y0 = Math.min(a.y, b.y);
+    const y1 = Math.max(a.y, b.y);
+    return x1 > r.x + 1 && x0 < r.x + r.width - 1 && y1 > r.y + 1 && y0 < r.y + r.height - 1;
+  };
+  const segments = (pts: Pt[]) => pts.slice(1).map((p, i) => [pts[i], p] as const);
+
+  it('draws right-angled routes from border to border, around what is in the way', () => {
+    const nodes = [box('a', 0, 100), box('b', 500, 100), box('wall', 250, 60, 40, 140)];
+    const routes = routeEdges(nodes, [{ id: 'e', source: 'a', target: 'b' }]);
+    const pts = routes.get('e')!;
+    expect(pts.length).toBeGreaterThan(2);
+    for (const [p, q] of segments(pts)) {
+      expect(p.x === q.x || p.y === q.y).toBe(true);
+      expect(hits(p, q, nodes[2].rect)).toBe(false);
+    }
+    const onBorder = (p: Pt, r: (typeof nodes)[0]['rect']) =>
+      (p.x === r.x || p.x === r.x + r.width || p.y === r.y || p.y === r.y + r.height) &&
+      p.x >= r.x && p.x <= r.x + r.width && p.y >= r.y && p.y <= r.y + r.height;
+    expect(onBorder(pts[0], nodes[0].rect)).toBe(true);
+    expect(onBorder(pts[pts.length - 1], nodes[1].rect)).toBe(true);
+  });
+
+  it('keeps edges that share an end on separate lanes', () => {
+    const nodes = [box('a', 0, 160), box('b', 400, 0), box('c', 400, 160), box('d', 400, 320)];
+    const edges = ['b', 'c', 'd'].map((t) => ({ id: `e-${t}`, source: 'a', target: t }));
+    const routes = routeEdges(nodes, edges);
+    const lines: string[] = [];
+    for (const e of edges) {
+      for (const [p, q] of segments(routes.get(e.id)!)) {
+        if (Math.hypot(p.x - q.x, p.y - q.y) < 15) continue;
+        // a lane is a line plus the span it covers
+        lines.push(p.x === q.x ? `v${p.x}:${Math.min(p.y, q.y)}-${Math.max(p.y, q.y)}` : `h${p.y}:${Math.min(p.x, q.x)}-${Math.max(p.x, q.x)}`);
+      }
+    }
+    const overlap = (s: string, t: string) => {
+      const [ls, rs] = s.split(':');
+      const [lt, rt] = t.split(':');
+      if (ls !== lt) return false;
+      const [a0, a1] = rs.split('-').map(Number);
+      const [b0, b1] = rt.split('-').map(Number);
+      return Math.min(a1, b1) - Math.max(a0, b0) > 15;
+    };
+    for (let i = 0; i < lines.length; i++) for (let j = i + 1; j < lines.length; j++) expect(overlap(lines[i], lines[j])).toBe(false);
+  });
+
+  it('never runs through a resource that is not one of its ends, in every template', () => {
+    for (const t of TEMPLATES) {
+      const graph = t.build(region);
+      const nodes = routerNodes(graph.nodes);
+      const edges = resolveEdges(graph)
+        .filter((r) => r.kind && !r.problem)
+        .map((r) => ({ id: r.edge.id, source: r.edge.source, target: r.edge.target }));
+      const routes = routeEdges(nodes, edges);
+      expect(routes.size).toBe(edges.length);
+      for (const e of edges) {
+        for (const [p, q] of segments(routes.get(e.id)!)) {
+          for (const n of nodes.filter((x) => !x.container && x.id !== e.source && x.id !== e.target)) {
+            expect(hits(p, q, n.rect), `${t.id}: ${e.id} crosses ${n.id}`).toBe(false);
+          }
+        }
+      }
+    }
+  });
+
+  it('builds a rounded path and finds a label spot', () => {
+    const pts = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 50 }];
+    expect(pathFromPoints(pts)).toContain('Q 100 0');
+    expect(labelPoint(pts)).toEqual({ x: 50, y: 0 });
+  });
 });

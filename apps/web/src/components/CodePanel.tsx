@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react';
 import { strToU8, zipSync } from 'fflate';
+import { Copy, Download } from 'lucide-react';
 import { generateTerraform } from '@av2i/core';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { useStore } from '../store';
 
 function download(filename: string, data: BlobPart, type: string) {
@@ -25,37 +28,43 @@ export function CodePanel({ errorCount }: { errorCount: number }) {
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'infrastructure';
 
   return (
-    <div className="code">
-      <div className="code-bar">
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-1.5">
         {names.map((f) => (
-          <button key={f} className={f === active ? 'chip active' : 'chip'} onClick={() => setCurrent(f)}>
+          <Button key={f} size="xs" variant={f === active ? 'default' : 'outline'} onClick={() => setCurrent(f)}>
             {f}
-          </button>
+          </Button>
         ))}
-        <span className="spacer" />
-        <button
+        <span className="flex-1" />
+        <Button
+          size="xs"
+          variant="outline"
           onClick={() => {
             void navigator.clipboard.writeText(files[active]);
             notify(`Copied ${active}`);
           }}
         >
-          Copy
-        </button>
-        <button
+          <Copy /> Copy
+        </Button>
+        <Button
+          size="xs"
+          variant="outline"
           onClick={() => {
             const zip = zipSync(Object.fromEntries(names.map((f) => [`${slug}/${f}`, strToU8(files[f])])));
             download(`${slug}.zip`, zip, 'application/zip');
           }}
         >
-          Download .zip
-        </button>
+          <Download /> .zip
+        </Button>
       </div>
       {errorCount > 0 && (
-        <div className="banner error">
-          {errorCount} validation error{errorCount === 1 ? '' : 's'}: this code will likely fail to apply.
-        </div>
+        <Alert variant="destructive">
+          <AlertDescription>
+            {errorCount} validation error{errorCount === 1 ? '' : 's'}: this code will likely fail to apply.
+          </AlertDescription>
+        </Alert>
       )}
-      <pre>{files[active]}</pre>
+      <pre className="overflow-auto rounded-lg border bg-muted/40 p-2.5 font-mono text-xs leading-relaxed">{files[active]}</pre>
     </div>
   );
 }

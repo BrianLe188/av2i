@@ -8,18 +8,16 @@ import { IssuesPanel } from '../components/IssuesPanel';
 import { Palette } from '../components/Palette';
 import { ProjectBar } from '../components/ProjectBar';
 import { PropertiesPanel } from '../components/PropertiesPanel';
+import { SidePanel } from '../components/SidePanel';
 import { useStore } from '../store';
 import { NotFoundPage } from './NotFoundPage';
 
-type Tab = 'properties' | 'code' | 'issues' | 'cost';
-
 export function EditorPage() {
-  const [tab, setTab] = useState<Tab>('properties');
+  const [tab, setTab] = useState('properties');
   const nodes = useStore((s) => s.nodes);
   const edges = useStore((s) => s.edges);
   const dirty = useStore((s) => s.dirty);
   const rev = useStore((s) => s.rev);
-  const notice = useStore((s) => s.notice);
   const projectId = useStore((s) => s.projectId);
 
   const issues = useMemo(() => validateGraph({ nodes, edges }), [nodes, edges]);
@@ -53,7 +51,7 @@ export function EditorPage() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement;
-      if (el.closest('input, textarea, select')) return;
+      if (el.closest('input, textarea, select, [role=combobox], [role=dialog]')) return;
       const mod = e.metaKey || e.ctrlKey;
       if (mod && e.key.toLowerCase() === 'c') {
         e.preventDefault();
@@ -85,7 +83,7 @@ export function EditorPage() {
   }, []);
 
   if (missing) return <NotFoundPage what="project" />;
-  if (projectId !== routeId) return <div className="page-center muted">Loading…</div>;
+  if (projectId !== routeId) return <div className="grid min-h-full place-items-center text-sm text-muted-foreground">Loading…</div>;
 
   return (
     <div className="app">
@@ -93,26 +91,17 @@ export function EditorPage() {
       <div className="workspace">
         <Palette />
         <Canvas issues={issues} />
-        <aside className="side">
-          <div className="tabs">
-            {(['properties', 'code', 'issues', 'cost'] as Tab[]).map((t) => (
-              <button key={t} className={tab === t ? 'tab active' : 'tab'} onClick={() => setTab(t)}>
-                {t === 'properties' ? 'Properties' : t === 'code' ? 'Terraform' : t === 'issues' ? 'Issues' : 'Cost'}
-                {t === 'issues' && issues.length > 0 && (
-                  <span className={errorCount ? 'pill error' : 'pill warning'}>{issues.length}</span>
-                )}
-              </button>
-            ))}
-          </div>
-          <div className="tab-body">
-            {tab === 'properties' && <PropertiesPanel issues={issues} />}
-            {tab === 'code' && <CodePanel errorCount={errorCount} />}
-            {tab === 'issues' && <IssuesPanel issues={issues} />}
-            {tab === 'cost' && <CostPanel />}
-          </div>
-        </aside>
+        <SidePanel
+          value={tab}
+          onChange={setTab}
+          tabs={[
+            { value: 'properties', label: 'Properties', content: <PropertiesPanel issues={issues} /> },
+            { value: 'code', label: 'Terraform', content: <CodePanel errorCount={errorCount} /> },
+            { value: 'issues', label: 'Issues', count: issues.length, danger: errorCount > 0, content: <IssuesPanel issues={issues} /> },
+            { value: 'cost', label: 'Cost', content: <CostPanel /> },
+          ]}
+        />
       </div>
-      {notice && <div className="toast">{notice}</div>}
     </div>
   );
 }

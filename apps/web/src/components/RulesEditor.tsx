@@ -1,3 +1,4 @@
+import { Plus, X } from 'lucide-react';
 import {
   expandRule,
   newRule,
@@ -12,8 +13,13 @@ import {
   type SgProtocol,
   type SgRule,
 } from '@av2i/core';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
+import { SimpleSelect } from './SimpleSelect';
 
-const PROTOCOLS: { value: SgProtocol; label: string }[] = [
+const PROTOCOLS = [
   { value: 'tcp', label: 'TCP' },
   { value: 'udp', label: 'UDP' },
   { value: 'icmp', label: 'ICMP' },
@@ -52,73 +58,61 @@ export function RulesEditor({
   };
 
   return (
-    <div className="field">
-      <span>{def.label}</span>
-      <div className="rules">
-        {rules.length === 0 && <p className="muted rules-empty">{direction === 'ingress' ? 'No inbound traffic allowed.' : 'No outbound traffic allowed.'}</p>}
+    <div className="flex flex-col gap-1.5">
+      <Label className="text-xs text-muted-foreground">{def.label}</Label>
+      <div className="flex flex-col gap-2">
+        {rules.length === 0 && (
+          <p className="text-xs text-muted-foreground">{direction === 'ingress' ? 'No inbound traffic allowed.' : 'No outbound traffic allowed.'}</p>
+        )}
         {rules.map((r, i) => {
           const mode = modeOf(r.peer);
           const bad = expandRule(r) === null;
+          const peerValue = mode === 'sg' ? `sg:${sgIdOfPeer(r.peer)}` : mode;
           return (
-            <div className="rule" key={i}>
-              <div className="rule-row">
-                <select value={r.protocol} onChange={(e) => patch(i, { protocol: e.target.value as SgProtocol })} aria-label="Protocol">
-                  {PROTOCOLS.map((p) => (
-                    <option key={p.value} value={p.value}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
+            <div className="flex flex-col gap-1.5 rounded-lg border bg-muted/30 p-2" key={i}>
+              <div className="flex gap-1.5">
+                <SimpleSelect size="sm" label="Protocol" value={r.protocol} options={PROTOCOLS} onChange={(v) => patch(i, { protocol: v as SgProtocol })} />
                 {(r.protocol === 'tcp' || r.protocol === 'udp') && (
-                  <input
-                    type="text"
-                    className={bad ? 'invalid' : undefined}
+                  <Input
+                    className={cn('h-7 min-w-0', bad && 'border-destructive')}
                     value={r.ports}
                     placeholder="all ports"
                     title="Comma separated, ranges allowed: 22, 443, 8000-8100"
+                    aria-invalid={bad}
                     onChange={(e) => patch(i, { ports: e.target.value })}
                     aria-label="Ports"
                   />
                 )}
-                <button className="rule-remove" title="Remove rule" onClick={() => set(rules.filter((_, k) => k !== i))}>
-                  ×
-                </button>
+                <Button variant="ghost" size="icon-sm" title="Remove rule" aria-label="Remove rule" onClick={() => set(rules.filter((_, k) => k !== i))}>
+                  <X />
+                </Button>
               </div>
-              <div className="rule-row">
-                <select
-                  value={mode === 'sg' ? `sg:${sgIdOfPeer(r.peer)}` : mode}
-                  onChange={(e) => choosePeer(i, e.target.value)}
-                  aria-label={peerWord}
-                >
-                  <option value="world">Anywhere (0.0.0.0/0)</option>
-                  <option value="cidr">Custom CIDR</option>
-                  {groups.map((g) => (
-                    <option key={g.id} value={`sg:${g.id}`}>
-                      Group: {g.name}
-                    </option>
-                  ))}
-                  {mode === 'sg' && !groups.some((g) => g.id === sgIdOfPeer(r.peer)) && (
-                    <option value={`sg:${sgIdOfPeer(r.peer)}`}>Group: (missing)</option>
-                  )}
-                </select>
+              <div className="flex gap-1.5">
+                <SimpleSelect
+                  size="sm"
+                  label={peerWord}
+                  value={peerValue}
+                  onChange={(v) => choosePeer(i, v)}
+                  options={[
+                    { value: 'world', label: 'Anywhere (0.0.0.0/0)' },
+                    { value: 'cidr', label: 'Custom CIDR' },
+                    ...groups.map((g) => ({ value: `sg:${g.id}`, label: `Group: ${g.name}` })),
+                    ...(mode === 'sg' && !groups.some((g) => g.id === sgIdOfPeer(r.peer)) ? [{ value: peerValue, label: 'Group: (missing)' }] : []),
+                  ]}
+                />
                 {mode === 'cidr' && (
-                  <input type="text" value={r.peer} placeholder="10.0.0.0/16" onChange={(e) => patch(i, { peer: e.target.value })} aria-label="CIDR" />
+                  <Input className="h-7 min-w-0" value={r.peer} placeholder="10.0.0.0/16" onChange={(e) => patch(i, { peer: e.target.value })} aria-label="CIDR" />
                 )}
               </div>
-              <input
-                type="text"
-                className="rule-desc"
-                value={r.description}
-                placeholder="Description (optional)"
-                onChange={(e) => patch(i, { description: e.target.value })}
-                aria-label="Description"
-              />
+              <Input className="h-7" value={r.description} placeholder="Description (optional)" onChange={(e) => patch(i, { description: e.target.value })} aria-label="Description" />
             </div>
           );
         })}
-        <button onClick={() => set([...rules, newRule(direction)])}>+ Add {direction === 'ingress' ? 'inbound' : 'outbound'} rule</button>
+        <Button variant="outline" size="sm" onClick={() => set([...rules, newRule(direction)])}>
+          <Plus /> Add {direction === 'ingress' ? 'inbound' : 'outbound'} rule
+        </Button>
       </div>
-      {def.hint && <small>{def.hint}</small>}
+      {def.hint && <p className="text-[11px] leading-snug text-muted-foreground">{def.hint}</p>}
     </div>
   );
 }

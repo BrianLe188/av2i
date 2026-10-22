@@ -1,15 +1,21 @@
 import { Link } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 export function NotFoundPage({ what = 'page' }: { what?: string }) {
   return (
-    <div className="page-center">
-      <div className="login-card">
-        <h1>Not found</h1>
-        <p className="muted">This {what} doesn't exist, or isn't yours.</p>
-        <Link className="btn" to="/">
-          Back to projects
-        </Link>
-      </div>
+    <div className="grid min-h-full place-items-center p-6">
+      <Card className="w-full max-w-sm text-center">
+        <CardHeader>
+          <CardTitle className="text-2xl">Not found</CardTitle>
+          <CardDescription>This {what} doesn't exist, or isn't yours.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button asChild variant="outline">
+            <Link to="/">Back to projects</Link>
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }

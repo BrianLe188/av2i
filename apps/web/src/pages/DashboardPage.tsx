@@ -2,8 +2,15 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, type ProjectSummary } from '../api';
 import { useAuth } from '../auth';
+import { autoLayout } from '../layout';
 import { ImportDialog } from '../components/ImportDialog';
 import { REGIONS, TEMPLATES, type ImportResult } from '@av2i/core';
+import { FileUp, Plus, Trash2 } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardFooter } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { SimpleSelect } from '../components/SimpleSelect';
 
 export function DashboardPage() {
   const { user, logout } = useAuth();
@@ -24,7 +31,9 @@ export function DashboardPage() {
     try {
       const region = REGIONS[0];
       const template = TEMPLATES.find((t) => t.id === templateId);
-      const p = await api.createProject(name.trim(), region, template?.build(region));
+      const built = template?.build(region);
+      const graph = built && { ...built, nodes: await autoLayout(built) };
+      const p = await api.createProject(name.trim(), region, graph);
       navigate(`/projects/${p.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -33,7 +42,8 @@ export function DashboardPage() {
 
   const createFromImport = async (projectName: string, result: ImportResult) => {
     try {
-      const p = await api.createProject(projectName, result.region, result.graph);
+      const graph = { ...result.graph, nodes: await autoLayout(result.graph) };
+      const p = await api.createProject(projectName, result.region, graph);
       navigate(`/projects/${p.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -52,59 +62,71 @@ export function DashboardPage() {
   };
 
   return (
-    <div className="page">
-      <header className="bar">
-        <strong className="logo">av2i</strong>
-        <span className="spacer" />
-        {user?.avatarUrl && <img className="avatar" src={user.avatarUrl} alt="" />}
-        <span>{user?.name ?? user?.login}</span>
-        <button onClick={() => void logout()}>Sign out</button>
+    <div className="flex min-h-full flex-col">
+      <header className="flex items-center gap-2 border-b bg-card px-3 py-2">
+        <strong className="tracking-wide">av2i</strong>
+        <span className="flex-1" />
+        {user?.avatarUrl && <img className="size-6 rounded-full" src={user.avatarUrl} alt="" />}
+        <span className="text-sm">{user?.name ?? user?.login}</span>
+        <Button variant="outline" size="sm" onClick={() => void logout()}>
+          Sign out
+        </Button>
       </header>
-      <main className="dashboard">
-        <h2>Projects</h2>
-        {error && <div className="banner error">{error}</div>}
-        <form className="new-project" onSubmit={create}>
-          <input
+      <main className="mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 py-6">
+        <h2 className="text-xl font-semibold">Projects</h2>
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        <form className="flex flex-wrap gap-2" onSubmit={create}>
+          <Input
+            className="max-w-sm flex-1"
             type="text"
             placeholder="New project name"
             value={name}
             maxLength={100}
             onChange={(e) => setName(e.target.value)}
           />
-          <select value={templateId} onChange={(e) => setTemplateId(e.target.value)} aria-label="Template">
-            <option value="">Blank canvas</option>
-            {TEMPLATES.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-          <button className="primary" disabled={!name.trim()}>
-            Create
-          </button>
-          <button type="button" onClick={() => setImporting(true)}>
-            Import Terraform…
-          </button>
+          <SimpleSelect
+            className="w-56"
+            label="Template"
+            value={templateId}
+            onChange={setTemplateId}
+            options={[{ value: '', label: 'Blank canvas' }, ...TEMPLATES.map((t) => ({ value: t.id, label: t.name }))]}
+          />
+          <Button disabled={!name.trim()}>
+            <Plus /> Create
+          </Button>
+          <Button type="button" variant="outline" onClick={() => setImporting(true)}>
+            <FileUp /> Import Terraform…
+          </Button>
         </form>
-        {templateId && <p className="muted">{TEMPLATES.find((t) => t.id === templateId)?.description}</p>}
+        {templateId && <p className="text-sm text-muted-foreground">{TEMPLATES.find((t) => t.id === templateId)?.description}</p>}
         {projects === null ? (
-          <p className="muted">Loading…</p>
+          <p className="text-sm text-muted-foreground">Loading…</p>
         ) : projects.length === 0 ? (
-          <p className="muted">No projects yet. Create one to open the canvas.</p>
+          <p className="text-sm text-muted-foreground">No projects yet. Create one to open the canvas.</p>
         ) : (
-          <ul className="project-grid">
+          <ul className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-3">
             {projects.map((p) => (
-              <li key={p.id} className="project-card">
-                <Link to={`/projects/${p.id}`} className="project-link">
-                  <strong>{p.name}</strong>
-                  <span className="muted">
-                    {p.region} · {p.nodeCount} resources
-                  </span>
-                  <span className="muted">Updated {new Date(p.updatedAt).toLocaleString()}</span>
-                </Link>
-                <button className="danger" onClick={() => void remove(p)}>
-                  Delete
-                </button>
+              <li key={p.id}>
+                <Card className="h-full gap-2 py-3 transition-colors hover:border-primary">
+                  <CardContent className="px-3">
+                    <Link to={`/projects/${p.id}`} className="flex flex-col gap-1">
+                      <strong>{p.name}</strong>
+                      <span className="text-xs text-muted-foreground">
+                        {p.region} · {p.nodeCount} resources
+                      </span>
+                      <span className="text-xs text-muted-foreground">Updated {new Date(p.updatedAt).toLocaleString()}</span>
+                    </Link>
+                  </CardContent>
+                  <CardFooter className="justify-end px-3">
+                    <Button variant="destructive" size="xs" onClick={() => void remove(p)}>
+                      <Trash2 /> Delete
+                    </Button>
+                  </CardFooter>
+                </Card>
               </li>
             ))}
           </ul>

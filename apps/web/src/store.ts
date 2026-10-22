@@ -27,6 +27,8 @@ import {
   type Size,
 } from '@av2i/core';
 import { api, type VersionSummary } from './api';
+import { autoLayout } from './layout';
+import { toast } from 'sonner';
 
 interface Snapshot {
   nodes: GraphNode[];
@@ -52,7 +54,6 @@ interface State extends Snapshot {
   dirty: boolean;
   rev: number;
   saveState: SaveState;
-  notice: string | null;
   /** Bumped when a project is loaded so the canvas can re-fit the view. */
   loadedAt: number;
 
@@ -76,6 +77,8 @@ interface State extends Snapshot {
   removeMany(ids: string[]): void;
   align(mode: AlignMode): void;
   distribute(axis: DistributeAxis): void;
+  /** Re-arrange everything so nothing overlaps (undoable). */
+  autoLayout(): Promise<void>;
   selectEdge(id: string | null): void;
   beginChange(coalesceKey?: string): void;
   undo(): void;
@@ -98,7 +101,6 @@ interface State extends Snapshot {
 
 const HISTORY_LIMIT = 100;
 
-let noticeTimer: ReturnType<typeof setTimeout> | undefined;
 let dragOrigin: Snapshot | null = null;
 let lastEdit = { key: '', at: 0 };
 let pasteCount = 0;
@@ -157,7 +159,6 @@ export const useStore = create<State>((set, get) => {
     dirty: false,
     rev: 0,
     saveState: 'idle',
-    notice: null,
     loadedAt: 0,
 
     openProject: async (id) => {
@@ -238,9 +239,7 @@ export const useStore = create<State>((set, get) => {
       }),
 
     notify: (message) => {
-      clearTimeout(noticeTimer);
-      set({ notice: message });
-      noticeTimer = setTimeout(() => set({ notice: null }), 3500);
+      toast(message);
     },
 
     select: (id) => get().setSelection(id ? [id] : []),
@@ -310,6 +309,19 @@ export const useStore = create<State>((set, get) => {
       if (!next) return get().notify('Distribute needs three or more resources inside the same container.');
       get().beginChange();
       commit({ nodes: next });
+    },
+
+    autoLayout: async () => {
+      const { nodes, edges } = get();
+      if (nodes.length === 0) return;
+      try {
+        const next = await autoLayout({ nodes, edges });
+        get().beginChange();
+        commit({ nodes: next });
+        set({ loadedAt: Date.now() });
+      } catch (e) {
+        get().notify(`Auto layout failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
     },
 
     beginChange: (coalesceKey) => {

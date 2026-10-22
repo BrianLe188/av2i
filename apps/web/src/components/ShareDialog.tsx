@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import { api } from '../api';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { useStore } from '../store';
 
-export function ShareDialog({ onClose }: { onClose: () => void }) {
+export function ShareDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const projectId = useStore((s) => s.projectId);
   const token = useStore((s) => s.shareToken);
   const setShareToken = useStore((s) => s.setShareToken);
@@ -22,24 +25,22 @@ export function ShareDialog({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" role="dialog" aria-label="Share" onClick={(e) => e.stopPropagation()}>
-        <h3>Share read-only link</h3>
-        {token ? (
-          <>
-            <p className="muted">Anyone with this link can view the design, its Terraform and cost. They cannot edit it.</p>
-            <input type="text" readOnly value={url} onFocus={(e) => e.target.select()} aria-label="Share link" />
-            <div className="actions">
-              <button
-                onClick={() => {
-                  void navigator.clipboard.writeText(url);
-                  notify('Link copied');
-                }}
-              >
-                Copy link
-              </button>
-              <button
-                className="danger"
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Share read-only link</DialogTitle>
+          <DialogDescription>
+            {token
+              ? 'Anyone with this link can view the design, its Terraform and cost. They cannot edit it.'
+              : 'Create a private link that lets anyone who has it view this design without signing in.'}
+          </DialogDescription>
+        </DialogHeader>
+        {token && <Input readOnly value={url} onFocus={(e) => e.target.select()} aria-label="Share link" />}
+        <DialogFooter>
+          {token ? (
+            <>
+              <Button
+                variant="destructive"
                 disabled={busy}
                 onClick={() =>
                   run(async () => {
@@ -49,32 +50,30 @@ export function ShareDialog({ onClose }: { onClose: () => void }) {
                 }
               >
                 Stop sharing
-              </button>
-              <span className="spacer" />
-              <button onClick={onClose}>Close</button>
-            </div>
-          </>
-        ) : (
-          <>
-            <p className="muted">Create a private link that lets anyone who has it view this design without signing in.</p>
-            <div className="actions">
-              <button
-                className="primary"
-                disabled={busy}
-                onClick={() =>
-                  run(async () => {
-                    setShareToken((await api.shareProject(projectId!)).token);
-                  })
-                }
+              </Button>
+              <Button
+                onClick={() => {
+                  void navigator.clipboard.writeText(url);
+                  notify('Link copied');
+                }}
               >
-                Create link
-              </button>
-              <span className="spacer" />
-              <button onClick={onClose}>Close</button>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+                Copy link
+              </Button>
+            </>
+          ) : (
+            <Button
+              disabled={busy}
+              onClick={() =>
+                run(async () => {
+                  setShareToken((await api.shareProject(projectId!)).token);
+                })
+              }
+            >
+              Create link
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

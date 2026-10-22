@@ -87,7 +87,7 @@ export function ResourceNode({ data, selected }: NodeProps<ResourceFlowNode>) {
         />
       )}
       <div className="rnode-head">
-        <span className="badge">{BADGES[resource.type] ?? resource.type.toUpperCase()}</span>
+        <span className="badge-type">{BADGES[resource.type] ?? resource.type.toUpperCase()}</span>
         <span className="rnode-name">{resource.name}</span>
         {(errors > 0 || warnings > 0) && (
           <span className={errors ? 'pill error' : 'pill warning'} title={`${errors} errors, ${warnings} warnings`}>

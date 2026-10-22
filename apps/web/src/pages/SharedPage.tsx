@@ -6,18 +6,17 @@ import { CodePanel } from '../components/CodePanel';
 import { CostPanel } from '../components/CostPanel';
 import { IssuesPanel } from '../components/IssuesPanel';
 import { useAuth } from '../auth';
+import { Button } from '@/components/ui/button';
+import { SidePanel } from '../components/SidePanel';
 import { useStore } from '../store';
 import { NotFoundPage } from './NotFoundPage';
-
-type Tab = 'code' | 'issues' | 'cost';
-const LABELS: Record<Tab, string> = { code: 'Terraform', issues: 'Issues', cost: 'Cost' };
 
 /** Read-only view of a shared design. Works without signing in. */
 export function SharedPage() {
   const { token } = useParams();
   const { user } = useAuth();
   const [status, setStatus] = useState<'loading' | 'ok' | 'missing'>('loading');
-  const [tab, setTab] = useState<Tab>('code');
+  const [tab, setTab] = useState('code');
   const nodes = useStore((s) => s.nodes);
   const edges = useStore((s) => s.edges);
   const name = useStore((s) => s.name);
@@ -32,38 +31,30 @@ export function SharedPage() {
   }, [token]);
 
   if (status === 'missing') return <NotFoundPage what="shared link" />;
-  if (status === 'loading') return <div className="page-center muted">Loading…</div>;
+  if (status === 'loading') return <div className="grid min-h-full place-items-center text-sm text-muted-foreground">Loading…</div>;
 
   return (
     <div className="app">
-      <header className="bar">
-        <strong className="logo">av2i</strong>
+      <header className="flex shrink-0 items-center gap-3 border-b bg-card px-3 py-2">
+        <strong className="tracking-wide">av2i</strong>
         <strong>{name}</strong>
-        <span className="muted">{region} · read-only</span>
-        <span className="spacer" />
-        <Link className="btn" to={user ? '/' : '/login'}>
-          {user ? 'My projects' : 'Sign in'}
-        </Link>
+        <span className="text-xs text-muted-foreground">{region} · read-only</span>
+        <span className="flex-1" />
+        <Button asChild variant="outline" size="sm">
+          <Link to={user ? '/' : '/login'}>{user ? 'My projects' : 'Sign in'}</Link>
+        </Button>
       </header>
       <div className="workspace shared">
         <Canvas issues={issues} readOnly />
-        <aside className="side">
-          <div className="tabs">
-            {(Object.keys(LABELS) as Tab[]).map((t) => (
-              <button key={t} className={tab === t ? 'tab active' : 'tab'} onClick={() => setTab(t)}>
-                {LABELS[t]}
-                {t === 'issues' && issues.length > 0 && (
-                  <span className={errorCount ? 'pill error' : 'pill warning'}>{issues.length}</span>
-                )}
-              </button>
-            ))}
-          </div>
-          <div className="tab-body">
-            {tab === 'code' && <CodePanel errorCount={errorCount} />}
-            {tab === 'issues' && <IssuesPanel issues={issues} />}
-            {tab === 'cost' && <CostPanel />}
-          </div>
-        </aside>
+        <SidePanel
+          value={tab}
+          onChange={setTab}
+          tabs={[
+            { value: 'code', label: 'Terraform', content: <CodePanel errorCount={errorCount} /> },
+            { value: 'issues', label: 'Issues', count: issues.length, danger: errorCount > 0, content: <IssuesPanel issues={issues} /> },
+            { value: 'cost', label: 'Cost', content: <CostPanel /> },
+          ]}
+        />
       </div>
     </div>
   );

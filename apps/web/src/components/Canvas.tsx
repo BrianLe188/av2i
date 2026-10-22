@@ -9,15 +9,18 @@ import {
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
-  type Edge,
   type NodeChange,
 } from '@xyflow/react';
-import { absolutePosition, resolveEdges, sortNodes, type Issue, type ResourceType } from '@av2i/core';
+import { LayoutGrid } from 'lucide-react';
+import { absolutePosition, resolveEdges, routeEdges, routerNodes, sortNodes, type Issue, type Point, type ResourceType } from '@av2i/core';
+import { Button } from '@/components/ui/button';
 import { useStore } from '../store';
 import { DRAG_MIME } from './Palette';
 import { ResourceNode, TYPE_COLORS, type ResourceFlowNode } from './ResourceNode';
+import { RoutedEdge, type RoutedEdgeType } from './RoutedEdge';
 
 const nodeTypes = { resource: ResourceNode };
+const edgeTypes = { routed: RoutedEdge };
 
 /** Renders the diagram (nodes and edges, not the controls) to a PNG and downloads it. */
 async function exportPng() {
@@ -81,22 +84,53 @@ function Flow({ issues, readOnly }: { issues: Issue[]; readOnly: boolean }) {
     }));
   }, [nodes, issues, selectedIds, measured]);
 
-  const flowEdges = useMemo<Edge[]>(
+  const resolved = useMemo(() => resolveEdges({ nodes, edges }), [nodes, edges]);
+
+  // Routes depend on where everything is, so they are recomputed (shortly after the last move, to keep dragging smooth).
+  const [routes, setRoutes] = useState<Map<string, Point[]>>(() => new Map());
+  useEffect(() => {
+    const run = () =>
+      setRoutes(
+        routeEdges(
+          routerNodes(nodes),
+          resolved.filter((r) => r.kind && !r.problem).map((r) => ({ id: r.edge.id, source: r.edge.source, target: r.edge.target })),
+        ),
+      );
+    if (routes.size === 0) {
+      run();
+      return;
+    }
+    const t = setTimeout(run, 80);
+    return () => clearTimeout(t);
+    // `routes` is only read to skip the delay for the very first route.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodes, resolved]);
+
+  // With one resource selected, connections that don't touch it fade, so its own stand out (unless it has none).
+  const focus = useMemo(() => {
+    const id = selectedIds.length === 1 ? selectedIds[0] : null;
+    return id !== null && edges.some((e) => e.source === id || e.target === id) ? id : null;
+  }, [selectedIds, edges]);
+
+  const flowEdges = useMemo<RoutedEdgeType[]>(
     () =>
-      resolveEdges({ nodes, edges }).map((r) => ({
-        id: r.edge.id,
-        source: r.edge.source,
-        target: r.edge.target,
-        type: 'smoothstep',
-        label: r.problem ? '\u26a0 invalid' : r.label,
-        selected: r.edge.id === selectedEdgeId,
-        className: r.problem ? 'edge-bad' : `edge-${r.kind}`,
-      })),
-    [nodes, edges, selectedEdgeId],
+      resolved.map((r) => {
+        const dim = focus !== null && r.edge.source !== focus && r.edge.target !== focus && r.edge.id !== selectedEdgeId;
+        return {
+          id: r.edge.id,
+          source: r.edge.source,
+          target: r.edge.target,
+          type: 'routed',
+          data: { points: routes.get(r.edge.id), label: r.problem ? '\u26a0 invalid' : r.label },
+          selected: r.edge.id === selectedEdgeId,
+          className: `${r.problem ? 'edge-bad' : `edge-${r.kind}`}${dim ? ' edge-dim' : ''}`,
+        };
+      }),
+    [resolved, routes, selectedEdgeId, focus],
   );
 
   useEffect(() => {
-    const t = setTimeout(() => void fitView({ padding: 0.2, maxZoom: 1 }), 50);
+    const t = setTimeout(() => void fitView({ padding: 0.2, maxZoom: 1 }), 300);
     return () => clearTimeout(t);
   }, [loadedAt, fitView]);
 
@@ -138,6 +172,7 @@ function Flow({ issues, readOnly }: { issues: Issue[]; readOnly: boolean }) {
       nodes={flowNodes}
       edges={flowEdges}
       nodeTypes={nodeTypes}
+      edgeTypes={edgeTypes}
       connectionMode={ConnectionMode.Loose}
       onNodesChange={onNodesChange}
       onEdgesChange={(changes) => {
@@ -179,10 +214,15 @@ function Flow({ issues, readOnly }: { issues: Issue[]; readOnly: boolean }) {
         }}
         nodeStrokeWidth={2}
       />
-      <Panel position="top-right">
-        <button onClick={() => void exportPng()} title="Download the diagram as a PNG">
+      <Panel position="top-right" className="flex gap-2">
+        {!readOnly && (
+          <Button variant="outline" size="sm" onClick={() => void useStore.getState().autoLayout()} title="Re-arrange so nothing overlaps">
+            <LayoutGrid /> Auto layout
+          </Button>
+        )}
+        <Button variant="outline" size="sm" onClick={() => void exportPng()} title="Download the diagram as a PNG">
           Export PNG
-        </button>
+        </Button>
       </Panel>
     </ReactFlow>
   );

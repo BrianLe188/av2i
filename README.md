@@ -45,6 +45,12 @@ For PostgreSQL: `npm run db:up` and set `DATABASE_URL=postgres://av2i:av2i@local
 - **How many groups AWS gets:** a resource with no group attached gets one of its own (`Managed by av2i for …`). Connect a Security group node to it and that group replaces the managed one; connect the same group to several resources and they share it (it is created once, and identical rules are emitted once because AWS rejects duplicates). A VPC's *Default security group* field does the same for every resource in the VPC that has none attached.
 - **Connection rules with drawn groups:** database access and load balancer targets add their rule to the first group of the receiving resource, naming the first group of the sending one, unless the group already has that exact rule. The load balancer's listener is opened to the internet automatically only on a managed group; with a drawn group, its own rules decide (the Issues tab warns when none allows the listener port).
 
+## UI and canvas layout
+
+- **UI:** shadcn/ui (Radix, Nova preset) on Tailwind v4, in `apps/web/src/components/ui`. Add more with `npx shadcn@latest add <component>` from `apps/web`. Light/dark follows the system. Only canvas styling lives in `styles.css`.
+- **Connections** are routed by `routeEdges` (`packages/core/src/route.ts`): right-angled paths on a grid that go around every resource that is not one of the connection's ends, prefer to stay inside their container, and keep off each other's lanes. They are recomputed when anything moves. The label shows on hover or selection, and selecting a resource fades the connections that don't touch it.
+- **Auto layout** (top right of the canvas, undoable) arranges everything with ELK (`apps/web/src/layout.ts`, loaded on first use): containers hold their children, connected resources sit side by side, nothing overlaps. Projects created from a template or an import are laid out the same way.
+
 ## Canvas shortcuts
 
 Shift-drag selects several resources (Cmd/Ctrl-click adds one). With several selected, the side panel aligns and distributes them (within one container). Cmd/Ctrl+C / V / D copy, paste and duplicate (nested resources and the connections between them come along; pasted subnets get a free CIDR, buckets a new name), Esc clears the selection, Cmd/Ctrl+Z / Shift+Z undo and redo. "Export PNG" (top right of the canvas) downloads the diagram, and the minimap sits bottom right.
