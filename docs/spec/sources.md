@@ -93,9 +93,9 @@ page is used.
 | Lambda execution role | https://docs.aws.amazon.com/lambda/latest/dg/lambda-intro-execution-role.html |
 | ECS task IAM role | https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-iam-roles.html |
 
-## Terraform AWS provider documentation (main branch, read as raw markdown)
+## Terraform AWS provider documentation (tag v6.66.0, read as raw markdown)
 
-Base: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/
+Base: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/
 
 `vpc`, `subnet`, `internet_gateway`, `nat_gateway`, `eip`, `route_table`, `route`, `route_table_association`,
 `security_group`, `vpc_security_group_ingress_rule`, `instance`, `lambda_function`, `ecs_cluster`,
@@ -107,8 +107,17 @@ Base: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/we
 `acm_certificate_validation`, `iam_role`, `iam_role_policy`, `iam_role_policy_attachment`, `iam_policy`, `iam_instance_profile`, `vpc_endpoint`, `vpc_endpoint_route_table_association`, `eip`, `eip_association` (the last two read at tag `v6.66.0`)
 (each with `.html.markdown`) and the data source `aws_iam_policy_document` (`d/iam_policy_document.html.markdown`).
 
-These are the `main` branch, which can be ahead of the pinned provider release. When the exact provider version
-is chosen (decision D-001), re-check the arguments used against the tagged documentation of that release.
+All pages were first read from the `main` branch. On 23 October 2026 each of the 52 pages used (including the `aws_default_*` pages) was
+downloaded at `main` and at the pinned tag `v6.66.0` and compared line by line. 31 are identical. The other 21 differ only in
+wording, capitalisation, new import examples and experimental notes, except for these three points, which are now recorded:
+
+- `aws_lambda_function`: inside the `ephemeral_storage` block `size` is Required at `v6.66.0` and Optional on `main`.
+- `aws_ecs_service`: capacity provider `weight` and the linear and canary deployment percentages are Required at `v6.66.0` and
+  Optional on `main`; capacity provider strategies and these deployment types are out of scope.
+- `aws_db_instance`: at `v6.66.0` the `password_wo` argument says it "will be stored in the state file", which contradicts its
+  write-only nature and which `main` removed. The specification keeps the write-only behaviour and marks it `unverified`.
+
+Every provider URL in the specification now points at `v6.66.0`.
 
 ## Not yet checked
 
@@ -143,5 +152,5 @@ is chosen (decision D-001), re-check the arguments used against the tagged docum
 - Network ACLs.
 - Latest AWS provider and OpenTofu release numbers (only unofficial listings were found).
 - VPC gateway endpoint for S3: whether the endpoint quota of 255 per VPC can be raised, whether `service_name`, `vpc_id` and `vpc_endpoint_type` force replacement, whether the endpoint route counts toward the routes-per-table quota, how the route appears in `aws_route_table` state, and the behaviour of a network ACL (out of scope, D-008).
-- Provider documentation of every service other than Elastic IP was read from `main`, not from the `v6.66.0` tag chosen in D-001; re-read it at the tag. The `aws_default_*` resources (D-006) have not been read at all.
+- `aws_default_route_table` and `aws_default_network_acl` were downloaded for the comparison but not read for design (D-006 leaves both untouched).
 - Elastic IP: the Public IPv4 price, whether a NAT gateway keeps its address on replacement, and `aws_nat_gateway.secondary_allocation_ids` as a second connection from an Elastic IP.

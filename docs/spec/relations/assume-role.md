@@ -70,10 +70,10 @@ sources:
   S5: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_execution_IAM_role.html
   S6: https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_passrole.html
   S7: https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc.html
-  S8: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/instance.html.markdown
-  S9: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/lambda_function.html.markdown
-  S10: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/ecs_task_definition.html.markdown
-  S11: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/db_instance.html.markdown
+  S8: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/instance.html.markdown
+  S9: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/lambda_function.html.markdown
+  S10: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/ecs_task_definition.html.markdown
+  S11: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/db_instance.html.markdown
 status: verified          # unverified items are marked in the registry and cases
 ---
 

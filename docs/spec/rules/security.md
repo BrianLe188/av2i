@@ -46,11 +46,11 @@ AWS-DEFSG https://docs.aws.amazon.com/vpc/latest/userguide/default-security-grou
 - id: SEC-005
   severity: info
   applies_to: [vpc]
-  check: "the VPC's default security group still has its default rules (allow all from itself, allow all outbound)"
+  check: "the VPC's default security group is not managed by the design, so it still has its default rules (allow all from itself, allow all outbound)"
   message: { vi: "Security Group mặc định của VPC vẫn cho phép mọi lưu lượng trong nhóm và ra ngoài.", en: "The VPC default security group still allows all traffic within the group and all outbound." }
-  fix: { vi: "Xoá hết rule của nhóm mặc định (dùng aws_default_security_group).", en: "Remove all rules from the default group (use aws_default_security_group)." }
-  source: null
-  status: unverified      # CIS-style hardening from general knowledge; confirm the benchmark number and the Terraform resource
+  fix: { vi: "Quản lý nhóm mặc định bằng aws_default_security_group và không khai báo rule nào (D-006).", en: "Manage the default group with aws_default_security_group and declare no rules (D-006)." }
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/default_security_group.html.markdown
+  status: verified      # the resource and its adopt-and-clear behaviour are verified; the CIS benchmark number is not cited
 
 # Compute and containers
 
@@ -69,7 +69,7 @@ AWS-DEFSG https://docs.aws.amazon.com/vpc/latest/userguide/default-security-grou
   check: "an instance's root_block_device.encrypted is false"
   message: { vi: "Ổ đĩa gốc của EC2 chưa mã hoá.", en: "The instance root volume is not encrypted." }
   fix: { vi: "Bật encrypted. Đổi giá trị này sau khi tạo sẽ thay thế instance.", en: "Enable encrypted. Changing it later replaces the instance." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/instance.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/instance.html.markdown
   status: verified        # default false is verified; the warning is platform policy
 
 - id: SEC-008
@@ -87,7 +87,7 @@ AWS-DEFSG https://docs.aws.amazon.com/vpc/latest/userguide/default-security-grou
   check: "image_scanning_configuration.scan_on_push is false"
   message: { vi: "ECR chưa quét image khi push.", en: "ECR does not scan images on push." }
   fix: { vi: "Bật scan_on_push.", en: "Enable scan_on_push." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/ecr_repository.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/ecr_repository.html.markdown
   status: verified
 
 - id: SEC-010
@@ -96,7 +96,7 @@ AWS-DEFSG https://docs.aws.amazon.com/vpc/latest/userguide/default-security-grou
   check: "an ECR repository has image_tag_mutability = MUTABLE, or a consumer references the tag latest"
   message: { vi: "Tag có thể bị ghi đè nên cùng một tag có thể trỏ tới image khác.", en: "Tags can be overwritten, so the same tag can point to a different image." }
   fix: { vi: "Dùng IMMUTABLE hoặc tham chiếu theo digest.", en: "Use IMMUTABLE or reference by digest." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/ecr_repository.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/ecr_repository.html.markdown
   status: verified
 
 - id: SEC-011
@@ -125,7 +125,7 @@ AWS-DEFSG https://docs.aws.amazon.com/vpc/latest/userguide/default-security-grou
   check: "versioning is not Enabled"
   message: { vi: "Bucket chưa bật versioning nên ghi đè hoặc xoá là mất dữ liệu.", en: "Versioning is off, so an overwrite or delete loses data." }
   fix: { vi: "Bật versioning cho dữ liệu cần giữ.", en: "Turn on versioning for data that must be kept." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/s3_bucket_versioning.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/s3_bucket_versioning.html.markdown
   status: verified            # the capability and its limits are verified; flagging it is platform policy
 
 - id: SEC-014
@@ -179,7 +179,7 @@ AWS-DEFSG https://docs.aws.amazon.com/vpc/latest/userguide/default-security-grou
   check: "deletion_protection is false"
   message: { vi: "RDS chưa bật bảo vệ xoá.", en: "Deletion protection is off." }
   fix: { vi: "Bật deletion_protection cho môi trường quan trọng.", en: "Turn on deletion_protection for important environments." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/db_instance.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/db_instance.html.markdown
   status: verified
 
 - id: SEC-020
@@ -188,7 +188,7 @@ AWS-DEFSG https://docs.aws.amazon.com/vpc/latest/userguide/default-security-grou
   check: "the master password is supplied through password instead of manage_master_user_password or password_wo"
   message: { vi: "Mật khẩu RDS nằm dạng văn bản thường trong Terraform state.", en: "The RDS password is stored in plain text in the Terraform state." }
   fix: { vi: "Dùng manage_master_user_password.", en: "Use manage_master_user_password." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/db_instance.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/db_instance.html.markdown
   status: verified
 
 - id: SEC-021
@@ -197,7 +197,7 @@ AWS-DEFSG https://docs.aws.amazon.com/vpc/latest/userguide/default-security-grou
   check: "backup_retention_period is 0"
   message: { vi: "RDS không có backup tự động.", en: "RDS has no automated backups." }
   fix: { vi: "Đặt backup_retention_period từ 1 trở lên.", en: "Set backup_retention_period to 1 or more." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/db_instance.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/db_instance.html.markdown
   status: verified
 
 - id: SEC-022
@@ -206,7 +206,7 @@ AWS-DEFSG https://docs.aws.amazon.com/vpc/latest/userguide/default-security-grou
   check: "skip_final_snapshot is true"
   message: { vi: "Xoá RDS sẽ không tạo snapshot cuối cùng.", en: "Deleting the instance will not take a final snapshot." }
   fix: { vi: "Đặt skip_final_snapshot = false cho dữ liệu cần giữ.", en: "Set skip_final_snapshot to false for data that must be kept." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/db_instance.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/db_instance.html.markdown
   status: verified
 
 - id: SEC-023
@@ -226,7 +226,7 @@ AWS-DEFSG https://docs.aws.amazon.com/vpc/latest/userguide/default-security-grou
   check: "an internet-facing ALB has an HTTP listener whose default action is forward, or has no HTTPS listener"
   message: { vi: "ALB phục vụ HTTP thường, chưa chuyển hướng sang HTTPS.", en: "The ALB serves plain HTTP and does not redirect to HTTPS." }
   fix: { vi: "Thêm listener HTTPS và đặt hành động mặc định của HTTP là redirect.", en: "Add an HTTPS listener and make the HTTP default action a redirect." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/lb_listener.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/lb_listener.html.markdown
   status: verified            # the redirect action is verified; requiring HTTPS is platform policy
 
 - id: SEC-025
@@ -235,7 +235,7 @@ AWS-DEFSG https://docs.aws.amazon.com/vpc/latest/userguide/default-security-grou
   check: "an HTTPS listener uses ssl_policy ELBSecurityPolicy-2016-08 (the provider default) or another policy older than a TLS 1.2 minimum"
   message: { vi: "Listener HTTPS dùng chính sách SSL cũ.", en: "The HTTPS listener uses an old SSL policy." }
   fix: { vi: "Dùng ELBSecurityPolicy-TLS13-1-2-2021-06.", en: "Use ELBSecurityPolicy-TLS13-1-2-2021-06." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/lb_listener.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/lb_listener.html.markdown
   status: verified            # the default is verified; calling it old is platform policy
 
 - id: SEC-026
@@ -253,7 +253,7 @@ AWS-DEFSG https://docs.aws.amazon.com/vpc/latest/userguide/default-security-grou
   check: "enable_deletion_protection is false"
   message: { vi: "ALB chưa bật bảo vệ xoá.", en: "ALB deletion protection is off." }
   fix: { vi: "Bật enable_deletion_protection cho môi trường quan trọng.", en: "Turn on enable_deletion_protection for important environments." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/lb.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/lb.html.markdown
   status: verified
 
 - id: SEC-028
@@ -271,7 +271,7 @@ AWS-DEFSG https://docs.aws.amazon.com/vpc/latest/userguide/default-security-grou
   check: "a cache behaviour has viewer_protocol_policy allow-all"
   message: { vi: "CloudFront cho phép viewer dùng HTTP thường.", en: "CloudFront allows viewers to use plain HTTP." }
   fix: { vi: "Dùng redirect-to-https hoặc https-only.", en: "Use redirect-to-https or https-only." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/cloudfront_distribution.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/cloudfront_distribution.html.markdown
   status: verified            # the values are verified; requiring HTTPS is platform policy
 
 - id: SEC-030
@@ -280,7 +280,7 @@ AWS-DEFSG https://docs.aws.amazon.com/vpc/latest/userguide/default-security-grou
   check: "viewer_certificate.minimum_protocol_version is TLSv1 (the provider default) or below TLSv1.2_2019"
   message: { vi: "CloudFront chấp nhận phiên bản TLS cũ.", en: "CloudFront accepts old TLS versions." }
   fix: { vi: "Đặt TLSv1.2_2021.", en: "Set TLSv1.2_2021." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/cloudfront_distribution.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/cloudfront_distribution.html.markdown
   status: verified
 
 - id: SEC-031
@@ -298,7 +298,7 @@ AWS-DEFSG https://docs.aws.amazon.com/vpc/latest/userguide/default-security-grou
   check: "web_acl_id is not set"
   message: { vi: "Distribution chưa gắn WAF.", en: "The distribution has no WAF web ACL." }
   fix: { vi: "Cân nhắc gắn WAF (dịch vụ Tier 2).", en: "Consider attaching WAF (a Tier 2 service)." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/cloudfront_distribution.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/cloudfront_distribution.html.markdown
   status: verified
 
 - id: SEC-033
@@ -307,7 +307,7 @@ AWS-DEFSG https://docs.aws.amazon.com/vpc/latest/userguide/default-security-grou
   check: "force_destroy is true on a hosted zone"
   message: { vi: "Xoá zone sẽ xoá mọi bản ghi, kể cả bản ghi tạo ngoài Terraform.", en: "Destroying the zone deletes every record, including ones created outside Terraform." }
   fix: { vi: "Giữ force_destroy là false cho zone quan trọng.", en: "Keep force_destroy false for important zones." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/route53_zone.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/route53_zone.html.markdown
   status: verified
 
 - id: SEC-034
@@ -363,7 +363,7 @@ AWS-DEFSG https://docs.aws.amazon.com/vpc/latest/userguide/default-security-grou
   check: "a role trust policy has Principal * or {AWS: *} without a restricting condition"
   message: { vi: "Trust policy cho phép bất kỳ ai assume role.", en: "The trust policy lets anyone assume the role." }
   fix: { vi: "Chỉ liệt kê service principal cần dùng.", en: "List only the service principals that need it." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/d/iam_policy_document.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/d/iam_policy_document.html.markdown
   status: unverified          # the page says the two forms differ in a trust policy; the risk itself is general knowledge
 
 - id: SEC-040

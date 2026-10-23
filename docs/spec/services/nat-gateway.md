@@ -12,8 +12,8 @@ sources:
   S1: https://docs.aws.amazon.com/vpc/latest/userguide/vpc-nat-gateway.html
   S2: https://docs.aws.amazon.com/vpc/latest/userguide/nat-gateway-basics.html
   S3: https://docs.aws.amazon.com/vpc/latest/userguide/nat-gateways-regional.html
-  S4: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/nat_gateway.html.markdown
-  S5: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/eip.html.markdown
+  S4: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/nat_gateway.html.markdown
+  S5: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/eip.html.markdown
   S6: https://docs.aws.amazon.com/vpc/latest/userguide/amazon-vpc-limits.html
 properties:
   - key: availability_mode

@@ -15,7 +15,7 @@ generates:
 invalid_when: [VAL-004, VAL-005, VAL-027]
 sources:
   S1: https://docs.aws.amazon.com/vpc/latest/userguide/subnet-sizing.html
-  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/subnet.html.markdown
+  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/subnet.html.markdown
 status: verified              # for the network services; compute, database and load balancer rows are pending their own files
 ---
 

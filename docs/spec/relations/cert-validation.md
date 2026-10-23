@@ -18,9 +18,9 @@ conditions:
 invalid_when: [VAL-099, VAL-100, VAL-102]
 sources:
   S1: https://docs.aws.amazon.com/acm/latest/userguide/dns-validation.html
-  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/acm_certificate.html.markdown
-  S3: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/acm_certificate_validation.html.markdown
-  S4: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/route53_record.html.markdown
+  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/acm_certificate.html.markdown
+  S3: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/acm_certificate_validation.html.markdown
+  S4: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/route53_record.html.markdown
 status: verified
 ---
 

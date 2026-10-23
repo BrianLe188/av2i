@@ -19,7 +19,7 @@ sources:
   S1: https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/resource-record-sets-choosing-alias-non-alias.html
   S2: https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/routing-to-cloudfront-distribution.html
   S3: https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/routing-to-elb-load-balancer.html
-  S4: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/route53_record.html.markdown
+  S4: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/route53_record.html.markdown
   S5: https://docs.aws.amazon.com/elasticloadbalancing/latest/application/application-load-balancers.html
 status: verified          # the CloudFront hosted zone ID constant and the ALB zone ID attribute name are unverified
 ---

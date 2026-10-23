@@ -7,7 +7,7 @@ scope: vpc
 placement: { requires: [vpc], subnet_type: null, min_azs: null }
 sources:
   S1: https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Internet_Gateway.html
-  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/internet_gateway.html.markdown
+  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/internet_gateway.html.markdown
   S3: https://docs.aws.amazon.com/vpc/latest/userguide/amazon-vpc-limits.html
   S4: https://docs.aws.amazon.com/vpc/latest/userguide/delete-igw.html
 properties:

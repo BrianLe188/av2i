@@ -6,8 +6,8 @@ terraform:
 scope: global
 placement: { requires: [], subnet_type: null, min_azs: null }
 sources:
-  S1: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/route53_zone.html.markdown
-  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/route53_record.html.markdown
+  S1: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/route53_zone.html.markdown
+  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/route53_record.html.markdown
   S3: https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/resource-record-sets-choosing-alias-non-alias.html
   S4: https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/DNSLimitations.html
   S5: https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/routing-to-cloudfront-distribution.html

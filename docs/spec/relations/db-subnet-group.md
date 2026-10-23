@@ -18,7 +18,7 @@ conditions:
 invalid_when: [VAL-058, VAL-062, VAL-067]
 sources:
   S1: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_VPC.WorkingWithRDSInstanceinaVPC.html
-  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/db_subnet_group.html.markdown
+  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/db_subnet_group.html.markdown
   S3: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_Limits.html
 status: verified          # items marked unverified in the cases below
 ---

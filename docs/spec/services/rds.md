@@ -9,8 +9,8 @@ placement:
   subnet_type: private
   min_azs: 2                   # the subnet group needs two AZs even for a single-AZ instance
 sources:
-  S1: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/db_instance.html.markdown
-  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/db_subnet_group.html.markdown
+  S1: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/db_instance.html.markdown
+  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/db_subnet_group.html.markdown
   S3: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_VPC.WorkingWithRDSInstanceinaVPC.html
   S4: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_Limits.html
   S5: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Concepts.MultiAZ.html
@@ -98,7 +98,7 @@ properties:
     constraints:
       - "required unless manage_master_user_password, snapshot_identifier or replicate_source_db"
       - "printable ASCII except / ' \" @ and space; MySQL 8 to 41 characters, PostgreSQL 8 to 128"
-      - "stored in Terraform state in plain text; password_wo (Terraform 1.11 or later, with password_wo_version) avoids that"
+      - "stored in Terraform state in plain text; password_wo (Terraform 1.11 or later, with password_wo_version) avoids that; the v6.66.0 page also says password_wo 'will be stored in the state file', which contradicts it and was removed on main, so treat the write-only behaviour as unverified"
     src: [S1, S4]
     status: verified
   - key: db_subnet_group_name

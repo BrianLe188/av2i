@@ -20,12 +20,12 @@ properties:
 merge_rule: "A bucket has at most one policy resource. The platform collects every statement that every relation wants on that bucket and emits one document, ordered by Sid. Never emit two policy resources for one bucket."
 invalid_when: [VAL-051, VAL-052, VAL-053, VAL-054, VAL-055]
 sources:
-  S1: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/s3_bucket_policy.html.markdown
+  S1: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/s3_bucket_policy.html.markdown
   S2: https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucket-policies.html
   S3: https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-s3.html
   S4: https://docs.aws.amazon.com/elasticloadbalancing/latest/application/enable-access-logging.html
   S5: https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html
-  S6: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/lambda_permission.html.markdown
+  S6: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/lambda_permission.html.markdown
   S7: https://docs.aws.amazon.com/AmazonECR/latest/userguide/repository-policy-examples.html
   S8: https://docs.aws.amazon.com/lambda/latest/dg/images-create.html
 status: verified          # sections marked unverified below; the CloudFront and ECS-side detail is completed with those files

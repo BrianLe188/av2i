@@ -15,7 +15,7 @@ effects:
 invalid_when: [VAL-014, VAL-015]
 sources:
   S1: https://docs.aws.amazon.com/vpc/latest/userguide/subnet-route-tables.html
-  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/route_table_association.html.markdown
+  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/route_table_association.html.markdown
   S3: https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Internet_Gateway.html
 status: verified          # VAL-015 is unverified
 ---

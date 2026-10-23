@@ -14,8 +14,8 @@ Source aliases used below:
 - AWS-SG: https://docs.aws.amazon.com/vpc/latest/userguide/vpc-security-groups.html
 - AWS-SGR: https://docs.aws.amazon.com/vpc/latest/userguide/security-group-rules.html
 - AWS-QUOTA: https://docs.aws.amazon.com/vpc/latest/userguide/amazon-vpc-limits.html
-- TF-ROUTE: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/route.html.markdown
-- TF-SGR: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/vpc_security_group_ingress_rule.html.markdown
+- TF-ROUTE: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/route.html.markdown
+- TF-SGR: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/vpc_security_group_ingress_rule.html.markdown
 
 ```yaml
 - id: VAL-001
@@ -69,7 +69,7 @@ Source aliases used below:
   check: "the subnet has availability_zone (or availability_zone_id) set"
   message: { vi: "Subnet chưa chọn Availability Zone; AWS sẽ tự chọn nên kết quả không cố định.", en: "The subnet has no Availability Zone; AWS picks one, so the result is not deterministic." }
   fix: { vi: "Chọn AZ cho từng subnet.", en: "Choose an AZ for every subnet." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/subnet.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/subnet.html.markdown
   status: verified          # the argument is optional (verified); treating its absence as a warning is a platform policy
 
 - id: VAL-007
@@ -287,7 +287,7 @@ Source aliases used below:
   check: "an EC2 instance has ami, instance_type and exactly one subnet, and the subnet is in the same VPC as its security groups"
   message: { vi: "EC2 cần AMI, loại instance và đúng một subnet.", en: "An EC2 instance needs an AMI, an instance type and exactly one subnet." }
   fix: { vi: "Điền đủ ba thông tin và đặt vào một subnet.", en: "Fill in all three and place it in one subnet." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/instance.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/instance.html.markdown
   status: verified            # the provider allows a launch template instead of ami and instance_type; the platform does not model it
 
 - id: VAL-031
@@ -314,7 +314,7 @@ Source aliases used below:
   check: "a Lambda function has exactly one code source (filename, s3_bucket with s3_key, or image_uri); Zip functions have handler and runtime; Image functions have package_type = Image"
   message: { vi: "Lambda cần đúng một nguồn code; hàm Zip cần handler và runtime.", en: "A Lambda function needs exactly one code source; Zip functions need a handler and runtime." }
   fix: { vi: "Chọn một nguồn code và điền các trường bắt buộc.", en: "Choose one code source and fill the required fields." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/lambda_function.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/lambda_function.html.markdown
   status: verified
 
 - id: VAL-034
@@ -341,7 +341,7 @@ Source aliases used below:
   check: "if a Lambda function has any of subnet_ids or security_group_ids, it has at least one of each"
   message: { vi: "Lambda gắn VPC cần ít nhất một subnet và một Security Group.", en: "A Lambda attached to a VPC needs at least one subnet and one security group." }
   fix: { vi: "Chọn subnet và Security Group, hoặc bỏ cấu hình VPC.", en: "Choose subnets and a security group, or remove the VPC configuration." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/lambda_function.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/lambda_function.html.markdown
   status: verified
 
 - id: VAL-037
@@ -431,7 +431,7 @@ Source aliases used below:
   check: "an ECS service does not set both launch_type and capacity_provider_strategy, and does not use DAEMON scheduling on Fargate"
   message: { vi: "launch_type và capacity_provider_strategy xung đột; DAEMON không hỗ trợ Fargate.", en: "launch_type and capacity_provider_strategy conflict; DAEMON is not supported on Fargate." }
   fix: { vi: "Chọn một cách và dùng REPLICA.", en: "Choose one and use REPLICA." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/ecs_service.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/ecs_service.html.markdown
   status: verified
 
 - id: VAL-047
@@ -449,7 +449,7 @@ Source aliases used below:
   check: "an ECS service references one cluster and one task definition, and the cluster and the service's subnets are in the same Region"
   message: { vi: "Service ECS cần một cluster và một task definition.", en: "An ECS service needs a cluster and a task definition." }
   fix: { vi: "Chọn cluster và task definition.", en: "Choose a cluster and a task definition." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/ecs_service.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/ecs_service.html.markdown
   status: verified
 
 - id: VAL-049
@@ -478,7 +478,7 @@ Source aliases used below:
   check: "the generated configuration has at most one bucket policy resource per bucket, built from all statements that relations require"
   message: { vi: "Một bucket chỉ có một bucket policy; các statement phải được gộp lại.", en: "A bucket has only one bucket policy; the statements must be merged." }
   fix: { vi: "Gộp các statement vào một policy.", en: "Merge the statements into one policy." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/s3_bucket_policy.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/s3_bucket_policy.html.markdown
   status: verified
 
 - id: VAL-052
@@ -496,7 +496,7 @@ Source aliases used below:
   check: "the merged bucket policy document is at most 20 KB"
   message: { vi: "Bucket policy vượt 20 KB.", en: "The bucket policy exceeds 20 KB." }
   fix: { vi: "Rút gọn statement hoặc dùng nhiều bucket.", en: "Shorten the statements or split across buckets." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/s3_bucket_policy.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/s3_bucket_policy.html.markdown
   status: verified
 
 - id: VAL-054
@@ -523,7 +523,7 @@ Source aliases used below:
   check: "a bucket has at most one lifecycle configuration; every rule has an id of at most 255 characters, a status and an action; its filter is empty or exactly one filter element; rules using noncurrent versions require versioning Enabled"
   message: { vi: "Lifecycle của bucket không hợp lệ.", en: "The bucket lifecycle configuration is not valid." }
   fix: { vi: "Một cấu hình lifecycle, mỗi rule một hành động, bật versioning nếu dùng noncurrent.", en: "One lifecycle configuration, an action per rule, versioning on for noncurrent rules." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/s3_bucket_lifecycle_configuration.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/s3_bucket_lifecycle_configuration.html.markdown
   status: verified
 
 - id: VAL-057
@@ -532,7 +532,7 @@ Source aliases used below:
   check: "a bucket with object_lock_enabled has versioning Enabled; versioning is never Disabled after having been Enabled"
   message: { vi: "Object Lock cần versioning bật và không thể tắt.", en: "Object Lock needs versioning on and it cannot be turned off." }
   fix: { vi: "Giữ versioning bật.", en: "Keep versioning enabled." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/s3_bucket.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/s3_bucket.html.markdown
   status: verified
 
 - id: VAL-058
@@ -559,7 +559,7 @@ Source aliases used below:
   check: "a DB instance has engine, instance_class, allocated_storage, username, a DB subnet group, and either a password or manage_master_user_password"
   message: { vi: "RDS thiếu thông tin bắt buộc.", en: "The RDS instance is missing required settings." }
   fix: { vi: "Điền engine, loại instance, dung lượng, tên người dùng, nhóm subnet và mật khẩu.", en: "Fill in engine, instance class, storage, username, subnet group and password." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/db_instance.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/db_instance.html.markdown
   status: verified
 
 - id: VAL-061
@@ -586,7 +586,7 @@ Source aliases used below:
   check: "backup_retention_period is 0 to 35 and backup_window does not overlap maintenance_window"
   message: { vi: "Cửa sổ backup trùng cửa sổ bảo trì hoặc thời gian lưu backup ngoài 0-35.", en: "The backup window overlaps the maintenance window or retention is outside 0 to 35." }
   fix: { vi: "Đổi giờ để không trùng.", en: "Change the times so they do not overlap." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/db_instance.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/db_instance.html.markdown
   status: verified
 
 - id: VAL-064
@@ -595,7 +595,7 @@ Source aliases used below:
   check: "when skip_final_snapshot is false, final_snapshot_identifier is set, starts with a letter, uses only alphanumerics and hyphens, does not end with a hyphen and has no consecutive hyphens"
   message: { vi: "Thiếu hoặc sai tên snapshot cuối cùng.", en: "The final snapshot identifier is missing or invalid." }
   fix: { vi: "Đặt tên snapshot hợp lệ hoặc bật skip_final_snapshot.", en: "Set a valid snapshot name or set skip_final_snapshot." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/db_instance.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/db_instance.html.markdown
   status: verified
 
 - id: VAL-065
@@ -604,7 +604,7 @@ Source aliases used below:
   check: "max_allocated_storage, when set above 0, is greater than or equal to allocated_storage"
   message: { vi: "max_allocated_storage phải lớn hơn hoặc bằng allocated_storage.", en: "max_allocated_storage must be at least allocated_storage." }
   fix: { vi: "Tăng giá trị tối đa.", en: "Raise the maximum." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/db_instance.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/db_instance.html.markdown
   status: verified
 
 - id: VAL-066
@@ -631,7 +631,7 @@ Source aliases used below:
   check: "for a network-access connection to an RDS instance, the generated ingress rule covers the instance's port (the configured port, else the engine default)"
   message: { vi: "Rule không mở đúng cổng của cơ sở dữ liệu.", en: "The rule does not open the database's port." }
   fix: { vi: "Dùng cổng của engine hoặc cổng đã cấu hình.", en: "Use the engine port or the configured port." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/db_instance.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/db_instance.html.markdown
   status: unverified          # the engine default ports 5432 and 3306 are general knowledge
 
 - id: VAL-069
@@ -676,7 +676,7 @@ Source aliases used below:
   check: "the load balancer name is at most 32 characters, alphanumeric or hyphens, with no leading or trailing hyphen, and is unique in the account"
   message: { vi: "Tên ALB không hợp lệ.", en: "The ALB name is not valid." }
   fix: { vi: "Tối đa 32 ký tự, chỉ chữ, số và dấu gạch ngang.", en: "Use at most 32 characters of letters, digits and hyphens." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/lb.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/lb.html.markdown
   status: verified
 
 - id: VAL-074
@@ -703,7 +703,7 @@ Source aliases used below:
   check: "a listener default action is forward (1 to 5 target groups, weights 0 to 999), redirect (status HTTP_301 or HTTP_302) or fixed-response (content_type set, status 2XX, 4XX or 5XX); the protocol is HTTP or HTTPS and the port 1 to 65535"
   message: { vi: "Hành động mặc định của listener không hợp lệ.", en: "The listener default action is not valid." }
   fix: { vi: "Chọn forward, redirect hoặc fixed-response đúng giá trị.", en: "Choose forward, redirect or fixed-response with valid values." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/lb_listener.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/lb_listener.html.markdown
   status: verified
 
 - id: VAL-077
@@ -712,7 +712,7 @@ Source aliases used below:
   check: "a target group of type instance or ip has port, protocol and vpc_id; a lambda target group has none of them and no health check protocol"
   message: { vi: "Target group thiếu hoặc thừa port, protocol, VPC so với kiểu target.", en: "The target group has missing or extra port, protocol or VPC for its target type." }
   fix: { vi: "instance/ip cần cả ba; lambda không dùng.", en: "instance and ip need all three; lambda uses none." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/lb_target_group.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/lb_target_group.html.markdown
   status: verified
 
 - id: VAL-078
@@ -748,7 +748,7 @@ Source aliases used below:
   check: "a Lambda function used as an ALB target has an aws_lambda_permission allowing elasticloadbalancing.amazonaws.com, and the target group attachment depends on it"
   message: { vi: "Lambda làm target chưa cho phép ALB gọi.", en: "The Lambda target does not allow the ALB to invoke it." }
   fix: { vi: "Thêm quyền gọi hàm cho elasticloadbalancing.amazonaws.com.", en: "Add an invoke permission for elasticloadbalancing.amazonaws.com." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/lb_target_group_attachment.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/lb_target_group_attachment.html.markdown
   status: verified
 
 - id: VAL-082
@@ -766,7 +766,7 @@ Source aliases used below:
   check: "health check interval is 5 to 300 seconds, timeout 2 to 120, thresholds 2 to 10, a matcher in 200 to 499, a path for HTTP and HTTPS, and for lambda the interval exceeds the function timeout"
   message: { vi: "Cấu hình health check không hợp lệ.", en: "The health check settings are not valid." }
   fix: { vi: "Điều chỉnh về khoảng cho phép.", en: "Adjust to the allowed ranges." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/lb_target_group.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/lb_target_group.html.markdown
   status: verified
 
 - id: VAL-084
@@ -784,7 +784,7 @@ Source aliases used below:
   check: "a record has exactly one of records or alias; an alias record has no ttl and no records"
   message: { vi: "Bản ghi alias không được kèm TTL hoặc giá trị.", en: "An alias record cannot also have a TTL or values." }
   fix: { vi: "Chỉ dùng alias hoặc chỉ dùng records.", en: "Use either alias or records." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/route53_record.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/route53_record.html.markdown
   status: verified
 
 - id: VAL-086
@@ -793,7 +793,7 @@ Source aliases used below:
   check: "an alias record's zone_id is the hosted zone ID of its target (the load balancer's zone, or CloudFront's global zone), and its name is the target's DNS name"
   message: { vi: "Alias dùng sai hosted zone ID của target.", en: "The alias uses the wrong hosted zone ID for its target." }
   fix: { vi: "Lấy zone ID và tên DNS từ chính target.", en: "Take the zone ID and DNS name from the target itself." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/route53_record.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/route53_record.html.markdown
   status: verified            # the CloudFront zone ID constant itself is unverified
 
 - id: VAL-087
@@ -847,7 +847,7 @@ Source aliases used below:
   check: "a distribution has at least one origin; the default behaviour has target_origin_id, viewer_protocol_policy, allowed_methods, cached_methods and a cache policy and no path_pattern; ordered behaviours have a path_pattern; every target_origin_id names an existing origin; custom_error_response sets response_code and response_page_path together"
   message: { vi: "Cấu hình behaviour của CloudFront thiếu trường bắt buộc.", en: "A CloudFront behaviour is missing required fields." }
   fix: { vi: "Điền đủ các trường bắt buộc.", en: "Fill in the required fields." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/cloudfront_distribution.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/cloudfront_distribution.html.markdown
   status: verified
 
 - id: VAL-093
@@ -865,7 +865,7 @@ Source aliases used below:
   check: "a distribution has exactly one of acm_certificate_arn, iam_certificate_id and cloudfront_default_certificate, and ssl_support_method with an ACM or IAM certificate; a distribution with aliases does not use the default certificate"
   message: { vi: "viewer_certificate không hợp lệ.", en: "The viewer certificate is not valid." }
   fix: { vi: "Chọn đúng một nguồn chứng chỉ và đặt ssl_support_method.", en: "Choose one certificate source and set ssl_support_method." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/cloudfront_distribution.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/cloudfront_distribution.html.markdown
   status: verified
 
 - id: VAL-095
@@ -892,7 +892,7 @@ Source aliases used below:
   check: "origin connection_attempts is 1 to 3, connection_timeout 1 to 10 seconds, and origin_read_timeout and origin_keepalive_timeout are within the account limits (60 seconds by default)"
   message: { vi: "Timeout hoặc số lần thử của origin ngoài giới hạn.", en: "An origin timeout or attempt count is out of range." }
   fix: { vi: "Đặt trong khoảng cho phép.", en: "Set within the allowed range." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/cloudfront_distribution.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/cloudfront_distribution.html.markdown
   status: verified
 
 - id: VAL-098
@@ -1011,7 +1011,7 @@ Source aliases used below:
   check: "every Lambda function has exactly one execution role"
   message: { vi: "Hàm Lambda bắt buộc có execution role.", en: "A Lambda function requires an execution role." }
   fix: { vi: "Gắn một role cho hàm.", en: "Attach a role to the function." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/lambda_function.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/lambda_function.html.markdown
   status: verified
 
 - id: VAL-111
@@ -1074,7 +1074,7 @@ Source aliases used below:
   check: "an identity policy statement has Effect, Action (or NotAction) and Resource (or NotResource); a trust or resource-based policy statement has a Principal; the version is 2012-10-17 and the text uses only allowed characters"
   message: { vi: "Cấu trúc policy không hợp lệ.", en: "The policy structure is not valid." }
   fix: { vi: "Điền đủ Effect, Action, Resource (hoặc Principal với trust/resource policy).", en: "Fill in Effect, Action, Resource (or Principal for trust and resource policies)." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/d/iam_policy_document.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/d/iam_policy_document.html.markdown
   status: unverified          # the elements and the Resource requirement are verified; that an identity policy must not carry a Principal was not stated on the pages read
 
 - id: VAL-118
@@ -1083,7 +1083,7 @@ Source aliases used below:
   check: "a role's policies are managed either with inline_policy and managed_policy_arns on the role or with aws_iam_role_policy and aws_iam_role_policy_attachment, never both; the platform uses the separate resources only, and never aws_iam_policy_attachment"
   message: { vi: "Không trộn cách quản lý policy của role.", en: "Do not mix the ways of managing a role's policies." }
   fix: { vi: "Chỉ dùng aws_iam_role_policy và aws_iam_role_policy_attachment.", en: "Use only aws_iam_role_policy and aws_iam_role_policy_attachment." }
-  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/iam_role.html.markdown
+  source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/iam_role.html.markdown
   status: verified
 
 - id: VAL-119

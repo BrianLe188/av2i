@@ -20,10 +20,10 @@ sources:
   S1: https://docs.aws.amazon.com/acm/latest/userguide/acm-services.html
   S2: https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cnames-and-https-requirements.html
   S3: https://docs.aws.amazon.com/elasticloadbalancing/latest/application/create-https-listener.html
-  S4: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/lb_listener.html.markdown
-  S5: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/cloudfront_distribution.html.markdown
+  S4: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/lb_listener.html.markdown
+  S5: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/cloudfront_distribution.html.markdown
   S6: https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-limits.html
-  S7: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/acm_certificate.html.markdown
+  S7: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/acm_certificate.html.markdown
   S8: https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cloudfront-limits.html
 status: verified          # the ALB same-Region rule is unverified
 ---

@@ -27,8 +27,8 @@ invalid_when: [VAL-009, VAL-010, VAL-016, VAL-017, VAL-028, VAL-122]
 sources:
   S1: https://docs.aws.amazon.com/vpc/latest/userguide/subnet-route-tables.html
   S2: https://docs.aws.amazon.com/vpc/latest/userguide/route-tables-priority.html
-  S3: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/route.html.markdown
-  S4: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/route_table.html.markdown
+  S3: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/route.html.markdown
+  S4: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/route_table.html.markdown
   S6: https://docs.aws.amazon.com/vpc/latest/privatelink/gateway-endpoints.html
   S5: https://docs.aws.amazon.com/vpc/latest/userguide/nat-gateway-basics.html
 status: verified          # VAL-016 and VAL-028 are unverified

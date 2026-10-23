@@ -2,15 +2,16 @@
 id: vpc
 title: { vi: "VPC (mạng riêng ảo)", en: "Virtual Private Cloud (VPC)" }
 terraform:
-  resources: [aws_vpc]
+  resources: [aws_vpc, aws_default_security_group]
 scope: regional
 placement: { requires: [], subnet_type: null, min_azs: null }
 sources:
   S1: https://docs.aws.amazon.com/vpc/latest/userguide/vpc-cidr-blocks.html
-  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/vpc.html.markdown
+  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/vpc.html.markdown
   S3: https://docs.aws.amazon.com/vpc/latest/userguide/amazon-vpc-limits.html
   S4: https://docs.aws.amazon.com/vpc/latest/userguide/subnet-route-tables.html
   S5: https://docs.aws.amazon.com/vpc/latest/userguide/default-security-group.html
+  S6: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/default_security_group.html.markdown
 properties:
   - key: cidr_block
     type: string
@@ -64,6 +65,16 @@ exported:
   - { key: default_route_table_id, src: [S2] }
   - { key: default_security_group_id, src: [S2] }
   - { key: default_network_acl_id, src: [S2] }
+  - key: default_security_group
+    type: object
+    value: managed, no rules
+    constraints:
+      - "emitted as an aws_default_security_group with vpc_id and no ingress or egress blocks; Terraform adopts the group and removes every rule at once (S6)"
+      - "its rules are inline and absolute, so no aws_security_group_rule or rule resource may target it (S6, decision D-005 already forbids using it)"
+      - "removing the resource from the design leaves the rules as they are; it does not restore the defaults (S6)"
+      - "changing vpc_id forces a new resource and does not restore rules (S6)"
+    src: [S5, S6]
+    status: verified
 limits:
   - { id: vpcs_per_region, value: 5, adjustable: true, src: [S3], status: verified, note: "raising it raises internet gateways per Region by the same amount" }
   - { id: subnets_per_vpc, value: 200, adjustable: true, src: [S3], status: verified }

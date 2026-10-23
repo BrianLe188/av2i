@@ -22,7 +22,7 @@ sources:
   S2: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/fargate-task-networking.html
   S3: https://docs.aws.amazon.com/lambda/latest/dg/images-create.html
   S4: https://docs.aws.amazon.com/AmazonECR/latest/userguide/repository-policy-examples.html
-  S5: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/lambda_function.html.markdown
+  S5: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/lambda_function.html.markdown
 status: verified          # same-Region behaviour for ECS and architecture matching for ECS are unverified
 ---
 

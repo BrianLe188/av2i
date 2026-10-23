@@ -10,8 +10,8 @@ sources:
   S2: https://docs.aws.amazon.com/vpc/latest/userguide/security-group-rules.html
   S3: https://docs.aws.amazon.com/vpc/latest/userguide/default-security-group.html
   S4: https://docs.aws.amazon.com/vpc/latest/userguide/deleting-security-groups.html
-  S5: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/security_group.html.markdown
-  S6: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/vpc_security_group_ingress_rule.html.markdown
+  S5: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/security_group.html.markdown
+  S6: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/vpc_security_group_ingress_rule.html.markdown
   S7: https://docs.aws.amazon.com/vpc/latest/userguide/amazon-vpc-limits.html
 properties:
   - key: name

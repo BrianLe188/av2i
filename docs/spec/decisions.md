@@ -38,7 +38,7 @@ the record.
 
 ## D-001 Exact versions
 
-Status: decided (owner accepted the proposal, 23 October 2026). Provider `~> 6.66.0` (released 21 September 2026, about a month old; the latest was 6.70.0 on 22 October and the provider releases weekly), OpenTofu `>= 1.12.0, < 1.13.0` (1.12.9 is the latest patch of that line; 1.13.0 is three weeks old). Commit the lock file. The choice rests on release age, not on a changelog review, so a regression in 6.66 is not excluded. Follow-up: re-check every provider argument in the specification against the `v6.66.0` tag instead of `main`; the Elastic IP files were already read at that tag. Original analysis follows. The README pins the AWS provider to `~> 6.0` and OpenTofu to `>= 1.10`. Official release pages
+Status: decided (owner accepted the proposal, 23 October 2026). Provider `~> 6.66.0` (released 21 September 2026, about a month old; the latest was 6.70.0 on 22 October and the provider releases weekly), OpenTofu `>= 1.12.0, < 1.13.0` (1.12.9 is the latest patch of that line; 1.13.0 is three weeks old). Commit the lock file. The choice rests on release age, not on a changelog review, so a regression in 6.66 is not excluded. Follow-up done on 23 October 2026: every provider page was compared at `main` and at `v6.66.0` and all URLs point at the tag; see [sources.md](sources.md). Original analysis follows. The README pins the AWS provider to `~> 6.0` and OpenTofu to `>= 1.10`. Official release pages
 were not read; unofficial listings suggest provider 6.5x and OpenTofu 1.12, one listing noting a withdrawn
 patch release. Choose an exact minor release, commit the lock file, and re-check the provider docs of that
 release. The docs read for this group are from the `main` branch.
@@ -96,7 +96,7 @@ visible. Needs your decision because it changes how much the user must draw.
 
 ## D-006 Default route table, security group, network ACL
 
-Status: decided (recommendation accepted): manage the VPC's default security group with `aws_default_security_group` and no rules, so SEC-005 stops being permanent noise; leave the default route table and the default network ACL untouched. The `aws_default_*` resources have not been read, so this stays `unverified` until they are checked at tag v6.66.0. AWS creates them with every VPC. The default group is open ([SEC-005](rules/security.md)).
+Status: decided (recommendation accepted): manage the VPC's default security group with `aws_default_security_group` and no rules, so SEC-005 stops being permanent noise; leave the default route table and the default network ACL untouched. The provider page was read at v6.66.0 and the facts are recorded in [services/vpc.md](services/vpc.md) and pitfalls P-078 to P-080: the resource adopts the existing group and removes all its rules at once, declares rules inline as absolute, and conflicts with separate rule resources, so nothing else may attach rules to the default group. AWS creates them with every VPC. The default group is open ([SEC-005](rules/security.md)).
 Options: leave them untouched, or manage them (`aws_default_security_group`, and similar for the others) so the
 default group has no rules. The `aws_default_*` resources were not read (unverified).
 

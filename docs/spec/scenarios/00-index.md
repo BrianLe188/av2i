@@ -25,4 +25,4 @@ must fire (see [conventions section 11](../00-conventions.md#11-scenario-files))
 
 The scenarios touch 86 of 174 rules. The 88 not listed in the front matter are mostly single-property checks
 (CIDR ranges, name formats, numeric limits, a policy statement's shape). A scenario does not test them; they need one unit
-test per rule, built from the `check` sentence. Rules about relations between resources are the ones scenarios cover.
+test per rule, built from the `check` sentence; those cases are written in [rules/cases.md](../rules/cases.md). Rules about relations between resources are the ones scenarios cover.

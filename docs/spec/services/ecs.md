@@ -9,9 +9,9 @@ placement:
   subnet_type: private         # recommended; public only with a public IP per task
   min_azs: 2                   # recommended
 sources:
-  S1: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/ecs_cluster.html.markdown
-  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/ecs_task_definition.html.markdown
-  S3: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/ecs_service.html.markdown
+  S1: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/ecs_cluster.html.markdown
+  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/ecs_task_definition.html.markdown
+  S3: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/ecs_service.html.markdown
   S4: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/fargate-tasks-services.html
   S5: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/fargate-task-networking.html
   S6: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_execution_IAM_role.html

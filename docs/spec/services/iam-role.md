@@ -6,10 +6,10 @@ terraform:
 scope: global
 placement: { requires: [], subnet_type: null, min_azs: null }
 sources:
-  S1: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/iam_role.html.markdown
-  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/iam_role_policy.html.markdown
-  S3: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/iam_role_policy_attachment.html.markdown
-  S4: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/iam_instance_profile.html.markdown
+  S1: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/iam_role.html.markdown
+  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/iam_role_policy.html.markdown
+  S3: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/iam_role_policy_attachment.html.markdown
+  S4: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/iam_instance_profile.html.markdown
   S5: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_iam-quotas.html
   S6: https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-service.html
   S7: https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_switch-role-ec2_instance-profiles.html

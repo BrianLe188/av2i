@@ -46,7 +46,8 @@ docs/spec/
 │   └── <mechanism>.md       detail per mechanism
 ├── rules/
 │   ├── validation.md        VAL-xxx: is the design deployable
-│   └── security.md          SEC-xxx: is the design safe
+│   ├── security.md          SEC-xxx: is the design safe
+│   └── cases.md             boundary test cases for rules the scenarios do not cover
 ├── scenarios/               reference architectures and edge cases
 ├── terraform/
 │   ├── resource-map.md      what each service and mechanism generates
@@ -74,5 +75,4 @@ A file is complete only when no `unverified` entry remains in it, or each remain
 - Decision D-001: AWS provider `~> 6.66.0` (6.66.x only) and OpenTofu `>= 1.12.0, < 1.13.0`. Commit the lock file, because
   patch releases have occasionally been withdrawn.
 - The versions were chosen from the GitHub release lists on 23 October 2026 by release age, not from a changelog review.
-- Most provider documentation in this specification was read from the `main` branch, which can be ahead of `v6.66.0`; the
-  Elastic IP files were read at the tag. Re-check the rest against the tag (listed in [sources.md](sources.md)).
+- All provider documentation was compared at `main` and `v6.66.0` on 23 October 2026 and every URL points at the tag (see [sources.md](sources.md)).

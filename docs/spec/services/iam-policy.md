@@ -7,8 +7,8 @@ terraform:
 scope: global
 placement: { requires: [], subnet_type: null, min_azs: null }
 sources:
-  S1: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/iam_policy.html.markdown
-  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/d/iam_policy_document.html.markdown
+  S1: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/iam_policy.html.markdown
+  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/d/iam_policy_document.html.markdown
   S3: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_iam-quotas.html
   S4: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html
   S5: https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html

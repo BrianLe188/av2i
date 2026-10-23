@@ -8,9 +8,9 @@ placement: { requires: [vpc], subnet_type: null, min_azs: null }
 sources:
   S1: https://docs.aws.amazon.com/vpc/latest/userguide/subnet-route-tables.html
   S2: https://docs.aws.amazon.com/vpc/latest/userguide/route-tables-priority.html
-  S3: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/route_table.html.markdown
-  S4: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/route.html.markdown
-  S5: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/route_table_association.html.markdown
+  S3: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/route_table.html.markdown
+  S4: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/route.html.markdown
+  S5: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/route_table_association.html.markdown
   S6: https://docs.aws.amazon.com/vpc/latest/userguide/amazon-vpc-limits.html
   S7: https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Internet_Gateway.html
 properties:

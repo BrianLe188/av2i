@@ -9,10 +9,10 @@ placement:
   subnet_type: public          # internet-facing; private for internal (see cases)
   min_azs: 2
 sources:
-  S1: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/lb.html.markdown
-  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/lb_listener.html.markdown
-  S3: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/lb_target_group.html.markdown
-  S4: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/lb_target_group_attachment.html.markdown
+  S1: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/lb.html.markdown
+  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/lb_listener.html.markdown
+  S3: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/lb_target_group.html.markdown
+  S4: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/lb_target_group_attachment.html.markdown
   S5: https://docs.aws.amazon.com/elasticloadbalancing/latest/application/application-load-balancers.html
   S6: https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-limits.html
   S7: https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-target-groups.html

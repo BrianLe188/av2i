@@ -81,7 +81,7 @@ Status `verified` unless noted. Sources: S3 https://docs.aws.amazon.com/AmazonS3
 |---|---|---|---|
 | s3 buckets per account | 10,000 | yes | Commercial-Region quotas are managed from US East (N. Virginia) |
 | s3 bucket size, object count | no limit | not applicable | |
-| s3 bucket policy size | 20 KB | no | https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/s3_bucket_policy.html.markdown |
+| s3 bucket policy size | 20 KB | no | https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/s3_bucket_policy.html.markdown |
 | s3 bucket name length | 3 to 63 characters | no | https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucketnamingrules.html |
 | s3 lifecycle rule id | 255 characters | no | |
 | rds DB instances per Region | 40 (20 in ap-south-1) | yes | Shared with Aurora, Neptune, DocumentDB |
@@ -114,7 +114,7 @@ https://docs.aws.amazon.com/acm/latest/userguide/acm-limits.html.
 | alb targets per target group | 1,000 instances or IPs; 1 Lambda function | instances and IPs | |
 | alb load balancers per target group | 1 | no | |
 | alb request line, single header, request header | 16 K, 16 K, 64 K | no | |
-| alb name length | 32 | no | https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/lb.html.markdown |
+| alb name length | 32 | no | https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/lb.html.markdown |
 | route53 hosted zones | 500 | yes | Quotas are managed from US East (N. Virginia) |
 | route53 records per zone | 10,000 | yes | An extra charge applies above it |
 | route53 records per record set | 400 | no | |

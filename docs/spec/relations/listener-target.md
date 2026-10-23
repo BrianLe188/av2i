@@ -22,12 +22,12 @@ conditions:
 invalid_when: [VAL-043, VAL-071, VAL-076, VAL-077, VAL-078, VAL-079, VAL-080, VAL-081, VAL-082, VAL-083]
 sources:
   S1: https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-target-groups.html
-  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/lb_target_group.html.markdown
-  S3: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/lb_target_group_attachment.html.markdown
-  S4: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/lb_listener.html.markdown
+  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/lb_target_group.html.markdown
+  S3: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/lb_target_group_attachment.html.markdown
+  S4: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/lb_listener.html.markdown
   S5: https://docs.aws.amazon.com/elasticloadbalancing/latest/application/application-load-balancers.html
   S6: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/fargate-task-networking.html
-  S7: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/ecs_service.html.markdown
+  S7: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/ecs_service.html.markdown
 status: verified          # items marked unverified in the cases
 ---
 

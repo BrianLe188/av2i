@@ -9,7 +9,7 @@ placement:
   subnet_type: any              # public only if it must be reachable from the internet directly
   min_azs: 1
 sources:
-  S1: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/instance.html.markdown
+  S1: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/instance.html.markdown
   S2: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-instance-addressing.html
   S3: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html
   S4: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-resource-limits.html

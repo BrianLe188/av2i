@@ -6,8 +6,8 @@ terraform:
 scope: regional
 placement: { requires: [], subnet_type: null, min_azs: null }
 sources:
-  S1: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/acm_certificate.html.markdown
-  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/acm_certificate_validation.html.markdown
+  S1: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/acm_certificate.html.markdown
+  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/acm_certificate_validation.html.markdown
   S3: https://docs.aws.amazon.com/acm/latest/userguide/dns-validation.html
   S4: https://docs.aws.amazon.com/acm/latest/userguide/acm-limits.html
   S5: https://docs.aws.amazon.com/acm/latest/userguide/acm-services.html

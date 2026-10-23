@@ -8,8 +8,8 @@ placement: { requires: [vpc, route-table], subnet_type: null, min_azs: null }
 sources:
   S1: https://docs.aws.amazon.com/vpc/latest/privatelink/vpc-endpoints-s3.html
   S2: https://docs.aws.amazon.com/vpc/latest/privatelink/gateway-endpoints.html
-  S3: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/vpc_endpoint.html.markdown
-  S4: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/vpc_endpoint_route_table_association.html.markdown
+  S3: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/vpc_endpoint.html.markdown
+  S4: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/vpc_endpoint_route_table_association.html.markdown
   S5: https://docs.aws.amazon.com/vpc/latest/privatelink/vpc-endpoints-access.html
 scope_note: "Gateway type for general purpose S3 buckets only (decision D-029). Interface endpoints, the DynamoDB gateway endpoint, S3 directory buckets (s3express), IPv6 and DNS record IP type are out of scope"
 properties:

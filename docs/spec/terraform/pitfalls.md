@@ -1,10 +1,10 @@
 # Terraform pitfalls
 
 Behaviours of the AWS provider and Terraform/OpenTofu that the platform must design around. This file covers
-networking (P-001 to P-017), compute and containers (P-018 to P-034) and storage and databases (P-035 to P-044) and delivery and certificates (P-045 to P-059) and IAM (P-060 to P-069) and the S3 gateway endpoint (P-070 to P-074) and Elastic IP (P-075 to P-077). Each entry says what happens, why it matters, and what the generator must do.
+networking (P-001 to P-017), compute and containers (P-018 to P-034) and storage and databases (P-035 to P-044) and delivery and certificates (P-045 to P-059) and IAM (P-060 to P-069) and the S3 gateway endpoint (P-070 to P-074) and Elastic IP (P-075 to P-077) and the default security group (P-078 to P-080). Each entry says what happens, why it matters, and what the generator must do.
 
 Sources: provider documentation under
-https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/ for `vpc`, `subnet`,
+https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/ for `vpc`, `subnet`,
 `internet_gateway`, `nat_gateway`, `route_table`, `route`, `route_table_association`, `security_group`,
 `vpc_security_group_ingress_rule`, `eip` (`.html.markdown`).
 
@@ -22,7 +22,7 @@ https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/
 | P-010 | Subnet deletion with Lambda interfaces | Delete can take up to 45 minutes | Allow a long delete timeout; destroy functions first | verified |
 | P-011 | Route table association on a subnet that already has one | `Resource.AlreadyAssociated` | Emit one association per subnet; for existing infrastructure import first | verified |
 | P-012 | Main route table is implicit | Subnets without an explicit association follow it silently | Emit an explicit association for every subnet | verified |
-| P-013 | `aws_vpc` creates a default route table, security group and network ACL | They exist outside the design and the security group is open | Decide whether to manage them with `aws_default_security_group` etc. (decision D-006) | verified (existence); `aws_default_*` resources unverified |
+| P-013 | `aws_vpc` creates a default route table, security group and network ACL | They exist outside the design and the security group is open | Manage the default security group with `aws_default_security_group` and no rules; leave the default route table and network ACL (decision D-006) | verified |
 | P-014 | Regional NAT gateway `availability_zone_address` blocks | Adding or removing them recreates the gateway; moving an allocation between AZs needs two applies | Treat the AZ list as immutable once created | verified |
 | P-015 | `secondary_allocation_ids` with `aws_nat_gateway_eip_association` | Perpetual diff and overwritten associations | Use one or the other | verified |
 | P-016 | Duplicate security group rules | AWS rejects the second identical rule | Deduplicate rules by content before emitting | unverified |
@@ -87,3 +87,6 @@ https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/
 | P-075 | Elastic IP on an instance: two styles | `aws_eip.instance` or `network_interface` together with `aws_eip_association` for the same pair overwrite each other; the provider says to set `instance` or `network_interface`, not both | Emit `aws_eip_association` only; leave `instance` and `network_interface` unset on the `aws_eip` | verified |
 | P-076 | Changing an Elastic IP association | Changing `allocation_id`, `instance_id`, `network_interface_id`, `allow_reassociation` or `private_ip_address` replaces the association; `allocation_id` is effectively required | Treat any change as a replacement and warn that connections drop | verified |
 | P-077 | Elastic IP replaces the instance's auto-assigned address | Associating an Elastic IP releases the auto-assigned public IPv4 address for good and changes the instance's public DNS name | Warn when an instance with an auto-assigned address gets an Elastic IP; reference `aws_eip.<x>.public_ip` (see P-021) | verified |
+| P-078 | `aws_default_security_group` adopts, it does not create | The first apply removes every ingress and egress rule of the existing default group immediately, then creates the rules written in the configuration | Emit it with no rule blocks to get an empty group; warn that an existing group loses its rules | verified |
+| P-079 | Default security group rules are inline and absolute | Rules declared inline are the only rules; the resource is incompatible with `aws_security_group_rule`, so rule resources must never target the default group | Never attach a rule resource, a resource or an endpoint to the default group | verified |
+| P-080 | Removing `aws_default_security_group` from the configuration | The group stays and keeps its current rules; Terraform does not restore the AWS defaults; changing `vpc_id` also leaves the rules as they are | Warn before removing it from a design | verified |

@@ -9,7 +9,7 @@ placement:
   subnet_type: private         # when attached to a VPC
   min_azs: 2                   # recommended, not required
 sources:
-  S1: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/lambda_function.html.markdown
+  S1: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/lambda_function.html.markdown
   S2: https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-limits.html
   S3: https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc.html
   S4: https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc-internet.html
@@ -71,7 +71,7 @@ properties:
   - key: ephemeral_storage_size
     type: number
     range: [512, 10240]
-    constraints: ["/tmp storage, 1 MB steps"]
+    constraints: ["/tmp storage, 1 MB steps", "emitted as ephemeral_storage { size }; size is Required inside the block at provider v6.66.0"]
     src: [S1, S2]
     status: verified
   - key: environment_variables

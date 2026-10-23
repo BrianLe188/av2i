@@ -7,7 +7,7 @@ What each service and mechanism generates. Networking group only for now. Pitfal
 
 | Service | Resource(s) | Key arguments emitted | Notes |
 |---|---|---|---|
-| vpc | `aws_vpc` | `cidr_block`, `enable_dns_support`, `enable_dns_hostnames`, `instance_tenancy`, `tags` | Also creates default route table, security group, network ACL (P-013) |
+| vpc | `aws_vpc`, `aws_default_security_group` | `cidr_block`, `enable_dns_support`, `enable_dns_hostnames`, `instance_tenancy`, `tags`; default group: `vpc_id` and no rules | Also creates default route table, security group, network ACL (P-013); the default group is emptied (P-078 to P-080, decision D-006) |
 | subnet | `aws_subnet` | `vpc_id`, `cidr_block`, `availability_zone`, `map_public_ip_on_launch`, `tags` | |
 | internet-gateway | `aws_internet_gateway` | `vpc_id`, `tags` | P-009 |
 | elastic-ip | `aws_eip`, `aws_eip_association` (EC2 only) | EIP: `domain = "vpc"`, `tags`, `depends_on` the internet gateway. Association: `allocation_id`, `instance_id` | P-007, P-008, P-075 to P-077; decision D-007 |

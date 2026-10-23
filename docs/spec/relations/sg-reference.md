@@ -16,8 +16,8 @@ effects:
 invalid_when: [VAL-023, VAL-025, VAL-026]
 sources:
   S1: https://docs.aws.amazon.com/vpc/latest/userguide/security-group-rules.html
-  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/vpc_security_group_ingress_rule.html.markdown
-  S3: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/security_group.html.markdown
+  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/vpc_security_group_ingress_rule.html.markdown
+  S3: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/security_group.html.markdown
   S4: https://docs.aws.amazon.com/vpc/latest/userguide/deleting-security-groups.html
 status: verified          # VAL-026 is unverified
 ---

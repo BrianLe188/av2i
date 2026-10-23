@@ -25,7 +25,7 @@ sources:
   S2: https://docs.aws.amazon.com/vpc/latest/userguide/vpc-security-groups.html
   S3: https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc.html
   S4: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/fargate-task-networking.html
-  S5: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/ecs_service.html.markdown
+  S5: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/ecs_service.html.markdown
 status: unverified          # the mechanism is built from verified security group behaviour; the choice of which group carries the rule is a platform decision (D-012)
 ---
 

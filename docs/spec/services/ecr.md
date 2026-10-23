@@ -6,8 +6,8 @@ terraform:
 scope: regional
 placement: { requires: [], subnet_type: null, min_azs: null }
 sources:
-  S1: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/ecr_repository.html.markdown
-  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/ecr_lifecycle_policy.html.markdown
+  S1: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/ecr_repository.html.markdown
+  S2: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/ecr_lifecycle_policy.html.markdown
   S3: https://docs.aws.amazon.com/AmazonECR/latest/userguide/service-quotas.html
   S4: https://docs.aws.amazon.com/AmazonECR/latest/userguide/repository-policy-examples.html
   S5: https://docs.aws.amazon.com/lambda/latest/dg/images-create.html

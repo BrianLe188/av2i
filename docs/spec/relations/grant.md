@@ -70,7 +70,7 @@ sources:
   S5: https://docs.aws.amazon.com/AmazonECR/latest/userguide/repository-policy-examples.html
   S6: https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-service.html
   S7: https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-s3.html
-  S8: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/db_instance.html.markdown
+  S8: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/db_instance.html.markdown
 status: verified          # the rds-iam-auth row and DeleteObject are unverified
 ---
 
