@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { compile } from "./compile.ts";
+import { generatedSource } from "./generate.ts";
 import { schemas } from "./schemas.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -20,6 +21,7 @@ if (problems.length) {
 }
 
 if (command === "build") {
+  writeFileSync(resolve(here, "generated.ts"), generatedSource(registry));
   mkdirSync(resolve(outDir, "schema"), { recursive: true });
   writeFileSync(resolve(outDir, "registry.json"), JSON.stringify(registry, null, 2));
   for (const [name, s] of Object.entries(schemas)) writeFileSync(resolve(outDir, "schema", `${name}.json`), JSON.stringify(s, null, 2));

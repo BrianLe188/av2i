@@ -94,7 +94,7 @@ Terraform state means destroy and create, or a `moved` block).
 | # | Slice | Done when |
 |---|---|---|
 | M0 | registry compiler, JSON Schema for every spec file kind, schema check in CI | every file in `docs/spec` validates; types generated. **Compiler, schemas and cross-reference checks done** (`packages/registry`); generated TypeScript types and CI wiring remain |
-| M1 | networking end to end: VPC, subnet, IGW, NAT, EIP, route table, SG, S3 endpoint; EC2 | [isolated-private-app](../spec/scenarios/isolated-private-app.md) generates and `tofu validate` passes |
+| M1 | networking end to end: VPC, subnet, IGW, NAT, EIP, route table, SG, S3 endpoint; EC2 | [ec2-in-vpc](../spec/scenarios/ec2-in-vpc.md) (an executable scenario written for this milestone) generates and `tofu validate` passes. **Done**: 40 of 174 rules implemented, 24 variants pass, golden files, and 11 generated designs pass `tofu fmt -check`, `init` and `validate` with OpenTofu 1.12.9 and provider 6.66.0 (`pnpm --filter @av2i/testkit tofu-check`, runs in Docker) |
 | M2 | rules for the networking and compute groups, with their cases | all their cases and scenario variants pass |
 | M3 | containers, storage and database | [container-service](../spec/scenarios/container-service.md) generates and validates |
 | M4 | delivery: ALB, Route 53, ACM, CloudFront | [static-site-cdn](../spec/scenarios/static-site-cdn.md) and [three-tier-web](../spec/scenarios/three-tier-web.md) |

@@ -133,11 +133,15 @@ const matrix: Schema = {
 const scenario: Schema = {
   $id: "scenario",
   type: "object",
-  required: ["id", "title", "services", "nodes", "connections", "expect", "variants"],
+  required: ["id", "title", "services", "expect", "variants"],
+  // a sketch scenario lists nodes and connections; an executable one carries a full design
+  anyOf: [{ required: ["nodes", "connections"] }, { required: ["design", "executable"] }],
   properties: {
     id: kebab,
     title: i18n,
     services: { type: "array", items: kebab },
+    executable: { type: "boolean" },
+    design: { type: "object", required: ["schema", "name", "settings", "nodes", "edges"] },
     nodes: {
       type: "array",
       items: { type: "object", required: ["id", "service"], properties: { id: kebab, service: kebab } },
@@ -165,6 +169,7 @@ const scenario: Schema = {
           change: { type: "string", minLength: 5 },
           fires: { type: "array", items: ruleId },
           severity: { enum: ["error", "warning", "info"] },
+          patch: { type: "array", items: { type: "object", required: ["op"], properties: { op: { enum: ["set", "unset", "add-node", "remove-node", "add-edge", "remove-edge"] } } } },
         },
       },
     },

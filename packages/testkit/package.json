@@ -1,0 +1,22 @@
+{
+  "name": "@av2i/testkit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "golden": "node scripts/golden.ts",
+    "tofu-check": "node scripts/tofu-check.ts"
+  },
+  "dependencies": {
+    "@av2i/registry": "workspace:*",
+    "@av2i/model": "workspace:*",
+    "@av2i/engine": "workspace:*",
+    "@av2i/rules": "workspace:*",
+    "@av2i/generator": "workspace:*"
+  }
+}

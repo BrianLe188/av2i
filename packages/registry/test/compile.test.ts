@@ -91,3 +91,11 @@ describe("front matter splitting", () => {
     expect(yamlBlocks("```yaml\na: 1\n```\n```bash\nls\n```\n")).toEqual(["a: 1\n"]);
   });
 });
+
+describe("generated identifiers", () => {
+  it("are current", async () => {
+    const { generatedSource } = await import("../src/generate.ts");
+    const current = readFileSync(resolve(import.meta.dirname, "../src/generated.ts"), "utf8");
+    expect(generatedSource(compile(specRoot).registry)).toBe(current);
+  });
+});

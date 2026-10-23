@@ -1,0 +1,156 @@
+{
+  "schema": 1,
+  "name": "ec2-in-vpc",
+  "settings": {
+    "region": "ap-southeast-1"
+  },
+  "nodes": [
+    {
+      "key": "vpc",
+      "label": "Main",
+      "service": "vpc",
+      "props": {
+        "cidr_block": "10.0.0.0/16",
+        "enable_dns_support": true,
+        "enable_dns_hostnames": true
+      }
+    },
+    {
+      "key": "igw",
+      "label": "Internet gateway",
+      "service": "internet-gateway",
+      "parent": "vpc",
+      "props": {}
+    },
+    {
+      "key": "pub_a",
+      "label": "Public A",
+      "service": "subnet",
+      "parent": "vpc",
+      "props": {
+        "cidr_block": "10.0.0.0/24",
+        "availability_zone": "ap-southeast-1a"
+      }
+    },
+    {
+      "key": "app_a",
+      "label": "App A",
+      "service": "subnet",
+      "parent": "vpc",
+      "props": {
+        "cidr_block": "10.0.10.0/24",
+        "availability_zone": "ap-southeast-1a"
+      }
+    },
+    {
+      "key": "nat_a",
+      "label": "NAT A",
+      "service": "nat-gateway",
+      "parent": "pub_a",
+      "props": {
+        "availability_mode": "zonal",
+        "connectivity_type": "public"
+      }
+    },
+    {
+      "key": "rt_public",
+      "label": "Public routes",
+      "service": "route-table",
+      "parent": "vpc",
+      "props": {}
+    },
+    {
+      "key": "rt_app",
+      "label": "App routes",
+      "service": "route-table",
+      "parent": "vpc",
+      "props": {}
+    },
+    {
+      "key": "s3ep",
+      "label": "S3 endpoint",
+      "service": "vpc-endpoint-s3",
+      "parent": "vpc",
+      "props": {}
+    },
+    {
+      "key": "sg_app",
+      "label": "app-sg",
+      "service": "security-group",
+      "parent": "vpc",
+      "props": {
+        "name": "app-sg",
+        "description": "Application tier",
+        "ingress_rules": [
+          {
+            "ip_protocol": "tcp",
+            "from_port": 22,
+            "to_port": 22,
+            "cidr_ipv4": "10.0.0.0/16",
+            "description": "ssh from the VPC"
+          }
+        ]
+      }
+    },
+    {
+      "key": "app",
+      "label": "App",
+      "service": "ec2",
+      "parent": "app_a",
+      "props": {
+        "ami": "ami-0123456789abcdef0",
+        "instance_type": "t3.micro",
+        "metadata_options": {
+          "http_tokens": "required"
+        },
+        "root_block_device": {
+          "encrypted": true
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_rt_public_igw",
+      "mechanism": "route",
+      "from": "rt_public",
+      "to": "igw",
+      "props": {
+        "destination_cidr_block": "0.0.0.0/0"
+      }
+    },
+    {
+      "id": "e_rt_public_pub",
+      "mechanism": "route-association",
+      "from": "rt_public",
+      "to": "pub_a"
+    },
+    {
+      "id": "e_rt_app_nat",
+      "mechanism": "route",
+      "from": "rt_app",
+      "to": "nat_a",
+      "props": {
+        "destination_cidr_block": "0.0.0.0/0"
+      }
+    },
+    {
+      "id": "e_rt_app_s3",
+      "mechanism": "route",
+      "from": "rt_app",
+      "to": "s3ep"
+    },
+    {
+      "id": "e_rt_app_app",
+      "mechanism": "route-association",
+      "from": "rt_app",
+      "to": "app_a"
+    },
+    {
+      "id": "e_sg_app",
+      "mechanism": "sg-attach",
+      "from": "sg_app",
+      "to": "app"
+    }
+  ]
+}

@@ -176,6 +176,48 @@ importers:
         specifier: ^3.2.0
         version: 3.2.7(@types/node@26.6.5)(yaml@2.9.1)
 
+  apps/cli:
+    dependencies:
+      '@av2i/generator':
+        specifier: workspace:*
+        version: link:../../packages/generator
+      '@av2i/model':
+        specifier: workspace:*
+        version: link:../../packages/model
+      '@av2i/registry':
+        specifier: workspace:*
+        version: link:../../packages/registry
+      '@av2i/rules':
+        specifier: workspace:*
+        version: link:../../packages/rules
+
+  packages/engine:
+    dependencies:
+      '@av2i/model':
+        specifier: workspace:*
+        version: link:../model
+      '@av2i/registry':
+        specifier: workspace:*
+        version: link:../registry
+
+  packages/generator:
+    dependencies:
+      '@av2i/engine':
+        specifier: workspace:*
+        version: link:../engine
+      '@av2i/model':
+        specifier: workspace:*
+        version: link:../model
+      '@av2i/registry':
+        specifier: workspace:*
+        version: link:../registry
+
+  packages/model:
+    dependencies:
+      '@av2i/registry':
+        specifier: workspace:*
+        version: link:../registry
+
   packages/registry:
     dependencies:
       ajv:
@@ -184,6 +226,36 @@ importers:
       yaml:
         specifier: ^2.8.0
         version: 2.9.1
+
+  packages/rules:
+    dependencies:
+      '@av2i/engine':
+        specifier: workspace:*
+        version: link:../engine
+      '@av2i/model':
+        specifier: workspace:*
+        version: link:../model
+      '@av2i/registry':
+        specifier: workspace:*
+        version: link:../registry
+
+  packages/testkit:
+    dependencies:
+      '@av2i/engine':
+        specifier: workspace:*
+        version: link:../engine
+      '@av2i/generator':
+        specifier: workspace:*
+        version: link:../generator
+      '@av2i/model':
+        specifier: workspace:*
+        version: link:../model
+      '@av2i/registry':
+        specifier: workspace:*
+        version: link:../registry
+      '@av2i/rules':
+        specifier: workspace:*
+        version: link:../rules
 
 packages:
 

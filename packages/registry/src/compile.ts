@@ -192,13 +192,13 @@ export function compile(root: string): { registry: Registry; problems: Problem[]
     if (!f.front) { add(f.path, "front-matter", "missing front matter"); continue; }
     validate(f.path, "scenario", f.front);
     scenarios[String(f.front.id)] = f.front;
-    const nodes = new Map((f.front.nodes as Obj[]).map((n) => [n.id as string, n.service as string]));
     const listed = new Set(f.front.services as string[]);
+    const nodes = new Map(((f.front.nodes ?? []) as Obj[]).map((n) => [n.id as string, n.service as string]));
     for (const [nid, sv] of nodes) {
       if (!services[sv]) add(f.path, "scenario-node", `${nid} uses unknown service ${sv}`);
       if (!listed.has(sv)) add(f.path, "scenario-services", `services list lacks ${sv}`);
     }
-    for (const c of f.front.connections as Obj[]) {
+    for (const c of (f.front.connections ?? []) as Obj[]) {
       const a = nodes.get(c.from), b = nodes.get(c.to);
       if (!a || !b) { add(f.path, "scenario-connection", `${c.from} -> ${c.to} names an unknown node`); continue; }
       if (!mechanisms[c.mechanism]) { add(f.path, "scenario-connection", `unknown mechanism ${c.mechanism}`); continue; }

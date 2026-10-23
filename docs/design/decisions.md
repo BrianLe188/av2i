@@ -16,6 +16,8 @@ Numbered `DD-nnn` to keep them apart from the specification's `D-nnn` ([../spec/
 | DD-009 | decided | Inputs of rule test cases |
 | DD-010 | decided | The platform never applies or holds credentials |
 | DD-011 | decided | Terraform local names |
+| DD-012 | decided | Scenario patch operations address nodes by key |
+| DD-013 | decided | Security group egress when the design says nothing |
 
 ## DD-001 Language and runtime
 
@@ -123,3 +125,19 @@ Options: (1) from the node `key`, immutable after creation; (2) from the label, 
 Renaming a canvas label must not rename a resource, because a changed local name is a destroy-and-create in Terraform
 state unless a `moved` block is emitted. The `key` is created from the first label and never changes; two nodes may not
 share a key.
+
+## DD-012 Scenario patch operations
+
+Status: decided (a refinement of DD-008, made while implementing it). DD-008 proposed JSON Patch operations. RFC 6902 addresses
+array elements by index, so a patch like `/nodes/3/props/cidr_block` breaks when a node is added before it. The scenario patch
+language is six operations that address nodes and edges by `key` and by `(mechanism, from, to)`: `set`, `unset`, `add-node`,
+`remove-node`, `add-edge`, `remove-edge`. A property path is dotted (`props.metadata_options.http_tokens`). The runner applies a
+patch to a deep copy of the design and compares the findings with the variant's `fires`.
+
+## DD-013 Security group egress when the design says nothing
+
+Status: decided (recommendation of the implementer; the owner can change it). When a security group has no `egress_rules`
+property at all, the engine emits AWS's default allow-all egress rule explicitly, because Terraform removes it
+([security-group](../spec/services/security-group.md)) and a design that never mentioned egress should behave like AWS. An
+explicit empty list means no egress. The user sees and can edit the generated rule. The alternative, emitting nothing, would
+silently cut every new security group off from the network.
