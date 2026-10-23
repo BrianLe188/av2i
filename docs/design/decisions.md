@@ -1,0 +1,125 @@
+# Design decisions
+
+Numbered `DD-nnn` to keep them apart from the specification's `D-nnn` ([../spec/decisions.md](../spec/decisions.md)). All are
+**decided**: the owner accepted every recommendation (23 October 2026), including DD-010 (the platform produces files and never applies or holds credentials).
+
+| ID | Status | Topic |
+|---|---|---|
+| DD-001 | decided | Language and runtime |
+| DD-002 | decided | Repository layout |
+| DD-003 | decided | How the engine reads the specification |
+| DD-004 | decided | How rules are implemented |
+| DD-005 | decided | How HCL is produced |
+| DD-006 | decided | Where the engine runs |
+| DD-007 | decided | Persistence, accounts and the commercial layer |
+| DD-008 | decided | Executable scenario variants |
+| DD-009 | decided | Inputs of rule test cases |
+| DD-010 | decided | The platform never applies or holds credentials |
+| DD-011 | decided | Terraform local names |
+
+## DD-001 Language and runtime
+
+Status: decided (recommendation accepted).
+
+Options: (1) TypeScript everywhere; (2) Go engine (Terraform's own ecosystem, a real `hclwrite` library for HCL) with a
+TypeScript UI; (3) Go engine compiled to WebAssembly for the browser. Recommendation: (1). The engine must give feedback
+while the user draws, so it must run in the browser; the previous version already used React, XYFlow and TypeScript; one
+language keeps the types shared between engine, rules and canvas. The cost is that TypeScript has no mature HCL writer, so
+a small printer is written (DD-005). Go would give better HCL tooling but doubles the toolchain and needs WebAssembly for
+instant feedback.
+
+## DD-002 Repository layout
+
+Status: decided (recommendation accepted).
+
+Options: (1) a pnpm workspace with `packages/*` and `apps/*` as in [README.md](README.md); (2) one package with folders.
+Recommendation: (1). The registry, the rules and the generator are independent products of the same data and need separate
+tests and, later, separate publishing (the engine may be offered as a library or CLI). `docs/spec` stays at the root as the
+source of truth and is read by the registry package; it is not copied.
+
+## DD-003 How the engine reads the specification
+
+Status: decided (recommendation accepted).
+
+Options: (1) compile the front matter into `registry.json` and generated TypeScript types at build time, validated by JSON
+Schema; (2) parse markdown at runtime. Recommendation: (1). The browser must not parse 50 markdown files, a schema check in
+CI catches a malformed spec edit before it ships, and generated types make a wrong service ID a compile error. The compiler
+also checks cross-references (rule IDs, decisions, pitfalls, matrix against mechanism files), which the validation scripts
+used while writing the spec already did by hand.
+
+## DD-004 How rules are implemented
+
+Status: decided (recommendation accepted).
+
+A rule's `check` is a sentence. Options: (1) a TypeScript function per rule ID, kept honest by a coverage check, the cases in
+[../spec/rules/cases.md](../spec/rules/cases.md) and the scenarios; (2) a small expression language (for example CEL or
+JSON Logic) in the spec so the check itself is executable and shared by any future implementation. Recommendation: (1) now.
+Expressing graph rules such as "the NAT gateway's subnet has a route to an attached internet gateway" in a generic
+expression language is slow to design and harder to read than code, and the cases already give the portable definition.
+Revisit (2) if a second implementation language appears.
+
+## DD-005 How HCL is produced
+
+Status: decided (recommendation accepted).
+
+Options: (1) an own small printer from an internal tree, checked with `tofu fmt` and `tofu validate`; (2) Terraform JSON
+syntax (`*.tf.json`); (3) CDK for Terraform. Recommendation: (1). Users read and edit the output, so it must be readable
+HCL; JSON syntax is valid but not what a team expects in a repository; CDKTF adds a runtime, a synthesis step and a
+dependency that the platform would have to track against the provider. HCL is simple to print (blocks, attributes,
+references as raw expressions, `jsonencode` for policy documents), and the three CI checks in [README.md](README.md) catch
+mistakes.
+
+## DD-006 Where the engine runs
+
+Status: decided (recommendation accepted).
+
+Options: (1) in the browser and on the server from the same package; (2) server only. Recommendation: (1). Findings update
+as the user draws; export and any API call run the same code on the server, so results never differ between the screen and
+the downloaded files.
+
+## DD-007 Persistence, accounts and the commercial layer
+
+Status: decided (recommendation accepted).
+
+Not needed for M0 to M5. The Design is a JSON file, so the CLI and tests need no database. Recommendation: defer accounts,
+projects, versions and sharing to `apps/api` after the canvas exists, and decide the database and authentication then. The
+spec makes no assumption about them.
+
+## DD-008 Executable scenario variants
+
+Status: decided (recommendation accepted).
+
+Scenario variants today describe the change in a sentence. A test needs a patch. Recommendation: add a `patch` list to each
+variant in the scenario files (JSON Patch operations on the Design), keep `change` as the human text, and make the runner
+apply `patch` and compare the findings with `fires`. This is a spec change (conventions section 11 and the five scenario
+files, 87 variants) and the first piece of work in M1. Where a variant changes something the Design cannot express
+(a bucket in another Region is expressible; "the apply may interrupt connections" is not), it stays prose and is marked
+`manual`.
+
+## DD-009 Inputs of rule test cases
+
+Status: decided (recommendation accepted).
+
+Case inputs in `cases.md` use their own keys per rule. Options: (1) write a fixture adapter per rule that builds a design
+from the case's keys; (2) rewrite every case as a small Design plus an expected finding set. Recommendation: (2),
+incrementally: when a rule is implemented, convert its cases and delete the adapter idea. Writing 88 adapters would cost
+about as much as converting the cases, and the adapters would be thrown away.
+
+## DD-010 The platform never applies or holds credentials
+
+Status: decided (recommendation accepted).
+
+Assumption in this design: the platform produces files (Terraform, the deployer policy of D-028) and the user runs
+`tofu apply` with their own credentials. It stores no AWS keys, assumes no role in the user's account and never runs
+`plan` for them. Reason: it removes the largest security and liability surface for a solo-built commercial product. A later
+"plan preview" through a role the user grants would be a separate decision. The owner should confirm this is the product
+boundary.
+
+## DD-011 Terraform local names
+
+Status: decided (recommendation accepted).
+
+Options: (1) from the node `key`, immutable after creation; (2) from the label, regenerated on rename. Recommendation: (1).
+Renaming a canvas label must not rename a resource, because a changed local name is a destroy-and-create in Terraform
+state unless a `moved` block is emitted. The `key` is created from the first label and never changes; two nodes may not
+share a key.

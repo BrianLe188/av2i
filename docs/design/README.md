@@ -1,0 +1,117 @@
+# Implementation design
+
+How the specification in [../spec](../spec/README.md) becomes software. Nothing here is built yet. Choices that need the
+owner's answer are in [decisions.md](decisions.md) with a recommendation; the rest of this file assumes the recommendations.
+
+## Principle
+
+The specification is the single source of truth. Code never copies a fact from it (a limit, a trust principal, a Terraform
+argument name); it reads them from a **registry** compiled from the front matter. A change to a service file changes the
+product without a code change, and a change to a rule's meaning is a code change that a test must catch.
+
+## Pipeline
+
+```
+docs/spec (markdown + YAML)
+   │  1 compile (build time)
+   ▼
+registry.json   services, mechanisms, matrix, limits, rule metadata, i18n strings
+                         │
+user's Design (JSON) ──► 2 normalize ──► 3 derive facts ──► 4 validate ──► 5 plan ──► 6 emit
+                         explicit graph   public/private,    findings       resources    HCL files +
+                         (derived and     egress, s3_path    (VAL, SEC)     and order    deployer policy
+                          generated
+                          elements added)
+```
+
+| Stage | Input | Output | Spec it reads |
+|---|---|---|---|
+| 1 compile | `docs/spec/**/*.md` | `registry.json`, TypeScript types | all front matter; [conventions](../spec/00-conventions.md) |
+| 2 normalize | Design | NormalizedDesign: every implied node and edge made explicit, each marked `origin` and `because` | mechanisms flagged derived or generated; D-005, D-006, D-012, D-022, D-025, D-030 |
+| 3 derive facts | NormalizedDesign | facts: `public(subnet)`, `internet_egress(w)`, `s3_path(w, bucket)` | [egress-path](../spec/relations/egress-path.md), [route](../spec/relations/route.md) |
+| 4 validate | NormalizedDesign + facts | `Finding[]` with rule ID, severity, targets, i18n message | [rules](../spec/rules/validation.md) |
+| 5 plan | NormalizedDesign | Terraform resources, local names, dependency order | [resource-map](../spec/terraform/resource-map.md), [pitfalls](../spec/terraform/pitfalls.md) |
+| 6 emit | plan | `*.tf` files, `versions.tf`, deployer IAM policy (D-028) | D-001, [pitfalls](../spec/terraform/pitfalls.md) |
+
+Each stage is a pure function. The same code runs in the browser (instant feedback while the user draws) and on a server
+(export, API). The platform never holds AWS credentials and never runs `apply`; it produces files (assumption, DD-010).
+
+## Packages
+
+```
+packages/
+  registry/    compiler from docs/spec to registry.json and generated types      (stage 1)
+  model/       Design and NormalizedDesign types, JSON Schema, graph helpers
+  engine/      normalize, derive, plan                                           (stages 2, 3, 5)
+  rules/       one implementation per VAL and SEC rule                            (stage 4)
+  generator/   HCL printer and file layout                                        (stage 6)
+  testkit/     fixtures, scenario and case runners, conformance checks
+apps/
+  cli/         `av2i validate|generate design.json`
+  web/         canvas, panels, i18n (later; interface design phase)
+  api/         persistence and accounts (later)
+```
+
+A pnpm workspace in TypeScript. TypeScript is chosen because the same engine must run in the browser and on the server and
+because the previous version already used React, XYFlow and TypeScript (DD-001).
+
+## Data model
+
+The design graph is a list of nodes and a list of edges ([data-model.md](data-model.md) has the full shape).
+
+- A **node** has an immutable `key` (used for Terraform names), a `service` ID from the registry, `props` using Terraform
+  argument names, and an optional `parent` (nesting gives `containment`, `igw-attach` and `nat-placement`).
+- An **edge** has a `mechanism` ID from the registry, `from` and `to` node keys, and mechanism-specific `props`. The matrix
+  decides whether an edge may exist; the mechanism file decides what it generates.
+- Nothing derived is stored in the user's Design. Normalization adds it, so changing a spec rule or D-025 never requires a
+  data migration.
+
+## Rules
+
+A rule's `check` is a sentence, not code (DD-004). Each rule ID has a TypeScript implementation in `packages/rules` that
+receives a read-only context and returns findings. Three tests keep the code honest:
+
+1. **Coverage:** CI fails if a rule ID in the registry has no implementation, or an implementation has no registry entry.
+2. **Cases:** every case in [rules/cases.md](../spec/rules/cases.md) is run, and `fires` must match.
+3. **Scenarios:** every base scenario produces no `error` finding, and every variant fires exactly the listed rules
+   ([scenarios](../spec/scenarios/00-index.md)).
+
+## Generation
+
+The generator prints HCL from an internal tree (DD-005): blocks, attributes and expressions, with references as raw
+expressions such as `aws_subnet.private_a.id`. Files are split by service group, names are stable, and every resource
+carries only the arguments the spec lists. CI runs three checks on every scenario base design:
+
+- golden files: the output equals the committed expected files;
+- `tofu fmt -check`: the output is canonical;
+- `tofu init -backend=false` and `tofu validate` with the pinned provider `~> 6.66.0`: the output is valid.
+
+Local names come from the node `key`, not its label, so renaming a box on the canvas never renames a resource (a rename in
+Terraform state means destroy and create, or a `moved` block).
+
+## Milestones
+
+| # | Slice | Done when |
+|---|---|---|
+| M0 | registry compiler, JSON Schema for every spec file kind, schema check in CI | every file in `docs/spec` validates; types generated |
+| M1 | networking end to end: VPC, subnet, IGW, NAT, EIP, route table, SG, S3 endpoint; EC2 | [isolated-private-app](../spec/scenarios/isolated-private-app.md) generates and `tofu validate` passes |
+| M2 | rules for the networking and compute groups, with their cases | all their cases and scenario variants pass |
+| M3 | containers, storage and database | [container-service](../spec/scenarios/container-service.md) generates and validates |
+| M4 | delivery: ALB, Route 53, ACM, CloudFront | [static-site-cdn](../spec/scenarios/static-site-cdn.md) and [three-tier-web](../spec/scenarios/three-tier-web.md) |
+| M5 | IAM, required roles, grants, deployer policy | [serverless-api](../spec/scenarios/serverless-api.md) and every grant case |
+| M6 | web canvas on the engine | interface design phase |
+
+IAM is not last because it is least important; M1 to M4 use only the roles the scenarios need, hard-wired through the
+assume-role registry until M5 generalizes them.
+
+## What the specification still lacks for implementation
+
+These are gaps found while designing, to be fixed in the spec rather than worked around in code.
+
+1. **Scenario variants are prose.** `change` is a sentence. A test needs a patch (add, remove, set on the Design). DD-008.
+2. **Case inputs are ad hoc.** Each case in `cases.md` uses its own keys. Each needs a fixture adapter, or to be rewritten as
+   a small Design. DD-009.
+3. **Rule checks that bundle conditions** (11 listed in `needs_split`) must be split into atomic rules first.
+4. **No JSON Schema yet** for service, relation and rule files; the conventions are prose. M0 writes them.
+5. **Heterogeneous front matter.** Service `properties`, mechanism `properties` and registry tables use different shapes.
+   M0 either normalizes them in the compiler or tightens the conventions.
