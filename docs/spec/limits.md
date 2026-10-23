@@ -20,7 +20,7 @@ blocked.
 | propagated_routes_per_route_table | 100 | no | |
 | internet_gateways_per_region | 5 | yes | Tied to VPC quota; one per VPC |
 | nat_gateways_per_az | 5 | yes | Counts pending, active and deleting |
-| eips_per_region | 5 | yes | Shared with all Elastic IPs; one per zonal public NAT gateway |
+| eips_per_region | 5 | yes | Shared with all Elastic IPs (NAT gateways and instances); addresses from a bring-your-own pool do not count. See [elastic-ip](services/elastic-ip.md) |
 | eips_per_public_nat_gateway | 2 | yes, up to 8 | |
 | security_groups_per_region | 2500 | yes | |
 | rules_per_security_group | 60 | yes | Per direction and per IP family. Times groups per interface must not exceed 1000 |

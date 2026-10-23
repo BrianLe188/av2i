@@ -1,7 +1,7 @@
 ---
 id: three-tier-web
 title: { vi: "Web 3 tầng: ALB, EC2, RDS", en: "Three-tier web: ALB, EC2, RDS" }
-services: [vpc, subnet, internet-gateway, nat-gateway, route-table, vpc-endpoint-s3, security-group, ec2, rds, alb, route53, acm, iam-role, s3]
+services: [vpc, subnet, internet-gateway, nat-gateway, elastic-ip, route-table, vpc-endpoint-s3, security-group, ec2, rds, alb, route53, acm, iam-role, s3]
 nodes:
   - { id: vpc, service: vpc, props: { cidr_block: "10.0.0.0/16", enable_dns_support: true, enable_dns_hostnames: true } }
   - { id: igw, service: internet-gateway }
@@ -13,6 +13,8 @@ nodes:
   - { id: db-b, service: subnet, props: { cidr_block: "10.0.21.0/24", availability_zone: az-b } }
   - { id: nat-a, service: nat-gateway, props: { mode: zonal, connectivity_type: public } }
   - { id: nat-b, service: nat-gateway, props: { mode: zonal, connectivity_type: public } }
+  - { id: eip-a, service: elastic-ip }
+  - { id: eip-b, service: elastic-ip }
   - { id: rt-public, service: route-table }
   - { id: rt-app-a, service: route-table }
   - { id: rt-app-b, service: route-table }
@@ -33,6 +35,8 @@ connections:
   - { from: rt-public, to: igw, mechanism: route, kind: drawn, note: "0.0.0.0/0" }
   - { from: rt-public, to: pub-a, mechanism: route-association, kind: drawn }
   - { from: rt-public, to: pub-b, mechanism: route-association, kind: drawn }
+  - { from: eip-a, to: nat-a, mechanism: eip-attach, kind: generated, note: "D-030: created with the gateway, shown as a derived node" }
+  - { from: eip-b, to: nat-b, mechanism: eip-attach, kind: generated }
   - { from: nat-a, to: pub-a, mechanism: nat-placement, kind: derived }
   - { from: nat-b, to: pub-b, mechanism: nat-placement, kind: derived }
   - { from: rt-app-a, to: nat-a, mechanism: route, kind: drawn, note: "same AZ as the gateway (VAL-013)" }
@@ -61,6 +65,11 @@ expect:
   errors: []
   findings: [SEC-019, SEC-026, SEC-027, SEC-028, SEC-013, SEC-043]
 variants:
+  - { id: nat-no-eip, change: "nat-a has no Elastic IP", fires: [VAL-011], severity: error }
+  - { id: eip-idle, change: "a third Elastic IP connected to nothing", fires: [VAL-128], severity: warning }
+  - { id: eip-two-targets, change: "eip-a connected to nat-a and to an instance", fires: [VAL-129], severity: error }
+  - { id: eip-quota, change: "six NAT gateways with six Elastic IPs in one Region", fires: [VAL-130], severity: error }
+  - { id: eip-on-private-instance, change: "an Elastic IP on an app instance in app-a", fires: [VAL-031], severity: warning, note: "the address is useless: app-a has no internet gateway route" }
   - { id: no-nat-route, change: "remove the route from rt-app-a to nat-a", fires: [VAL-032], severity: info }
   - { id: nat-wrong-az, change: "rt-app-a routes to nat-b", fires: [VAL-013], severity: warning }
   - { id: nat-in-private-subnet, change: "nat-a placed in app-a", fires: [VAL-012], severity: warning }
@@ -100,7 +109,7 @@ internet route at all.
   `pub-*` are public (route to `igw`), `app-*` are private with egress `via_nat`, `db-*` are private with egress `none`.
 - The `sg-reference` rules are generated from the drawn `listener-target` and `network-access` lines. The database group
   allows only the app group on 5432; the app group allows only the load balancer group.
-- The Elastic IPs for the two NAT gateways and the instance profile for `app-role` are generated.
+- The two Elastic IPs are created with the NAT gateways and shown as derived nodes (decision D-030); the instance profile for `app-role` is generated.
 - `cert-validation` adds one CNAME per distinct validation name to the zone.
 
 ## Edge cases this scenario exercises

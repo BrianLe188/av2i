@@ -111,7 +111,7 @@ limits:
   - { id: on_demand_vcpus, value: "per instance family group, in vCPUs; default depends on account", adjustable: true, src: [S4], status: verified, note: "numeric defaults not read; check Service Quotas" }
   - { id: security_groups_per_network_interface, value: 5, adjustable: true, max: 16, src: [S5], status: verified }
   - { id: outbound_port_25, value: "blocked to public addresses by default", adjustable: true, src: [S4], status: verified, note: "removal must be requested" }
-relations: [containment, sg-attach, egress-path, network-access, listener-target, assume-role]
+relations: [containment, sg-attach, egress-path, network-access, listener-target, assume-role, eip-attach]
 cost: { model: hourly, notes: "instance hours, EBS volumes, and every public IPv4 address (S2). Exact prices unverified" }
 status: verified
 ---
@@ -159,6 +159,7 @@ usual design puts instances in private subnets behind a load balancer.
 - [sg-attach](../relations/sg-attach.md): `vpc_security_group_ids`; at least one explicit group (D-005).
 - [egress-path](../relations/egress-path.md): how a private instance reaches the internet.
 - [network-access](../relations/network-access.md): which other workloads it may call or be called by.
+- [eip-attach](../relations/eip-attach.md): an optional [elastic-ip](elastic-ip.md) gives the instance a stable public address and replaces its auto-assigned one.
 - listener-target: an ALB forwards to the instance as an `instance` target; written with the ALB ([listener-target](../relations/listener-target.md)).
 - [assume-role](../relations/assume-role.md): the instance-profile role. The role is wrapped in an instance profile and
   referenced by profile **name**; one role per profile; optional.
@@ -185,7 +186,7 @@ See front matter. Security: require IMDSv2 ([SEC-006](../rules/security.md)), en
 
 `aws_instance` with `ami`, `instance_type`, `subnet_id`, `vpc_security_group_ids`,
 `associate_public_ip_address`, `iam_instance_profile`, `key_name`, `user_data`, `metadata_options`,
-`root_block_device`, `tags`. If an `aws_eip` is attached, reference the Elastic IP's address, not the
+`root_block_device`, `tags`. If an [elastic-ip](elastic-ip.md) is attached (an `aws_eip_association`), reference the Elastic IP's address, not the
 instance's `public_ip`, which changes after attachment (S1). Add `depends_on = [aws_internet_gateway.<x>]` when
 the instance needs a public address. The `network_interface` argument is deprecated; use
 `primary_network_interface` and `aws_network_interface_attachment` (S1).

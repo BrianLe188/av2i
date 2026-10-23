@@ -1,7 +1,7 @@
 # Validation rules
 
 Rules about whether a design can be deployed. Format and severity scale are in
-[../00-conventions.md](../00-conventions.md). This file covers the networking group (VAL-001 to 028), the compute and container group (VAL-029 to 049) and the storage and database group (VAL-050 to 070) and the delivery and certificate group (VAL-071 to 102) and the IAM group (VAL-103 to 121) and the S3 gateway endpoint group (VAL-122 to 127).
+[../00-conventions.md](../00-conventions.md). This file covers the networking group (VAL-001 to 028), the compute and container group (VAL-029 to 049) and the storage and database group (VAL-050 to 070) and the delivery and certificate group (VAL-071 to 102) and the IAM group (VAL-103 to 121) and the S3 gateway endpoint group (VAL-122 to 127) and the Elastic IP group (VAL-128 to 130).
 Rules for the other groups are added when their services are written, continuing the numbering.
 
 Source aliases used below:
@@ -110,10 +110,10 @@ Source aliases used below:
 
 - id: VAL-011
   severity: error
-  applies_to: [nat-placement]
-  check: "a public zonal NAT gateway is in a subnet of the VPC and has an Elastic IP allocation"
+  applies_to: [nat-placement, eip-attach]
+  check: "a public zonal NAT gateway is in a subnet of the VPC and is connected to at least one Elastic IP"
   message: { vi: "NAT Gateway công khai cần một subnet trong VPC và một Elastic IP.", en: "A public NAT gateway needs a subnet in the VPC and an Elastic IP." }
-  fix: { vi: "Đặt vào subnet; nền tảng tự tạo Elastic IP.", en: "Place it in a subnet; the platform creates the Elastic IP." }
+  fix: { vi: "Đặt vào subnet và gắn một Elastic IP.", en: "Place it in a subnet and attach an Elastic IP." }
   source: AWS-NAT
   status: verified
 
@@ -292,8 +292,8 @@ Source aliases used below:
 
 - id: VAL-031
   severity: warning
-  applies_to: [ec2, egress-path]
-  check: "an EC2 instance that gets a public IPv4 address is in a subnet whose route table has a route to an attached internet gateway"
+  applies_to: [ec2, egress-path, eip-attach]
+  check: "an EC2 instance that gets a public IPv4 address (auto-assigned or an Elastic IP) is in a subnet whose route table has a route to an attached internet gateway"
   message: { vi: "EC2 có IP công khai nhưng subnet không có route ra Internet Gateway.", en: "The instance has a public IP but its subnet has no route to an internet gateway." }
   fix: { vi: "Thêm route 0.0.0.0/0 tới Internet Gateway hoặc bỏ IP công khai.", en: "Add a 0.0.0.0/0 route to the internet gateway or remove the public IP." }
   source: https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Internet_Gateway.html
@@ -1165,5 +1165,32 @@ Source aliases used below:
   message: { vi: "Security Group chặn outbound nên workload không tới được S3 qua endpoint.", en: "Outbound rules block the workload from reaching S3 through the endpoint." }
   fix: { vi: "Cho phép tcp 443 tới prefix list của S3.", en: "Allow tcp 443 to the S3 prefix list." }
   source: https://docs.aws.amazon.com/vpc/latest/privatelink/gateway-endpoints.html
+  status: verified
+
+- id: VAL-128
+  severity: warning
+  applies_to: [elastic-ip, eip-attach]
+  check: "every Elastic IP is connected to exactly one NAT gateway or EC2 instance; an unconnected one is idle"
+  message: { vi: "Elastic IP chưa gắn vào tài nguyên nào vẫn bị tính phí.", en: "An Elastic IP that is not attached to anything is still charged." }
+  fix: { vi: "Gắn vào NAT Gateway hoặc EC2, hoặc xoá.", en: "Attach it to a NAT gateway or an EC2 instance, or remove it." }
+  source: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/elastic-ip-addresses-eip.html
+  status: verified
+
+- id: VAL-129
+  severity: error
+  applies_to: [elastic-ip, eip-attach]
+  check: "an Elastic IP is connected to at most one resource, a NAT gateway only when it is public and zonal, an EC2 instance only when it has one network interface, and the target is in the Region of the address"
+  message: { vi: "Một Elastic IP chỉ gắn một tài nguyên cùng Region; NAT Gateway phải là zonal công khai.", en: "An Elastic IP attaches to one resource in its own Region; a NAT gateway must be public and zonal." }
+  fix: { vi: "Tạo Elastic IP riêng cho từng tài nguyên.", en: "Create one Elastic IP per resource." }
+  source: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/elastic-ip-addresses-eip.html
+  status: verified            # the NAT gateway conditions come from the nat-gateway file
+
+- id: VAL-130
+  severity: error
+  applies_to: [elastic-ip, nat-gateway]
+  check: "the design uses at most the configured Elastic IPs per Region (default 5) and at most the configured addresses per public NAT gateway (default 2, up to 8)"
+  message: { vi: "Vượt hạn mức Elastic IP của Region hoặc của NAT Gateway.", en: "The Regional or per-NAT-gateway Elastic IP quota is exceeded." }
+  fix: { vi: "Giảm số lượng hoặc nâng quota (Service Quotas).", en: "Reduce the count or raise the quota in Service Quotas." }
+  source: https://docs.aws.amazon.com/vpc/latest/userguide/amazon-vpc-limits.html
   status: verified
 ```

@@ -15,6 +15,7 @@ documentation. Treat the participants and notes as the working hypothesis to con
 | `route` | route-table, internet-gateway, nat-gateway or vpc-endpoint-s3 | route-table to target | A default or specific route sends traffic to a gateway, or a table is associated with the S3 gateway endpoint | `aws_route`, or `aws_vpc_endpoint_route_table_association` for the endpoint |
 | `route-association` | route-table, subnet | undirected | A subnet uses the route table; this decides public or private | `aws_route_table_association` |
 | `nat-placement` | nat-gateway, subnet | child to parent | A NAT gateway sits in a public subnet and needs an Elastic IP | `aws_nat_gateway.subnet_id`, `aws_eip` |
+| `eip-attach` | elastic-ip, nat-gateway or ec2 | address to target | An Elastic IP is the public address of a NAT gateway or of an instance | `aws_nat_gateway.allocation_id`, `aws_eip_association` |
 | `sg-attach` | security-group, ec2 / ecs / rds / alb / lambda | undirected | A security group guards a resource's network interface | `vpc_security_group_ids` or `security_groups` |
 | `sg-reference` | security-group, security-group | a to b | A rule allows traffic from or to another group instead of a CIDR | `referenced_security_group_id` on the rule |
 | `network-access` | ec2 / lambda / ecs, rds; alb, ec2 / ecs | caller to callee | One workload may reach another on a port; implemented as security group rules | ingress rule on the callee's group |
@@ -58,7 +59,7 @@ These come from general AWS knowledge and each needs checking (`unverified`).
 `containment`, `igw-attach`, `route`, `route-association`, `nat-placement`, `sg-attach`, `sg-reference`,
 `network-access`, `egress-path`, `image-source`, `db-subnet-group`, `resource-policy` (S3 bucket policy in full,
 Lambda permission and ECR policy in outline), `listener-target`, `origin`, `dns-alias`, `cert-attach`,
-`cert-validation`, `assume-role`, `grant`. All mechanisms in the catalogue now have a detail file.
+`cert-validation`, `assume-role`, `grant`, `eip-attach`. All mechanisms in the catalogue now have a detail file.
 
 ## Order of detail files
 

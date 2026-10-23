@@ -2,7 +2,7 @@
 id: nat-gateway
 title: { vi: "NAT Gateway", en: "NAT gateway" }
 terraform:
-  resources: [aws_nat_gateway, aws_eip]
+  resources: [aws_nat_gateway]
 scope: az                      # zonal mode; regional mode is VPC level (see decisions D-002)
 placement:
   requires: [vpc, subnet]      # zonal mode needs a subnet; regional mode needs only the VPC
@@ -39,7 +39,7 @@ properties:
     status: verified
   - key: allocation_id
     type: reference
-    ref: eip
+    ref: elastic-ip
     required: "public zonal only"
     constraints: ["associated at creation, cannot be added later for a public gateway (S1)", "must not be set for regional"]
     src: [S1, S4]
@@ -62,7 +62,7 @@ limits:
   - { id: packets_per_second, value: "1 million, scales to 10 million", adjustable: false, src: [S2], status: verified }
   - { id: connections_per_ip_per_destination, value: 55000, adjustable: false, src: [S2], status: verified, note: "more IPs raise it" }
   - { id: regional_ips_per_az, value: 32, adjustable: false, src: [S3], status: verified }
-relations: [containment, nat-placement, route]
+relations: [containment, nat-placement, eip-attach, route]
 cost: { model: hourly, notes: "hourly plus per-GB processing (unverified; see pricing page). Public IPv4 addresses are billed (unverified)" }
 status: verified
 ---
@@ -100,7 +100,8 @@ Zonal: a public subnet of the VPC, in the AZ it should serve. Regional: the VPC 
 
 ## Relations
 
-- [nat-placement](../relations/nat-placement.md): subnet, Elastic IP and the internet gateway dependency.
+- [nat-placement](../relations/nat-placement.md): subnet and the internet gateway dependency.
+- [eip-attach](../relations/eip-attach.md): the [elastic-ip](elastic-ip.md) of a public zonal gateway (decision D-007).
 - [route](../relations/route.md): private route tables target it.
 
 ## Failure modes
@@ -123,7 +124,7 @@ reach anywhere on the internet through it; restrict with security group egress r
 
 ## Terraform mapping
 
-Zonal public: `aws_eip` with `domain = "vpc"`, then `aws_nat_gateway` with `allocation_id`, `subnet_id`,
+Zonal public: an [elastic-ip](elastic-ip.md) (`aws_eip` with `domain = "vpc"`), then `aws_nat_gateway` with `allocation_id`, `subnet_id`,
 `connectivity_type = "public"` and `depends_on = [aws_internet_gateway.<x>]` (S4, S5). Regional:
 `aws_nat_gateway` with `availability_mode = "regional"` and `vpc_id`; adding or removing
 `availability_zone_address` blocks recreates the gateway (S4).

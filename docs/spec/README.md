@@ -11,15 +11,15 @@ exists so the platform is built from one consistent model instead of from patche
 | Services | Tier 1 only (list below) |
 | Partition | AWS commercial (`aws`). GovCloud and China are out of scope |
 | Infrastructure as code | Terraform / OpenTofu (HCL). CloudFormation and CDK are out of scope |
-| AWS provider | `~> 6.0` (see [version pinning](#version-pinning)) |
-| OpenTofu | `>= 1.10` |
+| AWS provider | `~> 6.66.0` (see [version pinning](#version-pinning)) |
+| OpenTofu | `>= 1.12.0, < 1.13.0` |
 | UI language | Vietnamese by default, English selectable. Technical terms follow AWS naming in English |
 
 ### Services in scope
 
 | Group | Services |
 |---|---|
-| Networking | VPC, Subnet, Internet Gateway, NAT Gateway, Route Table, Security Group, VPC Endpoint (S3 gateway) |
+| Networking | VPC, Subnet, Internet Gateway, NAT Gateway, Route Table, Security Group, Elastic IP, VPC Endpoint (S3 gateway) |
 | Compute | EC2, Lambda |
 | Containers | ECS (Fargate), ECR |
 | Storage | S3 |
@@ -71,8 +71,8 @@ A file is complete only when no `unverified` entry remains in it, or each remain
 
 ## Version pinning
 
-- The provider constraint `~> 6.0` allows any 6.x release. Before implementation starts, pick one exact minor
-  release, record it in [decisions.md](decisions.md) and commit the lock file, because patch releases have
-  occasionally been withdrawn.
-- The newest 6.x release and the newest OpenTofu release were not confirmed against official pages when this
-  was written (status: `unverified`). Confirm on the Terraform Registry and the OpenTofu releases page.
+- Decision D-001: AWS provider `~> 6.66.0` (6.66.x only) and OpenTofu `>= 1.12.0, < 1.13.0`. Commit the lock file, because
+  patch releases have occasionally been withdrawn.
+- The versions were chosen from the GitHub release lists on 23 October 2026 by release age, not from a changelog review.
+- Most provider documentation in this specification was read from the `main` branch, which can be ahead of `v6.66.0`; the
+  Elastic IP files were read at the tag. Re-check the rest against the tag (listed in [sources.md](sources.md)).

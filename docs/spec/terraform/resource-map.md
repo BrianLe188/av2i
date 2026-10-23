@@ -1,7 +1,7 @@
 # Terraform resource map
 
 What each service and mechanism generates. Networking group only for now. Pitfalls referenced are in
-[pitfalls.md](pitfalls.md). Provider `~> 6.0`.
+[pitfalls.md](pitfalls.md). Provider `~> 6.66.0` (decision D-001).
 
 ## Services
 
@@ -10,7 +10,8 @@ What each service and mechanism generates. Networking group only for now. Pitfal
 | vpc | `aws_vpc` | `cidr_block`, `enable_dns_support`, `enable_dns_hostnames`, `instance_tenancy`, `tags` | Also creates default route table, security group, network ACL (P-013) |
 | subnet | `aws_subnet` | `vpc_id`, `cidr_block`, `availability_zone`, `map_public_ip_on_launch`, `tags` | |
 | internet-gateway | `aws_internet_gateway` | `vpc_id`, `tags` | P-009 |
-| nat-gateway (zonal, public) | `aws_eip`, `aws_nat_gateway` | EIP: `domain = "vpc"`. NAT: `allocation_id`, `subnet_id`, `connectivity_type`, `depends_on` | P-007, P-008 |
+| elastic-ip | `aws_eip`, `aws_eip_association` (EC2 only) | EIP: `domain = "vpc"`, `tags`, `depends_on` the internet gateway. Association: `allocation_id`, `instance_id` | P-007, P-008, P-075 to P-077; decision D-007 |
+| nat-gateway (zonal, public) | `aws_nat_gateway` | `allocation_id` (from the elastic-ip), `subnet_id`, `connectivity_type`, `depends_on` | P-007, P-008 |
 | nat-gateway (regional) | `aws_nat_gateway` | `availability_mode = "regional"`, `vpc_id` | P-014; decision D-002 |
 | vpc-endpoint-s3 | `aws_vpc_endpoint`, `aws_vpc_endpoint_route_table_association` | endpoint: `vpc_id`, `service_name = "com.amazonaws.<region>.s3"`, `vpc_endpoint_type = "Gateway"`, `policy`. Association: `route_table_id`, `vpc_endpoint_id` | P-070 to P-074; decision D-029 |
 | route-table | `aws_route_table` | `vpc_id`, `tags` (no inline `route`) | P-001 |
@@ -56,7 +57,8 @@ What each service and mechanism generates. Networking group only for now. Pitfal
 | igw-attach | none of its own | `aws_internet_gateway.vpc_id` |
 | route | `aws_route` for an internet or NAT gateway; `aws_vpc_endpoint_route_table_association` for the S3 endpoint | `route_table_id`, `destination_cidr_block`, `gateway_id` (internet gateway) or `nat_gateway_id` (NAT gateway); for the endpoint `route_table_id`, `vpc_endpoint_id` |
 | route-association | `aws_route_table_association` | `subnet_id`, `route_table_id` |
-| nat-placement | none of its own | `aws_nat_gateway.subnet_id`, `allocation_id`, `depends_on` |
+| nat-placement | none of its own | `aws_nat_gateway.subnet_id`, `depends_on` |
+| eip-attach | `aws_eip_association` for EC2; none for a NAT gateway | NAT: `aws_nat_gateway.allocation_id = aws_eip.<x>.id`. EC2: `allocation_id`, `instance_id` |
 | sg-attach | none of its own | `vpc_security_group_ids` (ec2), `vpc_config.security_group_ids` (lambda), `network_configuration.security_groups` (ecs); alb and rds pending |
 | image-source | none of its own | `image` in the container definition (ecs), `image_uri` and `package_type = "Image"` (lambda); pull permission is a grant on the consumer's role |
 | assume-role | `aws_iam_role` trust policy, `aws_iam_instance_profile`, the consumer's role argument | EC2 `iam_instance_profile` (name); Lambda `role` (ARN); ECS `task_role_arn` and `execution_role_arn`; RDS `monitoring_role_arn`. Required managed policies attached through `aws_iam_role_policy_attachment` |
@@ -77,7 +79,7 @@ What each service and mechanism generates. Networking group only for now. Pitfal
 
 1. `aws_vpc`
 2. `aws_internet_gateway`, `aws_subnet`, `aws_security_group`, `aws_route_table`
-3. `aws_eip`, then `aws_nat_gateway` (after the internet gateway)
+3. `aws_eip`, then `aws_nat_gateway` (after the internet gateway); `aws_eip_association` after the instance
 4. `aws_route`, `aws_route_table_association`, `aws_vpc_endpoint` then `aws_vpc_endpoint_route_table_association`, security group rules (the S3 egress rule uses the endpoint's `prefix_list_id`)
 5. Resources placed in subnets
 

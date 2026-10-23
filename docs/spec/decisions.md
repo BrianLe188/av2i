@@ -5,14 +5,14 @@ the record.
 
 | ID | Status | Topic |
 |---|---|---|
-| D-001 | open | Exact provider and OpenTofu versions |
+| D-001 | decided | Exact provider and OpenTofu versions |
 | D-002 | decided | Regional NAT gateway: specified alongside zonal; first implementation zonal only |
-| D-003 | open | Secondary VPC CIDR blocks and IPv6 |
-| D-004 | open | Route targets beyond internet gateway and NAT gateway |
+| D-003 | decided | Secondary VPC CIDR blocks and IPv6 |
+| D-004 | decided | Route targets beyond internet gateway and NAT gateway |
 | D-005 | decided | Resources with no explicit security group: an error (explicit group required) |
-| D-006 | open | Manage the VPC's default route table, security group and network ACL? |
-| D-007 | open | Elastic IP as a hidden part of the NAT gateway, or its own service? |
-| D-008 | open | Network ACLs |
+| D-006 | decided | Manage the VPC's default route table, security group and network ACL? |
+| D-007 | decided | Elastic IP is its own Tier 1 service (owner's choice, against the earlier recommendation to hide it) |
+| D-008 | decided | Network ACLs |
 | D-009 | decided | Rules are emitted as separate resources, routes as `aws_route` |
 | D-010 | decided | Lambda scope: classic event functions only |
 | D-011 | decided | ECS scope: Fargate only |
@@ -34,10 +34,11 @@ the record.
 | D-027 | decided | Sharing one role between several workloads |
 | D-028 | decided | The deploying identity and the IAM permissions it needs |
 | D-029 | decided | VPC endpoints: rules mention them, no Tier 1 service can express them |
+| D-030 | decided | How the Elastic IP of a NAT gateway appears: drawn by the user or created for them |
 
 ## D-001 Exact versions
 
-Status: open. The README pins the AWS provider to `~> 6.0` and OpenTofu to `>= 1.10`. Official release pages
+Status: decided (owner accepted the proposal, 23 October 2026). Provider `~> 6.66.0` (released 21 September 2026, about a month old; the latest was 6.70.0 on 22 October and the provider releases weekly), OpenTofu `>= 1.12.0, < 1.13.0` (1.12.9 is the latest patch of that line; 1.13.0 is three weeks old). Commit the lock file. The choice rests on release age, not on a changelog review, so a regression in 6.66 is not excluded. Follow-up: re-check every provider argument in the specification against the `v6.66.0` tag instead of `main`; the Elastic IP files were already read at that tag. Original analysis follows. The README pins the AWS provider to `~> 6.0` and OpenTofu to `>= 1.10`. Official release pages
 were not read; unofficial listings suggest provider 6.5x and OpenTofu 1.12, one listing noting a withdrawn
 patch release. Choose an exact minor release, commit the lock file, and re-check the provider docs of that
 release. The docs read for this group are from the `main` branch.
@@ -65,13 +66,13 @@ Regions offer it. Verify availability before making it a default.
 
 ## D-003 Secondary CIDR and IPv6
 
-Status: open. Secondary IPv4 CIDRs and IPv6 are real but add many branches (more local routes, IPv6 routes,
+Status: decided (recommendation accepted). Secondary IPv4 CIDRs and IPv6 are real but add many branches (more local routes, IPv6 routes,
 egress-only gateways, dual-stack security group rules). Recommendation: out of the first version. The model
 keeps the property names so they can be added without renaming.
 
 ## D-004 Route targets
 
-Status: open. Routes may also target peering, transit gateway, virtual private gateway, VPC endpoint, network
+Status: decided (recommendation accepted): internet gateway, NAT gateway and the S3 gateway endpoint (D-029) are the route targets; peering, transit gateway and the rest wait for Tier 2. Routes may also target peering, transit gateway, virtual private gateway, VPC endpoint, network
 interface and others. Only internet gateway and NAT gateway are Tier 1 services. A VPC endpoint (a Tier 2
 service) matters in practice: it is how private subnets reach S3 without a NAT gateway. Recommendation: keep
 the route mechanism open to new target services and add VPC endpoint first when Tier 2 starts.
@@ -95,20 +96,20 @@ visible. Needs your decision because it changes how much the user must draw.
 
 ## D-006 Default route table, security group, network ACL
 
-Status: open. AWS creates them with every VPC. The default group is open ([SEC-005](rules/security.md)).
+Status: decided (recommendation accepted): manage the VPC's default security group with `aws_default_security_group` and no rules, so SEC-005 stops being permanent noise; leave the default route table and the default network ACL untouched. The `aws_default_*` resources have not been read, so this stays `unverified` until they are checked at tag v6.66.0. AWS creates them with every VPC. The default group is open ([SEC-005](rules/security.md)).
 Options: leave them untouched, or manage them (`aws_default_security_group`, and similar for the others) so the
 default group has no rules. The `aws_default_*` resources were not read (unverified).
 
 ## D-007 Elastic IP
 
-Status: open. The Elastic IP is not in the Tier 1 list but a public zonal NAT gateway requires one. Options:
+Status: decided by the owner: the Elastic IP is its own Tier 1 service ([elastic-ip](services/elastic-ip.md), mechanism [eip-attach](relations/eip-attach.md)), not a hidden part of the NAT gateway. This replaces the recommendation below, which was to hide it for now. Reason given: it can be drawn, counted against the Regional quota and attached to EC2 from the start. How the address of a NAT gateway shows on the canvas is D-030. The Elastic IP is not in the Tier 1 list but a public zonal NAT gateway requires one. Options:
 treat it as an implementation detail of the NAT gateway (created automatically), or make it its own service so
 it can also be attached to an EC2 instance. Recommendation: hidden for now. Quota is 5 per Region by default
 and the platform should warn when the design needs more.
 
 ## D-008 Network ACLs
 
-Status: open. A stateless subnet-level filter with its own rules and quotas (20 rules per ACL by default). Not
+Status: decided (recommendation accepted): not modelled; the default network ACL allows all traffic. A custom ACL added outside the platform can block traffic that no rule here detects. A stateless subnet-level filter with its own rules and quotas (20 rules per ACL by default). Not
 in Tier 1. Every VPC has a default ACL that allows all traffic. Recommendation: not modelled in the first
 version; document that the default is open.
 
@@ -307,3 +308,13 @@ Consequence (done): [services/vpc-endpoint-s3.md](services/vpc-endpoint-s3.md) i
 endpoint as a target, VAL-070 now accepts the endpoint, and VAL-122 to 127, SEC-043 and SEC-044 and pitfalls P-070 to P-074 are
 added. VAL-042 is left as it was: it mentions an ECR interface endpoint, which stays Tier 2, so the ECR image-pull gap in
 [isolated-private-app](scenarios/isolated-private-app.md) remains.
+
+## D-030 Elastic IP of a NAT gateway
+
+Status: decided (option 2 of the analysis below, listed first in the owner's answer: the platform creates the address with the NAT gateway and shows it as a derived, replaceable node). A public zonal NAT gateway cannot exist without an Elastic IP (VAL-011), and the owner made the Elastic IP its own
+service (D-007). Options: (1) the user draws an Elastic IP and connects it to every NAT gateway, so a design with one gateway
+per AZ shows N extra nodes and N extra lines; (2) the platform creates the address when a NAT gateway is added, shows it as a
+derived node, and lets the user replace it by choosing another address, as with required roles (D-025); (3) the NAT gateway
+carries a hidden address again. Recommendation: option 2. It keeps the address visible, countable and replaceable, as D-007
+wants, without making the user draw a mandatory line, and it matches the treatment of required roles. An EC2 Elastic IP is
+always drawn by the user because it is optional.

@@ -10,7 +10,7 @@ cardinality: { gateway: one, host: many }     # a subnet may hold several gatewa
 user_drawn: false                              # derived from nesting
 generates:
   - { terraform: "aws_nat_gateway.subnet_id", on: gateway }
-  - { terraform: "aws_eip (domain = vpc) and aws_nat_gateway.allocation_id", on: gateway, when: "public zonal" }
+  - { terraform: "aws_nat_gateway.allocation_id, from the eip-attach connection", on: gateway, when: "public zonal" }
   - { terraform: "depends_on = [aws_internet_gateway.<x>]", on: gateway, when: "public" }
 conditions:
   - { text: { vi: "NAT Gateway công khai phải nằm trong subnet public (có route tới Internet Gateway)", en: "A public NAT gateway must sit in a public subnet (one with a route to an internet gateway)" }, when: "public zonal" }

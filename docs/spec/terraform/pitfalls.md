@@ -1,7 +1,7 @@
 # Terraform pitfalls
 
 Behaviours of the AWS provider and Terraform/OpenTofu that the platform must design around. This file covers
-networking (P-001 to P-017), compute and containers (P-018 to P-034) and storage and databases (P-035 to P-044) and delivery and certificates (P-045 to P-059) and IAM (P-060 to P-069) and the S3 gateway endpoint (P-070 to P-074). Each entry says what happens, why it matters, and what the generator must do.
+networking (P-001 to P-017), compute and containers (P-018 to P-034) and storage and databases (P-035 to P-044) and delivery and certificates (P-045 to P-059) and IAM (P-060 to P-069) and the S3 gateway endpoint (P-070 to P-074) and Elastic IP (P-075 to P-077). Each entry says what happens, why it matters, and what the generator must do.
 
 Sources: provider documentation under
 https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/ for `vpc`, `subnet`,
@@ -84,3 +84,6 @@ https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/
 | P-072 | Gateway endpoint policy principal | The `Principal` must be `*`; `"AWS": "<account id>"` grants the account root user only | Use `aws:PrincipalArn` or `aws:PrincipalAccount` conditions | verified |
 | P-073 | Endpoint arguments that replace it | The provider page names only `private_dns_enabled` as forcing replacement for a non-Interface endpoint; whether `service_name`, `vpc_id` and `vpc_endpoint_type` force replacement is not stated | Never set `private_dns_enabled` on a gateway endpoint; treat the other three as replacing | verified for `private_dns_enabled`, unverified for the rest |
 | P-074 | Switching routes breaks connections | Creating or changing an endpoint changes routes and drops open TCP connections to S3; they do not resume | Warn that an apply may interrupt running transfers | verified |
+| P-075 | Elastic IP on an instance: two styles | `aws_eip.instance` or `network_interface` together with `aws_eip_association` for the same pair overwrite each other; the provider says to set `instance` or `network_interface`, not both | Emit `aws_eip_association` only; leave `instance` and `network_interface` unset on the `aws_eip` | verified |
+| P-076 | Changing an Elastic IP association | Changing `allocation_id`, `instance_id`, `network_interface_id`, `allow_reassociation` or `private_ip_address` replaces the association; `allocation_id` is effectively required | Treat any change as a replacement and warn that connections drop | verified |
+| P-077 | Elastic IP replaces the instance's auto-assigned address | Associating an Elastic IP releases the auto-assigned public IPv4 address for good and changes the instance's public DNS name | Warn when an instance with an auto-assigned address gets an Elastic IP; reference `aws_eip.<x>.public_ip` (see P-021) | verified |
