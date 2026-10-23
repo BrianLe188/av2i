@@ -1,3 +1,10 @@
+---
+id: security-rules
+title: { vi: "Luật bảo mật", en: "Security rules" }
+source_aliases:
+  AWS-SG: https://docs.aws.amazon.com/vpc/latest/userguide/vpc-security-groups.html
+  AWS-DEFSG: https://docs.aws.amazon.com/vpc/latest/userguide/default-security-group.html
+---
 # Security rules
 
 Rules about whether a design is safe, not whether it deploys. Severity scale is in

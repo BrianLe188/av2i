@@ -6,7 +6,8 @@ authors describe the same thing the same way.
 ## 1. File format
 
 Every file under `services/`, `relations/`, `rules/` and `scenarios/` is markdown that starts with YAML front
-matter. The front matter is the machine-readable part and the source of truth. The body explains it to a human
+matter. The front matter of `rules/validation.md` and `rules/security.md` holds `source_aliases` (alias to URL); the rules themselves are one
+fenced `yaml` block in the body, and a rule's `source` is an alias, a URL, or `null` only while its status is `unverified`. The front matter is the machine-readable part and the source of truth. The body explains it to a human
 and must not contradict it.
 
 ## 2. Identifiers

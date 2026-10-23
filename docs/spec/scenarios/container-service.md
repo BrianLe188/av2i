@@ -16,13 +16,12 @@ nodes:
   - { id: sg-db, service: security-group }
   - { id: repo, service: ecr, props: { image_tag_mutability: IMMUTABLE, scan_on_push: true } }
   - { id: cluster, service: ecs, props: { part: cluster } }
-  - { id: web, service: ecs, props: { part: service, cpu: "512", memory: "1024", desired_count: 2, launch_type: FARGATE, assign_public_ip: false, container_port: 8080 } }
+  - { id: web, service: ecs, props: { part: service, cluster: cluster, cpu: "512", memory: "1024", desired_count: 2, launch_type: FARGATE, assign_public_ip: false, container_port: 8080 } }
   - { id: db, service: rds, props: { engine: postgres, multi_az: true } }
   - { id: files, service: s3 }
   - { id: task-role, service: iam-role }
   - { id: exec-role, service: iam-role }
 connections:
-  - { from: cluster, to: web, mechanism: containment, kind: drawn, note: "service belongs to one cluster in the same VPC (VAL-048)" }
   - { from: priv-a, to: web, mechanism: containment, kind: drawn, note: "tasks in priv-a and priv-b" }
   - { from: sg-task, to: web, mechanism: sg-attach, kind: drawn }
   - { from: alb, to: web, mechanism: listener-target, kind: drawn, note: "ip target group, container_name and container_port" }

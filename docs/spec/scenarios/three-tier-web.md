@@ -50,7 +50,7 @@ connections:
   - { from: sg-alb, to: alb, mechanism: sg-attach, kind: drawn }
   - { from: sg-app, to: app, mechanism: sg-attach, kind: drawn }
   - { from: sg-db, to: db, mechanism: sg-attach, kind: drawn }
-  - { from: alb, to: pub-a, mechanism: containment, kind: drawn, note: "two subnets in two AZs" }
+  - { from: pub-a, to: alb, mechanism: containment, kind: drawn, note: "two subnets in two AZs (pub-a and pub-b)" }
   - { from: alb, to: app, mechanism: listener-target, kind: drawn }
   - { from: app, to: db, mechanism: network-access, kind: drawn, note: "port 5432" }
   - { from: sg-app, to: sg-alb, mechanism: sg-reference, kind: generated, note: "app ingress from the load balancer group, target and health check port" }

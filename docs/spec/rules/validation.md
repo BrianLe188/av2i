@@ -1,3 +1,18 @@
+---
+id: validation-rules
+title: { vi: "Luật kiểm tra triển khai", en: "Validation rules" }
+source_aliases:
+  AWS-CIDR: https://docs.aws.amazon.com/vpc/latest/userguide/vpc-cidr-blocks.html
+  AWS-SUBNET: https://docs.aws.amazon.com/vpc/latest/userguide/subnet-sizing.html
+  AWS-IGW: https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Internet_Gateway.html
+  AWS-NAT: https://docs.aws.amazon.com/vpc/latest/userguide/nat-gateway-basics.html
+  AWS-RT: https://docs.aws.amazon.com/vpc/latest/userguide/subnet-route-tables.html
+  AWS-SG: https://docs.aws.amazon.com/vpc/latest/userguide/vpc-security-groups.html
+  AWS-SGR: https://docs.aws.amazon.com/vpc/latest/userguide/security-group-rules.html
+  AWS-QUOTA: https://docs.aws.amazon.com/vpc/latest/userguide/amazon-vpc-limits.html
+  TF-ROUTE: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/route.html.markdown
+  TF-SGR: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/vpc_security_group_ingress_rule.html.markdown
+---
 # Validation rules
 
 Rules about whether a design can be deployed. Format and severity scale are in

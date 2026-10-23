@@ -1,0 +1,16 @@
+{
+  "name": "@av2i/registry",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node src/cli.ts check",
+    "build": "node src/cli.ts build",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "ajv": "^8.17.0",
+    "yaml": "^2.8.0"
+  }
+}

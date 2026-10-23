@@ -462,8 +462,8 @@ cases:
       - { name: provider-default, in: { listener: { ssl_policy: "ELBSecurityPolicy-2016-08" } }, fires: true }
   - rule: SEC-033
     cases:
-      - { name: false, in: { zone: { force_destroy: false } }, fires: false }
-      - { name: true, in: { zone: { force_destroy: true } }, fires: true }
+      - { name: "false", in: { zone: { force_destroy: false } }, fires: false }
+      - { name: "true", in: { zone: { force_destroy: true } }, fires: true }
   - rule: SEC-037
     cases:
       - { name: scoped, in: { statement: { actions: ["s3:GetObject"], resource: "arn:aws:s3:::b/*" } }, fires: false }

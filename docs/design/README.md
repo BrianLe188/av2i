@@ -93,7 +93,7 @@ Terraform state means destroy and create, or a `moved` block).
 
 | # | Slice | Done when |
 |---|---|---|
-| M0 | registry compiler, JSON Schema for every spec file kind, schema check in CI | every file in `docs/spec` validates; types generated |
+| M0 | registry compiler, JSON Schema for every spec file kind, schema check in CI | every file in `docs/spec` validates; types generated. **Compiler, schemas and cross-reference checks done** (`packages/registry`); generated TypeScript types and CI wiring remain |
 | M1 | networking end to end: VPC, subnet, IGW, NAT, EIP, route table, SG, S3 endpoint; EC2 | [isolated-private-app](../spec/scenarios/isolated-private-app.md) generates and `tofu validate` passes |
 | M2 | rules for the networking and compute groups, with their cases | all their cases and scenario variants pass |
 | M3 | containers, storage and database | [container-service](../spec/scenarios/container-service.md) generates and validates |
