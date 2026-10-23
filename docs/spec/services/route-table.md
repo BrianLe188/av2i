@@ -75,7 +75,7 @@ VPC level. Associated with subnets (or gateways) in the same VPC.
 
 ## Relations
 
-- [route](../relations/route.md): the entries inside the table.
+- [route](../relations/route.md): the entries inside the table, and the association with an S3 gateway endpoint ([vpc-endpoint-s3](vpc-endpoint-s3.md)).
 - [route-association](../relations/route-association.md): which subnets use the table.
 
 ## Failure modes

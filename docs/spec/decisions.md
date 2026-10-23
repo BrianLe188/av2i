@@ -303,6 +303,7 @@ Recommendation: option 2. It removes the NAT data charge for S3 traffic, which i
 mechanism (`route` to an endpoint, already anticipated by D-004) and no new security group handling, whereas interface
 endpoints need their own security groups, private DNS and per-AZ cost.
 
-Consequence: a new Tier 1 service `vpc-endpoint-s3` (gateway type) is still to be written, with its `route` target
-(D-004), its endpoint policy, and an update of VAL-042, VAL-070 and the scenarios. Interface endpoints (ECR, logs) stay
-Tier 2, so the ECR image-pull gap in [isolated-private-app](scenarios/isolated-private-app.md) remains.
+Consequence (done): [services/vpc-endpoint-s3.md](services/vpc-endpoint-s3.md) is written, [route](relations/route.md) takes the
+endpoint as a target, VAL-070 now accepts the endpoint, and VAL-122 to 127, SEC-043 and SEC-044 and pitfalls P-070 to P-074 are
+added. VAL-042 is left as it was: it mentions an ECR interface endpoint, which stays Tier 2, so the ECR image-pull gap in
+[isolated-private-app](scenarios/isolated-private-app.md) remains.

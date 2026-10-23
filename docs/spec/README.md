@@ -19,7 +19,7 @@ exists so the platform is built from one consistent model instead of from patche
 
 | Group | Services |
 |---|---|
-| Networking | VPC, Subnet, Internet Gateway, NAT Gateway, Route Table, Security Group |
+| Networking | VPC, Subnet, Internet Gateway, NAT Gateway, Route Table, Security Group, VPC Endpoint (S3 gateway) |
 | Compute | EC2, Lambda |
 | Containers | ECS (Fargate), ECR |
 | Storage | S3 |

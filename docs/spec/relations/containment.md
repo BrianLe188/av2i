@@ -3,7 +3,7 @@ id: containment
 title: { vi: "Chứa / đặt trong", en: "Containment (placement)" }
 participants:
   - { role: parent, service: vpc }
-  - { role: child_vpc_level, service: [subnet, route-table, security-group, internet-gateway, nat-gateway] }
+  - { role: child_vpc_level, service: [subnet, route-table, security-group, internet-gateway, nat-gateway, vpc-endpoint-s3] }
   - { role: child_subnet_level, service: [nat-gateway, ec2, ecs, lambda, rds, alb] }
 direction: parent->child
 same_vpc: true
@@ -32,6 +32,7 @@ the user draws. It is the nesting on the canvas, and every mechanism marked `sam
 | route-table | one VPC | exactly one VPC | |
 | security-group | one VPC | exactly one VPC | |
 | internet-gateway | one VPC (attached) | exactly one VPC | see [igw-attach](igw-attach.md) |
+| vpc-endpoint-s3 | one VPC | exactly one VPC | no subnet; used through route table associations (see [vpc-endpoint-s3](../services/vpc-endpoint-s3.md)) |
 | nat-gateway, zonal | one subnet | exactly one subnet | public subnet for a public gateway |
 | nat-gateway, regional | one VPC | no subnet | see decision D-002 |
 | ec2 | exactly one subnet | one | One primary network interface, so one subnet and one AZ (verified, see [ec2](../services/ec2.md)) |

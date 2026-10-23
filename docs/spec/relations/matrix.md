@@ -1,10 +1,10 @@
 ---
 id: relation-matrix
 title: { vi: "Ma trận quan hệ giữa các service", en: "Service relation matrix" }
-services: [vpc, subnet, internet-gateway, nat-gateway, route-table, security-group, ec2, lambda, ecs, ecr, s3, rds, alb, route53, cloudfront, acm, iam-role, iam-policy]
+services: [vpc, subnet, internet-gateway, nat-gateway, route-table, vpc-endpoint-s3, security-group, ec2, lambda, ecs, ecr, s3, rds, alb, route53, cloudfront, acm, iam-role, iam-policy]
 cell_values: [valid, conditional, invalid, none]
 direction: "a cell reads from the row service to the column service, in the direction the mechanism is drawn or derived"
-counts: { valid: 37, conditional: 20, invalid: 38, none: 229 }
+counts: { valid: 39, conditional: 20, invalid: 40, none: 262 }
 status: unverified
 pairs:
   - { from: vpc, to: vpc, value: none, mechanism: "-", note: "a resource of this kind has no relationship to another of the same kind" }
@@ -12,6 +12,7 @@ pairs:
   - { from: vpc, to: internet-gateway, value: valid, mechanism: "igw-attach", note: "one gateway per VPC and one VPC per gateway; derived from nesting" }
   - { from: vpc, to: nat-gateway, value: conditional, mechanism: "containment", note: "regional mode only (D-002); a zonal gateway is placed in a subnet instead" }
   - { from: vpc, to: route-table, value: valid, mechanism: "containment", note: "a route table belongs to one VPC; derived from nesting" }
+  - { from: vpc, to: vpc-endpoint-s3, value: valid, mechanism: "containment", note: "an S3 gateway endpoint belongs to one VPC and serves S3 in the VPC's Region; derived from nesting" }
   - { from: vpc, to: security-group, value: valid, mechanism: "containment", note: "a security group belongs to one VPC; derived from nesting" }
   - { from: vpc, to: ec2, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: vpc, to: lambda, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
@@ -30,6 +31,7 @@ pairs:
   - { from: subnet, to: internet-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: subnet, to: nat-gateway, value: invalid, mechanism: "-", note: "direction: nat-placement is drawn from nat-gateway to subnet" }
   - { from: subnet, to: route-table, value: valid, mechanism: "route-association", note: "a subnet has exactly one table; the table decides public or private" }
+  - { from: subnet, to: vpc-endpoint-s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: subnet, to: security-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: subnet, to: ec2, value: valid, mechanism: "containment", note: "an instance runs in exactly one subnet" }
   - { from: subnet, to: lambda, value: conditional, mechanism: "containment", note: "only when the function is attached to the VPC; private subnets, two or more AZs recommended" }
@@ -48,6 +50,7 @@ pairs:
   - { from: internet-gateway, to: internet-gateway, value: none, mechanism: "-", note: "a resource of this kind has no relationship to another of the same kind" }
   - { from: internet-gateway, to: nat-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: internet-gateway, to: route-table, value: invalid, mechanism: "-", note: "direction: route is drawn from route-table to internet-gateway" }
+  - { from: internet-gateway, to: vpc-endpoint-s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: internet-gateway, to: security-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: internet-gateway, to: ec2, value: none, mechanism: "-", note: "derived only: reaching the internet is reported by egress-path, never drawn" }
   - { from: internet-gateway, to: lambda, value: none, mechanism: "-", note: "derived only: reaching the internet is reported by egress-path, never drawn" }
@@ -66,6 +69,7 @@ pairs:
   - { from: nat-gateway, to: internet-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: nat-gateway, to: nat-gateway, value: none, mechanism: "-", note: "a resource of this kind has no relationship to another of the same kind" }
   - { from: nat-gateway, to: route-table, value: invalid, mechanism: "-", note: "direction: route is drawn from route-table to nat-gateway" }
+  - { from: nat-gateway, to: vpc-endpoint-s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: nat-gateway, to: security-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: nat-gateway, to: ec2, value: none, mechanism: "-", note: "derived only: reaching the internet is reported by egress-path, never drawn" }
   - { from: nat-gateway, to: lambda, value: none, mechanism: "-", note: "derived only: reaching the internet is reported by egress-path, never drawn" }
@@ -84,6 +88,7 @@ pairs:
   - { from: route-table, to: internet-gateway, value: valid, mechanism: "route", note: "a route to the gateway; the gateway must be attached to the table's VPC" }
   - { from: route-table, to: nat-gateway, value: valid, mechanism: "route", note: "a route to the gateway; same VPC; the gateway's own subnet must be public" }
   - { from: route-table, to: route-table, value: none, mechanism: "-", note: "a resource of this kind has no relationship to another of the same kind" }
+  - { from: route-table, to: vpc-endpoint-s3, value: valid, mechanism: "route", note: "associates the table with the endpoint (aws_vpc_endpoint_route_table_association); same VPC, one S3 endpoint per table; AWS adds the route" }
   - { from: route-table, to: security-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: route-table, to: ec2, value: none, mechanism: "-", note: "derived only: reaching the internet is reported by egress-path, never drawn" }
   - { from: route-table, to: lambda, value: none, mechanism: "-", note: "derived only: reaching the internet is reported by egress-path, never drawn" }
@@ -97,11 +102,31 @@ pairs:
   - { from: route-table, to: acm, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: route-table, to: iam-role, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: route-table, to: iam-policy, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: vpc-endpoint-s3, to: vpc, value: invalid, mechanism: "-", note: "direction: containment is drawn from vpc to vpc-endpoint-s3" }
+  - { from: vpc-endpoint-s3, to: subnet, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: vpc-endpoint-s3, to: internet-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: vpc-endpoint-s3, to: nat-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: vpc-endpoint-s3, to: route-table, value: invalid, mechanism: "-", note: "direction: route is drawn from route-table to vpc-endpoint-s3" }
+  - { from: vpc-endpoint-s3, to: vpc-endpoint-s3, value: none, mechanism: "-", note: "a resource of this kind has no relationship to another of the same kind" }
+  - { from: vpc-endpoint-s3, to: security-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: vpc-endpoint-s3, to: ec2, value: none, mechanism: "-", note: "derived only: reaching the internet is reported by egress-path, never drawn" }
+  - { from: vpc-endpoint-s3, to: lambda, value: none, mechanism: "-", note: "derived only: reaching the internet is reported by egress-path, never drawn" }
+  - { from: vpc-endpoint-s3, to: ecs, value: none, mechanism: "-", note: "derived only: reaching the internet is reported by egress-path, never drawn" }
+  - { from: vpc-endpoint-s3, to: ecr, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: vpc-endpoint-s3, to: s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: vpc-endpoint-s3, to: rds, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: vpc-endpoint-s3, to: alb, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: vpc-endpoint-s3, to: route53, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: vpc-endpoint-s3, to: cloudfront, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: vpc-endpoint-s3, to: acm, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: vpc-endpoint-s3, to: iam-role, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: vpc-endpoint-s3, to: iam-policy, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: security-group, to: vpc, value: invalid, mechanism: "-", note: "direction: containment is drawn from vpc to security-group" }
   - { from: security-group, to: subnet, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: security-group, to: internet-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: security-group, to: nat-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: security-group, to: route-table, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: security-group, to: vpc-endpoint-s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: security-group, to: security-group, value: valid, mechanism: "sg-reference", note: "a rule names another group as source or destination, same VPC; no rules are copied" }
   - { from: security-group, to: ec2, value: valid, mechanism: "sg-attach", note: "up to 5 groups per network interface" }
   - { from: security-group, to: lambda, value: conditional, mechanism: "sg-attach", note: "only when the function is attached to a VPC" }
@@ -120,6 +145,7 @@ pairs:
   - { from: ec2, to: internet-gateway, value: none, mechanism: "-", note: "derived only: reaching the internet is reported by egress-path, never drawn" }
   - { from: ec2, to: nat-gateway, value: none, mechanism: "-", note: "derived only: reaching the internet is reported by egress-path, never drawn" }
   - { from: ec2, to: route-table, value: none, mechanism: "-", note: "derived only: reaching the internet is reported by egress-path, never drawn" }
+  - { from: ec2, to: vpc-endpoint-s3, value: none, mechanism: "-", note: "derived only: reaching the internet is reported by egress-path, never drawn" }
   - { from: ec2, to: security-group, value: valid, mechanism: "sg-attach", note: "up to 5 groups per network interface" }
   - { from: ec2, to: ec2, value: valid, mechanism: "network-access", note: "same VPC; implemented as ingress on the callee's group referencing the caller's group" }
   - { from: ec2, to: lambda, value: invalid, mechanism: "-", note: "direction: network-access is drawn from lambda to ec2" }
@@ -138,6 +164,7 @@ pairs:
   - { from: lambda, to: internet-gateway, value: none, mechanism: "-", note: "derived only: reaching the internet is reported by egress-path, never drawn" }
   - { from: lambda, to: nat-gateway, value: none, mechanism: "-", note: "derived only: reaching the internet is reported by egress-path, never drawn" }
   - { from: lambda, to: route-table, value: none, mechanism: "-", note: "derived only: reaching the internet is reported by egress-path, never drawn" }
+  - { from: lambda, to: vpc-endpoint-s3, value: none, mechanism: "-", note: "derived only: reaching the internet is reported by egress-path, never drawn" }
   - { from: lambda, to: security-group, value: conditional, mechanism: "sg-attach", note: "only when the function is attached to a VPC" }
   - { from: lambda, to: ec2, value: conditional, mechanism: "network-access", note: "the function must be attached to the same VPC" }
   - { from: lambda, to: lambda, value: none, mechanism: "-", note: "a resource of this kind has no relationship to another of the same kind" }
@@ -156,6 +183,7 @@ pairs:
   - { from: ecs, to: internet-gateway, value: none, mechanism: "-", note: "derived only: reaching the internet is reported by egress-path, never drawn" }
   - { from: ecs, to: nat-gateway, value: none, mechanism: "-", note: "derived only: reaching the internet is reported by egress-path, never drawn" }
   - { from: ecs, to: route-table, value: none, mechanism: "-", note: "derived only: reaching the internet is reported by egress-path, never drawn" }
+  - { from: ecs, to: vpc-endpoint-s3, value: none, mechanism: "-", note: "derived only: reaching the internet is reported by egress-path, never drawn" }
   - { from: ecs, to: security-group, value: valid, mechanism: "sg-attach", note: "attached to the task's interface; 1 to 5 groups" }
   - { from: ecs, to: ec2, value: valid, mechanism: "network-access", note: "same VPC; implemented as ingress on the callee's group referencing the caller's group" }
   - { from: ecs, to: lambda, value: invalid, mechanism: "-", note: "direction: network-access is drawn from lambda to ecs" }
@@ -174,6 +202,7 @@ pairs:
   - { from: ecr, to: internet-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: ecr, to: nat-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: ecr, to: route-table, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: ecr, to: vpc-endpoint-s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: ecr, to: security-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: ecr, to: ec2, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: ecr, to: lambda, value: conditional, mechanism: "image-source", note: "the repository must be in the function's own Region; one architecture" }
@@ -192,6 +221,7 @@ pairs:
   - { from: s3, to: internet-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: s3, to: nat-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: s3, to: route-table, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: s3, to: vpc-endpoint-s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: s3, to: security-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: s3, to: ec2, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: s3, to: lambda, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
@@ -210,6 +240,7 @@ pairs:
   - { from: rds, to: internet-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: rds, to: nat-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: rds, to: route-table, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: rds, to: vpc-endpoint-s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: rds, to: security-group, value: valid, mechanism: "sg-attach", note: "attached through vpc_security_group_ids" }
   - { from: rds, to: ec2, value: invalid, mechanism: "-", note: "direction: network-access is drawn from ec2 to rds" }
   - { from: rds, to: lambda, value: invalid, mechanism: "-", note: "direction: network-access is drawn from lambda to rds" }
@@ -228,6 +259,7 @@ pairs:
   - { from: alb, to: internet-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: alb, to: nat-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: alb, to: route-table, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: alb, to: vpc-endpoint-s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: alb, to: security-group, value: valid, mechanism: "sg-attach", note: "required for an application load balancer" }
   - { from: alb, to: ec2, value: valid, mechanism: "listener-target", note: "instance target group; the platform adds the ingress rule from the ALB's group" }
   - { from: alb, to: lambda, value: conditional, mechanism: "listener-target", note: "lambda target group; needs aws_lambda_permission for elasticloadbalancing.amazonaws.com; no VPC involved" }
@@ -246,6 +278,7 @@ pairs:
   - { from: route53, to: internet-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: route53, to: nat-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: route53, to: route-table, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: route53, to: vpc-endpoint-s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: route53, to: security-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: route53, to: ec2, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: route53, to: lambda, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
@@ -264,6 +297,7 @@ pairs:
   - { from: cloudfront, to: internet-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: cloudfront, to: nat-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: cloudfront, to: route-table, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: cloudfront, to: vpc-endpoint-s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: cloudfront, to: security-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: cloudfront, to: ec2, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: cloudfront, to: lambda, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
@@ -282,6 +316,7 @@ pairs:
   - { from: acm, to: internet-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: acm, to: nat-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: acm, to: route-table, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: acm, to: vpc-endpoint-s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: acm, to: security-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: acm, to: ec2, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: acm, to: lambda, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
@@ -300,6 +335,7 @@ pairs:
   - { from: iam-role, to: internet-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: iam-role, to: nat-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: iam-role, to: route-table, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: iam-role, to: vpc-endpoint-s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: iam-role, to: security-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: iam-role, to: ec2, value: valid, mechanism: "assume-role", note: "through an instance profile; trust principal ec2.amazonaws.com" }
   - { from: iam-role, to: lambda, value: valid, mechanism: "assume-role", note: "execution role; required; trust principal lambda.amazonaws.com" }
@@ -318,6 +354,7 @@ pairs:
   - { from: iam-policy, to: internet-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: iam-policy, to: nat-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: iam-policy, to: route-table, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: iam-policy, to: vpc-endpoint-s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: iam-policy, to: security-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: iam-policy, to: ec2, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: iam-policy, to: lambda, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
@@ -335,7 +372,7 @@ pairs:
 
 # Service relation matrix
 
-Every ordered pair of the 18 Tier 1 services has exactly one value (see [00-conventions](../00-conventions.md#8-matrix-cells)).
+Every ordered pair of the 19 Tier 1 services has exactly one value (see [00-conventions](../00-conventions.md#8-matrix-cells)).
 The list in the front matter is the source of truth; the grid below is a view of it.
 
 A cell reads **from the row service to the column service**, in the direction the mechanism is drawn or derived
@@ -344,26 +381,27 @@ only one way round, so a design tool must not offer the reverse.
 
 `V` valid, `C` conditional, `X` invalid, `-` none.
 
-| from \ to | vpc | subnet | internet-gateway | nat-gateway | route-table | security-group | ec2 | lambda | ecs | ecr | s3 | rds | alb | route53 | cloudfront | acm | iam-role | iam-policy |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| **vpc** | - | V | V | C | V | V | - | - | - | - | - | - | - | - | - | - | - | - |
-| **subnet** | X | - | - | X | V | - | V | C | V | - | - | C | C | - | - | - | - | - |
-| **internet-gateway** | V | - | - | - | X | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| **nat-gateway** | X | C | - | - | X | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| **route-table** | X | V | V | V | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| **security-group** | X | - | - | - | - | V | V | C | V | - | - | V | V | - | - | - | - | - |
-| **ec2** | - | X | - | - | - | V | V | X | V | - | - | V | X | - | - | - | X | - |
-| **lambda** | - | X | - | - | - | C | C | - | C | X | - | C | X | - | - | - | X | - |
-| **ecs** | - | X | - | - | - | V | V | X | V | X | - | V | X | - | - | - | X | - |
-| **ecr** | - | - | - | - | - | - | - | C | V | - | - | - | - | - | - | - | X | - |
-| **s3** | - | - | - | - | - | - | - | - | - | - | - | - | X | - | X | - | X | - |
-| **rds** | - | C | - | - | - | V | X | X | X | - | - | - | - | - | - | - | X | - |
-| **alb** | - | X | - | - | - | V | V | C | C | - | C | X | - | X | X | X | - | - |
-| **route53** | - | - | - | - | - | - | - | - | - | - | X | - | V | - | C | X | - | - |
-| **cloudfront** | - | - | - | - | - | - | - | - | - | - | V | - | C | X | - | X | - | - |
-| **acm** | - | - | - | - | - | - | - | - | - | - | - | - | C | V | C | - | - | - |
-| **iam-role** | - | - | - | - | - | - | V | V | V | V | V | C | - | - | - | - | - | V |
-| **iam-policy** | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | X | - |
+| from \ to | vpc | subnet | internet-gateway | nat-gateway | route-table | vpc-endpoint-s3 | security-group | ec2 | lambda | ecs | ecr | s3 | rds | alb | route53 | cloudfront | acm | iam-role | iam-policy |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| **vpc** | - | V | V | C | V | V | V | - | - | - | - | - | - | - | - | - | - | - | - |
+| **subnet** | X | - | - | X | V | - | - | V | C | V | - | - | C | C | - | - | - | - | - |
+| **internet-gateway** | V | - | - | - | X | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| **nat-gateway** | X | C | - | - | X | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| **route-table** | X | V | V | V | - | V | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| **vpc-endpoint-s3** | X | - | - | - | X | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| **security-group** | X | - | - | - | - | - | V | V | C | V | - | - | V | V | - | - | - | - | - |
+| **ec2** | - | X | - | - | - | - | V | V | X | V | - | - | V | X | - | - | - | X | - |
+| **lambda** | - | X | - | - | - | - | C | C | - | C | X | - | C | X | - | - | - | X | - |
+| **ecs** | - | X | - | - | - | - | V | V | X | V | X | - | V | X | - | - | - | X | - |
+| **ecr** | - | - | - | - | - | - | - | - | C | V | - | - | - | - | - | - | - | X | - |
+| **s3** | - | - | - | - | - | - | - | - | - | - | - | - | - | X | - | X | - | X | - |
+| **rds** | - | C | - | - | - | - | V | X | X | X | - | - | - | - | - | - | - | X | - |
+| **alb** | - | X | - | - | - | - | V | V | C | C | - | C | X | - | X | X | X | - | - |
+| **route53** | - | - | - | - | - | - | - | - | - | - | - | X | - | V | - | C | X | - | - |
+| **cloudfront** | - | - | - | - | - | - | - | - | - | - | - | V | - | C | X | - | X | - | - |
+| **acm** | - | - | - | - | - | - | - | - | - | - | - | - | - | C | V | C | - | - | - |
+| **iam-role** | - | - | - | - | - | - | - | V | V | V | V | V | C | - | - | - | - | - | V |
+| **iam-policy** | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | X | - |
 
 ## Reading the values
 
@@ -377,8 +415,8 @@ only one way round, so a design tool must not offer the reverse.
 
 1. **No workload connects to S3 or ECR directly.** EC2, Lambda and ECS reach S3 only through an
    `iam-role` ([assume-role](assume-role.md) then [grant](grant.md)); the cells `ec2 -> s3`, `lambda -> s3` and `ecs -> s3` are `none`.
-2. **Every internet path is derived.** The pairs between workloads and route tables, gateways and NAT gateways are `none`;
-   the verdict comes from [egress-path](egress-path.md).
+2. **Every internet path is derived.** The pairs between workloads and route tables, gateways, NAT gateways and the S3 endpoint are `none`;
+   the verdict comes from [egress-path](egress-path.md), which reports `internet_egress` and `s3_path` separately.
 3. **`iam-role -> rds` carries two mechanisms** (monitoring role and database authentication). They share one cell; the
    registry rows in [assume-role](assume-role.md) and [grant](grant.md) hold the detail.
 4. **`route53 -> s3` is `invalid` in this version.** The dns-alias file covers ALB and CloudFront only; an alias to an S3
@@ -387,3 +425,6 @@ only one way round, so a design tool must not offer the reverse.
 6. **Lambda is the odd one out.** It joins a VPC, a security group, a subnet and `network-access` only when attached to a VPC;
    `alb -> lambda` works without any VPC.
 7. **No pair marks ACM, Route 53 or CloudFront as VPC members.** They are global or regional and sit outside the network.
+8. **The S3 endpoint is a route target, not a peer of S3.** `route-table -> vpc-endpoint-s3` is the only drawn line; `vpc-endpoint-s3 -> s3` is `none`
+   because the endpoint covers every S3 bucket in its Region (its policy may name buckets, but that is a property, not a connection).
+   The egress rule to the S3 prefix list is generated from the association, so `security-group -> vpc-endpoint-s3` is also `none`.

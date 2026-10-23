@@ -3,7 +3,7 @@ id: egress-path
 title: { vi: "Đường ra ngoài của workload", en: "Egress path" }
 participants:
   - { role: workload, service: [ec2, ecs, lambda] }
-  - { role: route, service: [route-table, internet-gateway, nat-gateway] }
+  - { role: route, service: [route-table, internet-gateway, nat-gateway, vpc-endpoint-s3] }
 direction: workload->outside
 same_vpc: true
 cardinality: { workload: many, route: one }
@@ -18,7 +18,8 @@ evaluation:
   direct:   "public_subnet AND public_address"
   via_nat:  "NOT public_subnet AND nat_egress"       # also valid for a public subnet without a public address when its table routes to a NAT gateway
   none:     "otherwise"
-invalid_when: [VAL-012, VAL-013, VAL-031, VAL-032, VAL-038, VAL-042, VAL-045]
+  s3_path:  "internet_egress OR (the route table of the subnet is associated with an S3 gateway endpoint AND the bucket is in the Region of the VPC)"
+invalid_when: [VAL-012, VAL-013, VAL-031, VAL-032, VAL-038, VAL-042, VAL-045, VAL-070, VAL-126]
 sources:
   S1: https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Internet_Gateway.html
   S2: https://docs.aws.amazon.com/vpc/latest/userguide/vpc-nat-gateway.html
@@ -46,6 +47,7 @@ nat_egress(s)      := route table of s has 0.0.0.0/0 -> NAT gateway n,
 direct(w)          := public_subnet(w.subnet) AND w has a public IPv4 address                      (S1, S5)
 via_nat(w)         := nat_egress(w.subnet)
 internet_egress(w) := direct(w) OR via_nat(w)
+s3_path(w, b)      := internet_egress(w) OR (s3_endpoint(w.subnet) AND region(b) = region(w.vpc))   (S6)
 ```
 
 A regional NAT gateway replaces the "sits in a public subnet" condition with "is attached to the VPC and has an
@@ -67,11 +69,14 @@ internet-gateway route in its own table" (S2, decision D-002).
 | 10 | ECS task, public subnet, `assign_public_ip` true | | Direct; can pull images (S4) |
 | 11 | ECS task, public subnet, `assign_public_ip` false, no NAT | | Cannot pull images. Rule [VAL-042](../rules/validation.md) |
 | 12 | ECS task, private subnet with NAT | | Can pull images and send logs (S4) |
-| 13 | ECS task, private subnet, no NAT, ECR interface endpoint | | Image pull works over the private address (S4). Endpoint is Tier 2 |
+| 13 | ECS task, private subnet, no NAT, ECR interface endpoint | | Image pull works over the private address (S4). The interface endpoint is Tier 2, so the platform cannot draw it; the S3 gateway endpoint does not help an ECR pull on its own |
 | 14 | ECS task, private subnet, `assign_public_ip` true | | Has no effect. Rule [VAL-045](../rules/validation.md) |
 | 15 | Any, NAT gateway in another AZ | | Works with cross-AZ cost. Rule [VAL-013](../rules/validation.md) |
 | 16 | Any, NAT gateway's own subnet has no internet-gateway route | | No egress. Rule [VAL-012](../rules/validation.md) |
 | 17 | Any, IPv6 | | Needs an egress-only internet gateway; out of scope (decision D-003) |
+| 18 | EC2, ECS or Lambda, private subnet, no NAT, S3 gateway endpoint on the table | | Reaches S3 in the same Region; the internet and other AWS services stay unreachable. `internet_egress` is still false, `s3_path` is true |
+| 19 | Same, bucket in another Region | | No path to the bucket. Rule [VAL-126](../rules/validation.md) |
+| 20 | Private subnet, no NAT, no endpoint, workload uses S3 | | No path. Rule [VAL-070](../rules/validation.md) |
 
 ## Reporting
 

@@ -12,7 +12,7 @@ documentation. Treat the participants and notes as the working hypothesis to con
 |---|---|---|---|---|
 | `containment` | vpc, subnet, then placed resources | parent to child | A resource lives inside a VPC or subnet | `vpc_id`, `subnet_id` / `subnet_ids` on the child |
 | `igw-attach` | internet-gateway, vpc | undirected | The VPC can reach the internet through the gateway | `aws_internet_gateway.vpc_id` |
-| `route` | route-table, internet-gateway or nat-gateway | route-table to target | A default or specific route sends traffic to a gateway | `aws_route` |
+| `route` | route-table, internet-gateway, nat-gateway or vpc-endpoint-s3 | route-table to target | A default or specific route sends traffic to a gateway, or a table is associated with the S3 gateway endpoint | `aws_route`, or `aws_vpc_endpoint_route_table_association` for the endpoint |
 | `route-association` | route-table, subnet | undirected | A subnet uses the route table; this decides public or private | `aws_route_table_association` |
 | `nat-placement` | nat-gateway, subnet | child to parent | A NAT gateway sits in a public subnet and needs an Elastic IP | `aws_nat_gateway.subnet_id`, `aws_eip` |
 | `sg-attach` | security-group, ec2 / ecs / rds / alb / lambda | undirected | A security group guards a resource's network interface | `vpc_security_group_ids` or `security_groups` |

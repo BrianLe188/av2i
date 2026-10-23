@@ -12,6 +12,7 @@ What each service and mechanism generates. Networking group only for now. Pitfal
 | internet-gateway | `aws_internet_gateway` | `vpc_id`, `tags` | P-009 |
 | nat-gateway (zonal, public) | `aws_eip`, `aws_nat_gateway` | EIP: `domain = "vpc"`. NAT: `allocation_id`, `subnet_id`, `connectivity_type`, `depends_on` | P-007, P-008 |
 | nat-gateway (regional) | `aws_nat_gateway` | `availability_mode = "regional"`, `vpc_id` | P-014; decision D-002 |
+| vpc-endpoint-s3 | `aws_vpc_endpoint`, `aws_vpc_endpoint_route_table_association` | endpoint: `vpc_id`, `service_name = "com.amazonaws.<region>.s3"`, `vpc_endpoint_type = "Gateway"`, `policy`. Association: `route_table_id`, `vpc_endpoint_id` | P-070 to P-074; decision D-029 |
 | route-table | `aws_route_table` | `vpc_id`, `tags` (no inline `route`) | P-001 |
 | security-group | `aws_security_group` | `name`, `description`, `vpc_id`, `tags` (no inline rules) | P-002, P-003, P-005, P-006 |
 
@@ -53,7 +54,7 @@ What each service and mechanism generates. Networking group only for now. Pitfal
 |---|---|---|
 | containment | none of its own | `vpc_id`, `subnet_id` references on the child |
 | igw-attach | none of its own | `aws_internet_gateway.vpc_id` |
-| route | `aws_route` | `route_table_id`, `destination_cidr_block`, `gateway_id` (internet gateway) or `nat_gateway_id` (NAT gateway) |
+| route | `aws_route` for an internet or NAT gateway; `aws_vpc_endpoint_route_table_association` for the S3 endpoint | `route_table_id`, `destination_cidr_block`, `gateway_id` (internet gateway) or `nat_gateway_id` (NAT gateway); for the endpoint `route_table_id`, `vpc_endpoint_id` |
 | route-association | `aws_route_table_association` | `subnet_id`, `route_table_id` |
 | nat-placement | none of its own | `aws_nat_gateway.subnet_id`, `allocation_id`, `depends_on` |
 | sg-attach | none of its own | `vpc_security_group_ids` (ec2), `vpc_config.security_group_ids` (lambda), `network_configuration.security_groups` (ecs); alb and rds pending |
@@ -77,7 +78,7 @@ What each service and mechanism generates. Networking group only for now. Pitfal
 1. `aws_vpc`
 2. `aws_internet_gateway`, `aws_subnet`, `aws_security_group`, `aws_route_table`
 3. `aws_eip`, then `aws_nat_gateway` (after the internet gateway)
-4. `aws_route`, `aws_route_table_association`, security group rules
+4. `aws_route`, `aws_route_table_association`, `aws_vpc_endpoint` then `aws_vpc_endpoint_route_table_association`, security group rules (the S3 egress rule uses the endpoint's `prefix_list_id`)
 5. Resources placed in subnets
 
 Terraform derives this from attribute references. Add `depends_on` only where a reference does not exist but

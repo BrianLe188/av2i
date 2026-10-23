@@ -17,6 +17,9 @@ page is used.
 | NAT gateways | https://docs.aws.amazon.com/vpc/latest/userguide/vpc-nat-gateway.html |
 | NAT gateway basics | https://docs.aws.amazon.com/vpc/latest/userguide/nat-gateway-basics.html |
 | Regional NAT gateways | https://docs.aws.amazon.com/vpc/latest/userguide/nat-gateways-regional.html |
+| Gateway endpoints (routing, security, IP types) | https://docs.aws.amazon.com/vpc/latest/privatelink/gateway-endpoints.html |
+| Gateway endpoints for S3 (considerations, bucket policies, endpoint policy examples) | https://docs.aws.amazon.com/vpc/latest/privatelink/vpc-endpoints-s3.html |
+| Endpoint policies | https://docs.aws.amazon.com/vpc/latest/privatelink/vpc-endpoints-access.html |
 | Security groups | https://docs.aws.amazon.com/vpc/latest/userguide/vpc-security-groups.html |
 | Security group rules | https://docs.aws.amazon.com/vpc/latest/userguide/security-group-rules.html |
 | Default security groups | https://docs.aws.amazon.com/vpc/latest/userguide/default-security-group.html |
@@ -100,7 +103,7 @@ Base: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/we
 `s3_bucket_versioning`, `s3_bucket_ownership_controls`, `s3_bucket_lifecycle_configuration`, `db_instance`,
 `db_subnet_group`, `lambda_permission`, `lb`, `lb_listener`, `lb_target_group`, `lb_target_group_attachment`,
 `route53_zone`, `route53_record`, `cloudfront_distribution`, `cloudfront_origin_access_control`, `acm_certificate`,
-`acm_certificate_validation`, `iam_role`, `iam_role_policy`, `iam_role_policy_attachment`, `iam_policy`, `iam_instance_profile`
+`acm_certificate_validation`, `iam_role`, `iam_role_policy`, `iam_role_policy_attachment`, `iam_policy`, `iam_instance_profile`, `vpc_endpoint`, `vpc_endpoint_route_table_association`
 (each with `.html.markdown`) and the data source `aws_iam_policy_document` (`d/iam_policy_document.html.markdown`).
 
 These are the `main` branch, which can be ahead of the pinned provider release. When the exact provider version
@@ -138,3 +141,4 @@ is chosen (decision D-001), re-check the arguments used against the tagged docum
 - DNS attributes of a VPC (`vpc-dns` page was found but its detail was not read).
 - Network ACLs.
 - Latest AWS provider and OpenTofu release numbers (only unofficial listings were found).
+- VPC gateway endpoint for S3: whether the endpoint quota of 255 per VPC can be raised, whether `service_name`, `vpc_id` and `vpc_endpoint_type` force replacement, whether the endpoint route counts toward the routes-per-table quota, how the route appears in `aws_route_table` state, and the behaviour of a network ACL (out of scope, D-008).

@@ -26,6 +26,10 @@ blocked.
 | rules_per_security_group | 60 | yes | Per direction and per IP family. Times groups per interface must not exceed 1000 |
 | security_groups_per_network_interface | 5 | yes, up to 16 | |
 | network_interfaces_per_region | 5000 | yes | Enforced per AZ |
+| gateway_endpoints_per_region | 20 | yes | Counts every gateway endpoint (S3 and DynamoDB) |
+| gateway_endpoints_per_vpc | 255 | unverified | |
+| s3_endpoint_routes_per_route_table | 1 | no | A table cannot have two endpoint routes to the same service |
+| endpoint_policy_size | 20480 characters | no | Including white space |
 
 ## NAT gateway throughput
 

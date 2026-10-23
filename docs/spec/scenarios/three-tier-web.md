@@ -1,7 +1,7 @@
 ---
 id: three-tier-web
 title: { vi: "Web 3 tầng: ALB, EC2, RDS", en: "Three-tier web: ALB, EC2, RDS" }
-services: [vpc, subnet, internet-gateway, nat-gateway, route-table, security-group, ec2, rds, alb, route53, acm, iam-role, s3]
+services: [vpc, subnet, internet-gateway, nat-gateway, route-table, vpc-endpoint-s3, security-group, ec2, rds, alb, route53, acm, iam-role, s3]
 nodes:
   - { id: vpc, service: vpc, props: { cidr_block: "10.0.0.0/16", enable_dns_support: true, enable_dns_hostnames: true } }
   - { id: igw, service: internet-gateway }
@@ -17,6 +17,7 @@ nodes:
   - { id: rt-app-a, service: route-table }
   - { id: rt-app-b, service: route-table }
   - { id: rt-db, service: route-table }
+  - { id: s3-endpoint, service: vpc-endpoint-s3, props: { policy: default } }
   - { id: sg-alb, service: security-group }
   - { id: sg-app, service: security-group }
   - { id: sg-db, service: security-group }
@@ -36,6 +37,8 @@ connections:
   - { from: nat-b, to: pub-b, mechanism: nat-placement, kind: derived }
   - { from: rt-app-a, to: nat-a, mechanism: route, kind: drawn, note: "same AZ as the gateway (VAL-013)" }
   - { from: rt-app-b, to: nat-b, mechanism: route, kind: drawn }
+  - { from: rt-app-a, to: s3-endpoint, mechanism: route, kind: drawn, note: "association; S3 traffic skips the NAT gateway" }
+  - { from: rt-app-b, to: s3-endpoint, mechanism: route, kind: drawn }
   - { from: rt-app-a, to: app-a, mechanism: route-association, kind: drawn }
   - { from: rt-app-b, to: app-b, mechanism: route-association, kind: drawn }
   - { from: rt-db, to: db-a, mechanism: route-association, kind: drawn, note: "local route only: no internet path" }
@@ -56,7 +59,7 @@ connections:
   - { from: app-role, to: assets, mechanism: grant, kind: drawn, note: "level read" }
 expect:
   errors: []
-  findings: [SEC-019, SEC-026, SEC-027, SEC-028, SEC-013]
+  findings: [SEC-019, SEC-026, SEC-027, SEC-028, SEC-013, SEC-043]
 variants:
   - { id: no-nat-route, change: "remove the route from rt-app-a to nat-a", fires: [VAL-032], severity: info }
   - { id: nat-wrong-az, change: "rt-app-a routes to nat-b", fires: [VAL-013], severity: warning }
@@ -72,6 +75,15 @@ variants:
   - { id: cert-not-covering, change: "certificate covers example.com but the alias is www.example.com", fires: [VAL-102], severity: error }
   - { id: role-wrong-trust, change: "the role's trust policy names lambda.amazonaws.com", fires: [VAL-105], severity: error }
   - { id: role-unused, change: "app-role connected to nothing", fires: [VAL-106], severity: warning }
+  - { id: endpoint-removed, change: "remove s3-endpoint and the NAT routes", fires: [VAL-070, VAL-032], severity: warning, note: "app reads S3 with no path" }
+  - { id: endpoint-wrong-vpc, change: "rt-app-a belongs to another VPC but is associated with s3-endpoint", fires: [VAL-122], severity: error }
+  - { id: two-endpoints-one-table, change: "a second S3 endpoint associated with rt-app-a", fires: [VAL-122], severity: error }
+  - { id: bucket-other-region, change: "assets is in another Region and the NAT routes are removed", fires: [VAL-126, VAL-070, VAL-032], severity: warning }
+  - { id: endpoint-region-mismatch, change: "service_name names another Region", fires: [VAL-123], severity: error }
+  - { id: endpoint-policy-principal, change: "endpoint policy with Principal AWS account id", fires: [VAL-125], severity: error }
+  - { id: restricted-egress, change: "sg-app egress allows only the database port, S3 endpoint kept", fires: [VAL-127], severity: warning }
+  - { id: source-ip-condition, change: "a bucket policy statement on assets uses aws:SourceIp", fires: [SEC-044], severity: warning }
+  - { id: dns-off, change: "enable_dns_hostnames false", fires: [VAL-124], severity: warning }
   - { id: direct-edge-to-s3, change: "a connection drawn from app to assets with no role", fires: [], severity: error, note: "rejected by the matrix: ec2 to s3 is none; no rule ID because the edge cannot be created" }
 ---
 
@@ -100,6 +112,7 @@ internet route at all.
 | Load balancer needs two subnets in two AZs | [containment](../relations/containment.md), VAL-071 |
 | Instance reads S3 only through a role | [assume-role](../relations/assume-role.md), [grant](../relations/grant.md) |
 | Database password never enters the design | D-017, `manage_master_user_password` |
+| S3 reached through an endpoint route instead of the NAT gateway | [route](../relations/route.md), [vpc-endpoint-s3](../services/vpc-endpoint-s3.md), VAL-070 |
 
 ## Variants
 
@@ -108,5 +121,6 @@ matrix rather than a rule: the connection cannot be created.
 
 ## Open points
 
-The S3 read from private subnets goes through the NAT gateway (VAL-070 stays quiet because egress is `via_nat`). A gateway
-VPC endpoint would avoid the NAT data charge; endpoints are Tier 2 (see D-029).
+S3 traffic from `app` takes the endpoint route, not the NAT gateway, so it costs no NAT data charge; other traffic (package
+updates, external APIs) still uses the NAT gateway. The endpoint policy is the default full access, which SEC-043 reports
+as an info finding (D-029).

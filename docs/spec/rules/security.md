@@ -1,7 +1,7 @@
 # Security rules
 
 Rules about whether a design is safe, not whether it deploys. Severity scale is in
-[../00-conventions.md](../00-conventions.md). This file covers the networking group (SEC-001 to 005), the compute and container group (SEC-006 to 011) and the storage and database group (SEC-012 to 023) and the delivery and certificate group (SEC-024 to 034) and the IAM group (SEC-035 to 042).
+[../00-conventions.md](../00-conventions.md). This file covers the networking group (SEC-001 to 005), the compute and container group (SEC-006 to 011) and the storage and database group (SEC-012 to 023) and the delivery and certificate group (SEC-024 to 034) and the IAM group (SEC-035 to 042) and the S3 gateway endpoint group (SEC-043 to 044).
 
 Source aliases: AWS-SG https://docs.aws.amazon.com/vpc/latest/userguide/vpc-security-groups.html,
 AWS-DEFSG https://docs.aws.amazon.com/vpc/latest/userguide/default-security-group.html.
@@ -392,4 +392,22 @@ AWS-DEFSG https://docs.aws.amazon.com/vpc/latest/userguide/default-security-grou
   fix: { vi: "Bỏ các quyền IAM khỏi role của ứng dụng.", en: "Remove IAM permissions from application roles." }
   source: https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-service.html
   status: verified            # the escalation risk of creating roles and attaching policies is stated; PassRole risk from the PassRole page
+
+- id: SEC-043
+  severity: info
+  applies_to: [vpc-endpoint-s3]
+  check: "a gateway endpoint for S3 has no policy, or the default full-access policy"
+  message: { vi: "Endpoint S3 đang cho phép mọi thao tác trên mọi bucket.", en: "The S3 endpoint allows every action on every bucket." }
+  fix: { vi: "Giới hạn theo bucket, tài khoản (s3:ResourceAccount) hoặc role (aws:PrincipalArn).", en: "Limit by bucket, by account (s3:ResourceAccount) or by role (aws:PrincipalArn)." }
+  source: https://docs.aws.amazon.com/vpc/latest/privatelink/vpc-endpoints-s3.html
+  status: verified
+
+- id: SEC-044
+  severity: warning
+  applies_to: [vpc-endpoint-s3, s3, iam-policy]
+  check: "a bucket policy or identity policy statement uses the aws:SourceIp condition key and the bucket is reached from a VPC that has an S3 gateway endpoint"
+  message: { vi: "aws:SourceIp không áp dụng cho request đi qua VPC endpoint.", en: "aws:SourceIp does not apply to requests that go through a VPC endpoint." }
+  fix: { vi: "Dùng aws:VpcSourceIp, aws:SourceVpc hoặc aws:SourceVpce.", en: "Use aws:VpcSourceIp, aws:SourceVpc or aws:SourceVpce." }
+  source: https://docs.aws.amazon.com/vpc/latest/privatelink/vpc-endpoints-s3.html
+  status: verified
 ```

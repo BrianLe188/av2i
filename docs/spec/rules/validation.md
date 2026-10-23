@@ -1,7 +1,7 @@
 # Validation rules
 
 Rules about whether a design can be deployed. Format and severity scale are in
-[../00-conventions.md](../00-conventions.md). This file covers the networking group (VAL-001 to 028), the compute and container group (VAL-029 to 049) and the storage and database group (VAL-050 to 070) and the delivery and certificate group (VAL-071 to 102) and the IAM group (VAL-103 to 121).
+[../00-conventions.md](../00-conventions.md). This file covers the networking group (VAL-001 to 028), the compute and container group (VAL-029 to 049) and the storage and database group (VAL-050 to 070) and the delivery and certificate group (VAL-071 to 102) and the IAM group (VAL-103 to 121) and the S3 gateway endpoint group (VAL-122 to 127).
 Rules for the other groups are added when their services are written, continuing the numbering.
 
 Source aliases used below:
@@ -645,14 +645,12 @@ Source aliases used below:
 
 - id: VAL-070
   severity: warning
-  applies_to: [s3, egress-path, grant]
-  check: "a workload that uses an S3 bucket and is in a private subnet has internet_egress = true, or a gateway VPC endpoint for S3 is attached to its route table"
-  message: { vi: "Workload ở subnet private không có đường tới S3 (cần NAT Gateway hoặc VPC endpoint).", en: "The workload in a private subnet has no path to S3 (needs a NAT gateway or a VPC endpoint)." }
-  fix: { vi: "Thêm NAT Gateway hoặc VPC endpoint cho S3.", en: "Add a NAT gateway or an S3 VPC endpoint." }
-  source: https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc-internet.html
-  status: verified            # S3 is a public endpoint and the gateway endpoint exists; the endpoint itself is a Tier 2 service and is not modelled yet
-
-# Delivery and certificates
+  applies_to: [s3, egress-path, grant, vpc-endpoint-s3]
+  check: "a workload that uses an S3 bucket and is in a private subnet has internet_egress = true, or the route table of its subnet is associated with a gateway endpoint for S3 in the Region of the bucket (s3_path = true)"
+  message: { vi: "Workload ở subnet private không có đường tới S3 (cần NAT Gateway hoặc VPC Gateway Endpoint cho S3).", en: "The workload in a private subnet has no path to S3 (needs a NAT gateway or an S3 gateway endpoint)." }
+  fix: { vi: "Thêm VPC Gateway Endpoint cho S3 và gắn vào route table của subnet, hoặc thêm NAT Gateway.", en: "Add an S3 gateway endpoint and associate it with the subnet's route table, or add a NAT gateway." }
+  source: https://docs.aws.amazon.com/vpc/latest/privatelink/gateway-endpoints.html
+  status: verified            # the endpoint is a Tier 1 service since decision D-029
 
 - id: VAL-071
   severity: error
@@ -1113,5 +1111,59 @@ Source aliases used below:
   message: { vi: "Vượt giới hạn IAM của tài khoản.", en: "An account IAM limit is exceeded." }
   fix: { vi: "Giảm số lượng hoặc nâng quota.", en: "Reduce the count or raise the quota." }
   source: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_iam-quotas.html
+  status: verified
+
+- id: VAL-122
+  severity: error
+  applies_to: [vpc-endpoint-s3, route]
+  check: "a route table associated with a gateway endpoint for S3 is in the same VPC as the endpoint and is associated with no other gateway endpoint for S3"
+  message: { vi: "Route table chỉ gắn được một Gateway Endpoint S3 và phải cùng VPC với endpoint.", en: "A route table can have only one S3 gateway endpoint and must be in the endpoint's VPC." }
+  fix: { vi: "Gắn route table vào đúng một endpoint S3 của VPC đó.", en: "Associate the route table with exactly one S3 endpoint of that VPC." }
+  source: https://docs.aws.amazon.com/vpc/latest/privatelink/gateway-endpoints.html
+  status: verified
+
+- id: VAL-123
+  severity: error
+  applies_to: [vpc-endpoint-s3]
+  check: "the endpoint's service_name is com.amazonaws.<region>.s3 with <region> equal to the Region of the design, and its type is Gateway"
+  message: { vi: "Gateway Endpoint S3 chỉ phục vụ S3 trong cùng Region.", en: "An S3 gateway endpoint serves S3 in its own Region only." }
+  fix: { vi: "Tạo endpoint trong Region của bucket.", en: "Create the endpoint in the bucket's Region." }
+  source: https://docs.aws.amazon.com/vpc/latest/privatelink/vpc-endpoints-s3.html
+  status: verified
+
+- id: VAL-124
+  severity: warning
+  applies_to: [vpc-endpoint-s3, vpc]
+  check: "a VPC with a gateway endpoint for S3 has enable_dns_support and enable_dns_hostnames both true"
+  message: { vi: "VPC có endpoint S3 nên bật cả DNS resolution và DNS hostnames.", en: "A VPC with an S3 endpoint should have both DNS resolution and DNS hostnames enabled." }
+  fix: { vi: "Bật enable_dns_support và enable_dns_hostnames.", en: "Set enable_dns_support and enable_dns_hostnames to true." }
+  source: https://docs.aws.amazon.com/vpc/latest/privatelink/vpc-endpoints-s3.html
+  status: verified            # the page says both must be enabled with Amazon DNS; the exact failure is not described
+
+- id: VAL-125
+  severity: error
+  applies_to: [vpc-endpoint-s3, iam-policy]
+  check: "an endpoint policy is a policy document with a Principal element equal to \"*\" (principals are limited through the aws:PrincipalArn condition) and at most 20,480 characters"
+  message: { vi: "Policy của endpoint phải có Principal là \"*\" và không quá 20.480 ký tự.", en: "An endpoint policy needs Principal \"*\" and at most 20,480 characters." }
+  fix: { vi: "Dùng điều kiện aws:PrincipalArn để giới hạn principal.", en: "Use the aws:PrincipalArn condition to limit principals." }
+  source: https://docs.aws.amazon.com/vpc/latest/privatelink/vpc-endpoints-access.html
+  status: verified
+
+- id: VAL-126
+  severity: warning
+  applies_to: [vpc-endpoint-s3, s3, egress-path]
+  check: "a workload that uses a bucket in a Region other than the Region of its VPC has internet_egress = true, because a gateway endpoint does not carry traffic to another Region"
+  message: { vi: "Bucket ở Region khác không đi qua Gateway Endpoint; workload cần NAT Gateway hoặc IP công khai.", en: "A bucket in another Region is not reached through the gateway endpoint; the workload needs a NAT gateway or a public address." }
+  fix: { vi: "Đặt bucket cùng Region hoặc thêm đường ra Internet.", en: "Put the bucket in the same Region or add an internet path." }
+  source: https://docs.aws.amazon.com/vpc/latest/privatelink/gateway-endpoints.html
+  status: verified
+
+- id: VAL-127
+  severity: warning
+  applies_to: [vpc-endpoint-s3, security-group, sg-attach]
+  check: "when the security groups of a workload restrict outbound traffic and its route table is associated with an S3 gateway endpoint, they allow tcp 443 to the S3 prefix list (or to 0.0.0.0/0); the platform emits that egress rule"
+  message: { vi: "Security Group chặn outbound nên workload không tới được S3 qua endpoint.", en: "Outbound rules block the workload from reaching S3 through the endpoint." }
+  fix: { vi: "Cho phép tcp 443 tới prefix list của S3.", en: "Allow tcp 443 to the S3 prefix list." }
+  source: https://docs.aws.amazon.com/vpc/latest/privatelink/gateway-endpoints.html
   status: verified
 ```

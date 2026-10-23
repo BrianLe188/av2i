@@ -1,7 +1,7 @@
 # Terraform pitfalls
 
 Behaviours of the AWS provider and Terraform/OpenTofu that the platform must design around. This file covers
-networking (P-001 to P-017), compute and containers (P-018 to P-034) and storage and databases (P-035 to P-044) and delivery and certificates (P-045 to P-059) and IAM (P-060 to P-069). Each entry says what happens, why it matters, and what the generator must do.
+networking (P-001 to P-017), compute and containers (P-018 to P-034) and storage and databases (P-035 to P-044) and delivery and certificates (P-045 to P-059) and IAM (P-060 to P-069) and the S3 gateway endpoint (P-070 to P-074). Each entry says what happens, why it matters, and what the generator must do.
 
 Sources: provider documentation under
 https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/docs/r/ for `vpc`, `subnet`,
@@ -79,3 +79,8 @@ https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/main/website/
 | P-067 | Trust policy source | The `assume_role_policy` argument cannot be an `aws_iam_policy` resource | Use `jsonencode` or the data source | verified |
 | P-068 | IAM propagation | A role or profile just created may not be usable by the next resource immediately (eventual consistency) | Reference the role ARN so the order is right; allow a retry on creation errors | verified for instance profiles (S7 of iam-role); general for roles, `unverified` |
 | P-069 | Merged policy documents | In `aws_iam_policy_document`, statements without a non-blank `sid` cannot be overridden; `source_policy_documents` need unique sids; `override_policy_documents` replace matching sids; `"Principal": "*"` and `{"AWS": "*"}` differ | Give every generated statement a `sid` derived from the relation; use `type = "*"` or `"AWS"` deliberately | verified |
+| P-070 | S3 endpoint route table style | `aws_vpc_endpoint.route_table_ids` and `aws_vpc_endpoint_route_table_association` managing the same association conflict and overwrite each other | Emit one association resource per route table; never set `route_table_ids` on the endpoint | verified |
+| P-071 | Endpoint route is not an `aws_route` | The route to the S3 prefix list is added by AWS when a table is associated; it can be viewed but not modified or deleted by hand | Never emit `aws_route` for an endpoint; never import the route. How the route shows in `aws_route_table` state is unverified | verified |
+| P-072 | Gateway endpoint policy principal | The `Principal` must be `*`; `"AWS": "<account id>"` grants the account root user only | Use `aws:PrincipalArn` or `aws:PrincipalAccount` conditions | verified |
+| P-073 | Endpoint arguments that replace it | The provider page names only `private_dns_enabled` as forcing replacement for a non-Interface endpoint; whether `service_name`, `vpc_id` and `vpc_endpoint_type` force replacement is not stated | Never set `private_dns_enabled` on a gateway endpoint; treat the other three as replacing | verified for `private_dns_enabled`, unverified for the rest |
+| P-074 | Switching routes breaks connections | Creating or changing an endpoint changes routes and drops open TCP connections to S3; they do not resume | Warn that an apply may interrupt running transfers | verified |
