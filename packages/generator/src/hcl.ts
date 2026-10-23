@@ -1,5 +1,14 @@
 /** A Terraform expression: a literal, a list, a map, or a raw reference such as `aws_vpc.main.id`. */
-export type Expr = string | number | boolean | Expr[] | { [key: string]: Expr } | Ref;
+export type Expr = string | number | boolean | Expr[] | { [key: string]: Expr } | Ref | Call;
+
+/** A function call with one argument, such as `jsonencode({ ... })`. */
+export interface Call {
+  call: string;
+  arg: Expr;
+}
+
+export const call = (name: string, arg: Expr): Call => ({ call: name, arg });
+const isCall = (e: Expr): e is Call => typeof e === "object" && e !== null && !Array.isArray(e) && "call" in e && typeof (e as Call).call === "string" && "arg" in e && Object.keys(e).length === 2;
 
 export interface Ref {
   ref: string;
@@ -33,6 +42,7 @@ const key = (k: string) => (IDENT.test(k) ? k : quote(k));
 
 function inline(e: Expr): string | null {
   if (isRef(e)) return e.ref;
+  if (isCall(e)) { const a = inline(e.arg); return a === null ? null : `${e.call}(${a})`; }
   if (typeof e === "string") return quote(e);
   if (typeof e === "number" || typeof e === "boolean") return String(e);
   if (Array.isArray(e)) {
@@ -46,16 +56,25 @@ function inline(e: Expr): string | null {
 function valueLines(e: Expr, indent: string): string[] {
   const one = inline(e);
   if (one !== null) return [one];
+  if (isCall(e)) {
+    const l = valueLines(e.arg, indent);
+    return [`${e.call}(${l[0]}`, ...l.slice(1, -1), `${l[l.length - 1]})`];
+  }
   if (Array.isArray(e)) {
     return ["[", ...e.flatMap((x) => { const l = valueLines(x, indent + "  "); return [`${indent}  ${l[0]}`, ...l.slice(1)].map((s, i, a) => (i === a.length - 1 && !s.endsWith(",") ? s + "," : s)); }), `${indent}]`];
   }
   const obj = e as { [key: string]: Expr };
   const entries = Object.entries(obj);
-  const width = Math.max(...entries.map(([k]) => key(k).length));
+  const rendered = entries.map(([k, v]) => ({ k: key(k), l: valueLines(v, indent + "  ") }));
+  // `tofu fmt` aligns the `=` of consecutive single-line entries only; a multi-line entry stands alone
   const lines = ["{"];
-  for (const [k, v] of entries) {
-    const l = valueLines(v, indent + "  ");
-    lines.push(`${indent}  ${key(k).padEnd(width)} = ${l[0]}`, ...l.slice(1));
+  for (let i = 0; i < rendered.length; ) {
+    let j = i;
+    if (rendered[i]!.l.length === 1) while (j < rendered.length && rendered[j]!.l.length === 1) j++;
+    else j = i + 1;
+    const width = Math.max(...rendered.slice(i, j).map((r) => r.k.length));
+    for (const r of rendered.slice(i, j)) lines.push(`${indent}  ${r.k.padEnd(width)} = ${r.l[0]}`, ...r.l.slice(1));
+    i = j;
   }
   lines.push(`${indent}}`);
   return lines;

@@ -15,7 +15,7 @@ design:
     - { key: nat_a, label: "NAT A", service: nat-gateway, parent: pub_a, props: { availability_mode: zonal, connectivity_type: public } }
     - { key: rt_public, label: "Public routes", service: route-table, parent: vpc, props: {} }
     - { key: rt_app, label: "App routes", service: route-table, parent: vpc, props: {} }
-    - { key: s3ep, label: "S3 endpoint", service: vpc-endpoint-s3, parent: vpc, props: {} }
+    - { key: s3ep, label: "S3 endpoint", service: vpc-endpoint-s3, parent: vpc, props: { policy: { Version: "2012-10-17", Statement: [{ Effect: Allow, Principal: "*", Action: ["s3:GetObject"], Resource: ["arn:aws:s3:::example-bucket/*"] }] } } }
     - key: sg_app
       label: "app-sg"
       service: security-group
@@ -75,7 +75,12 @@ variants:
   - { id: eip-idle, change: "an Elastic IP attached to nothing", patch: [{ op: add-node, node: { key: eip_idle, label: "Idle", service: elastic-ip, props: {} } }], fires: [VAL-128], severity: warning }
   - { id: eip-on-private-instance, change: "an Elastic IP on the instance in the private subnet", patch: [{ op: add-node, node: { key: eip_app, label: "App IP", service: elastic-ip, props: {} } }, { op: add-edge, edge: { id: e_eip_app, mechanism: eip-attach, from: eip_app, to: app } }], fires: [VAL-031], severity: warning }
   - { id: dns-hostnames-off, change: "DNS hostnames off with an S3 endpoint", patch: [{ op: set, node: vpc, path: props.enable_dns_hostnames, value: false }], fires: [VAL-124], severity: warning }
-  - { id: two-s3-endpoints-one-table, change: "a second S3 endpoint on the same route table", patch: [{ op: add-node, node: { key: s3ep2, label: "Second endpoint", service: vpc-endpoint-s3, parent: vpc, props: {} } }, { op: add-edge, edge: { id: e_s3_2, mechanism: route, from: rt_app, to: s3ep2 } }], fires: [VAL-122], severity: error }
+  - { id: s3-endpoint-full-access, change: "the S3 endpoint has no policy", patch: [{ op: unset, node: s3ep, path: props.policy }], fires: [SEC-043], severity: info }
+  - { id: s3-endpoint-other-region, change: "the endpoint names the service of another Region", patch: [{ op: set, node: s3ep, path: props.service_name, value: "com.amazonaws.us-east-1.s3" }], fires: [VAL-123], severity: error }
+  - { id: sg-name-sg-prefix, change: "the security group name starts with sg-", patch: [{ op: set, node: sg_app, path: props.name, value: sg-app }], fires: [VAL-018], severity: error }
+  - { id: sg-description-empty, change: "the security group description is empty", patch: [{ op: set, node: sg_app, path: props.description, value: "" }], fires: [VAL-020], severity: error }
+  - { id: sg-name-duplicate, change: "a second group with the same name in another case", patch: [{ op: add-node, node: { key: sg_dup, label: "Dup", service: security-group, parent: vpc, props: { name: APP-SG, description: "Duplicate" } } }], fires: [VAL-019], severity: error }
+  - { id: two-s3-endpoints-one-table, change: "a second S3 endpoint on the same route table", patch: [{ op: add-node, node: { key: s3ep2, label: "Second endpoint", service: vpc-endpoint-s3, parent: vpc, props: { policy: { Version: "2012-10-17", Statement: [{ Effect: Allow, Principal: "*", Action: ["s3:GetObject"], Resource: ["arn:aws:s3:::example-bucket/*"] }] } } } }, { op: add-edge, edge: { id: e_s3_2, mechanism: route, from: rt_app, to: s3ep2 } }], fires: [VAL-122], severity: error }
 ---
 
 # EC2 in a VPC

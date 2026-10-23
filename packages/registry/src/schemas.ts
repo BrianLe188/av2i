@@ -192,7 +192,11 @@ const cases: Schema = {
           cases: {
             type: "array",
             minItems: 1,
-            items: { type: "object", required: ["name", "in", "fires"], properties: { name: { type: "string" }, fires: { type: "boolean" } } },
+            items: {
+              type: "object",
+              required: ["name", "in", "fires"],
+              properties: { name: { type: "string" }, fires: { type: "boolean" }, base: { type: "string" }, patch: { type: "array" }, unrepresentable: { type: "string" } },
+            },
           },
         },
       },

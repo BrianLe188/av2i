@@ -15,7 +15,7 @@ export interface Registry {
   mechanisms: Record<string, Record<string, any>>;
   matrix: { services: string[]; pairs: { from: string; to: string; value: string; mechanism: string; note: string }[] };
   rules: Record<string, Record<string, any>>;
-  cases: { rule: string; cases: { name: string; in: unknown; fires: boolean }[] }[];
+  cases: { rule: string; cases: { name: string; in: unknown; fires: boolean; base?: string; patch?: unknown[]; unrepresentable?: string }[] }[];
   scenarios: Record<string, Record<string, any>>;
   glossary: { term: string; vi: string; en: string; see: string }[];
   decisions: Record<string, { status: string; title: string }>;

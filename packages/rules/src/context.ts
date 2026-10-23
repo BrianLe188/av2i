@@ -7,7 +7,7 @@ export interface Ctx {
   g: Graph;
   facts: Facts;
   region: string;
-  limits: { eipsPerRegion: number; eipsPerNat: number; securityGroupsPerInterface: number };
+  limits: { eipsPerRegion: number; eipsPerNat: number; securityGroupsPerInterface: number; rulesPerDirection: number };
 }
 
 /** What a rule reports: the nodes (and edges) to highlight. Severity, message and fix come from the registry. */
@@ -19,7 +19,7 @@ export type RuleImpl = (ctx: Ctx) => Hit[];
 
 export function makeContext(nd: NormalizedDesign): Ctx {
   const g = new Graph(nd);
-  return { g, facts: computeFacts(g), region: nd.settings.region, limits: { eipsPerRegion: 5, eipsPerNat: 2, securityGroupsPerInterface: 5 } };
+  return { g, facts: computeFacts(g), region: nd.settings.region, limits: { eipsPerRegion: 5, eipsPerNat: 2, securityGroupsPerInterface: 5, rulesPerDirection: 60 } };
 }
 
 export const hit = (...targets: string[]): Hit => ({ targets });

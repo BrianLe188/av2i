@@ -71,7 +71,23 @@
       "label": "S3 endpoint",
       "service": "vpc-endpoint-s3",
       "parent": "vpc",
-      "props": {}
+      "props": {
+        "policy": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": "*",
+              "Action": [
+                "s3:GetObject"
+              ],
+              "Resource": [
+                "arn:aws:s3:::example-bucket/*"
+              ]
+            }
+          ]
+        }
+      }
     },
     {
       "key": "sg_app",

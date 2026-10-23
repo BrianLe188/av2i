@@ -109,6 +109,18 @@ resource "aws_vpc_endpoint" "s3ep" {
   service_name      = "com.amazonaws.ap-southeast-1.s3"
   vpc_endpoint_type = "Gateway"
 
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = ["s3:GetObject"]
+        Resource  = ["arn:aws:s3:::example-bucket/*"]
+      },
+    ]
+  })
+
   tags = {
     Name = "S3 endpoint"
   }

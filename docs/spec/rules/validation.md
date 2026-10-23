@@ -299,7 +299,7 @@ Source aliases used below:
 - id: VAL-030
   severity: error
   applies_to: [ec2]
-  check: "an EC2 instance has ami, instance_type and exactly one subnet, and the subnet is in the same VPC as its security groups"
+  check: "an EC2 instance has ami, instance_type and exactly one subnet (security groups in another VPC are VAL-027)"
   message: { vi: "EC2 cần AMI, loại instance và đúng một subnet.", en: "An EC2 instance needs an AMI, an instance type and exactly one subnet." }
   fix: { vi: "Điền đủ ba thông tin và đặt vào một subnet.", en: "Fill in all three and place it in one subnet." }
   source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/instance.html.markdown

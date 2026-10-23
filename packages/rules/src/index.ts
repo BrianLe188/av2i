@@ -6,6 +6,7 @@ import * as network from "./network.ts";
 import * as securitygroup from "./securitygroup.ts";
 import * as compute from "./compute.ts";
 import * as elasticip from "./elasticip.ts";
+import * as sgmeta from "./sgmeta.ts";
 
 export type { Ctx, Hit, RuleImpl } from "./context.ts";
 
@@ -16,7 +17,7 @@ function collect(...modules: Record<string, unknown>[]): Partial<Record<RuleId, 
   return out as Partial<Record<RuleId, RuleImpl>>;
 }
 
-export const implementations = collect(network, securitygroup, compute, elasticip);
+export const implementations = collect(network, securitygroup, sgmeta, compute, elasticip);
 
 export function runRules(design: Design, registry: Registry): Finding[] {
   const ctx = makeContext(normalize(design));

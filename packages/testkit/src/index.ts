@@ -34,3 +34,18 @@ export function structuralProblems(design: Design): string[] {
 }
 
 export { applyPatch };
+
+export interface ExecutableCase {
+  rule: string;
+  name: string;
+  fires: boolean;
+  base: string;
+  patch: PatchOp[];
+}
+
+/** Cases of rules/cases.md that carry a patch, with the base design they patch. */
+export function executableCases(): ExecutableCase[] {
+  return getRegistry().cases.flatMap((g) =>
+    g.cases.filter((c) => c.patch).map((c) => ({ rule: g.rule, name: c.name, fires: c.fires, base: c.base ?? "ec2-in-vpc", patch: c.patch as PatchOp[] })),
+  );
+}

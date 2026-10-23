@@ -1,6 +1,6 @@
 import { effectiveEgress, Graph, ingressRules, normalize, type SgRule } from "@av2i/engine";
 import type { Design, NormalizedNode, Value } from "@av2i/model";
-import { ref, type Block, type Expr } from "./hcl.ts";
+import { call, ref, type Block, type Expr } from "./hcl.ts";
 
 export type FileName = "network.tf" | "security.tf" | "compute.tf";
 
@@ -94,7 +94,7 @@ export function plan(design: Design): PlannedResource[] {
   }
   for (const n of nd.nodes.filter((x) => x.service === "vpc-endpoint-s3")) {
     const vpc = g.vpcOf(n.key)!;
-    add("network.tf", resource("aws_vpc_endpoint", n.key, [["vpc_id", ref(`aws_vpc.${vpc.key}.id`)], ["service_name", `com.amazonaws.${nd.settings.region}.s3`], ["vpc_endpoint_type", "Gateway"], tags(n)]), n.key);
+    add("network.tf", resource("aws_vpc_endpoint", n.key, [["vpc_id", ref(`aws_vpc.${vpc.key}.id`)], ["service_name", `com.amazonaws.${nd.settings.region}.s3`], ["vpc_endpoint_type", "Gateway"], ...(n.props.policy ? ([["policy", call("jsonencode", (typeof n.props.policy === "string" ? JSON.parse(n.props.policy) : n.props.policy) as Expr)]] as [string, Expr][]) : []), tags(n)]), n.key);
   }
 
   const peerArgs = (r: SgRule): [string, Expr][] => {
