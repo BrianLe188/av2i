@@ -7,7 +7,8 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "spec:check": "pnpm --filter @av2i/registry check",
-    "spec:build": "pnpm --filter @av2i/registry build"
+    "spec:build": "pnpm --filter @av2i/registry build",
+    "studio": "pnpm --filter @av2i/studio dev"
   },
   "devDependencies": {
     "@types/node": "^26.0.0",

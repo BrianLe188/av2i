@@ -99,7 +99,7 @@ Terraform state means destroy and create, or a `moved` block).
 | M3 | containers, storage and database | [container-service](../spec/scenarios/container-service.md) generates and validates |
 | M4 | delivery: ALB, Route 53, ACM, CloudFront | [static-site-cdn](../spec/scenarios/static-site-cdn.md) and [three-tier-web](../spec/scenarios/three-tier-web.md) |
 | M5 | IAM, required roles, grants, deployer policy | [serverless-api](../spec/scenarios/serverless-api.md) and every grant case |
-| M6 | web canvas on the engine | interface design phase |
+| M6 | web canvas on the engine | [ui.md](ui.md). **First version done** in `apps/studio` (React, Vite, React Flow; `pnpm studio`): palette, canvas with nesting and connections checked against the matrix, inspector forms from the registry, live problems, Terraform and resource tabs, templates with variants, zip and JSON export, undo and redo, VI and EN. Nine services only |
 
 IAM is not last because it is least important; M1 to M4 use only the roles the scenarios need, hard-wired through the
 assume-role registry until M5 generalizes them.

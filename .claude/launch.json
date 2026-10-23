@@ -1,7 +1,6 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "api", "runtimeExecutable": "npm", "runtimeArgs": ["run", "start", "-w", "@av2i/api"], "port": 3000 },
-    { "name": "web", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev", "-w", "@av2i/web"], "port": 5173 }
+    { "name": "studio", "runtimeExecutable": "npx", "runtimeArgs": ["-y", "pnpm@12.15.0", "--filter", "@av2i/studio", "dev"], "port": 5173 }
   ]
 }
