@@ -1,64 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Background, ConnectionMode, Controls, Handle, MiniMap, NodeResizer, Panel, Position, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useReactFlow,
-  type Connection, type Node as RFNode, type NodeProps,
+  Background, BackgroundVariant, ConnectionMode, Controls, MiniMap, Panel, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useReactFlow,
+  type Connection, type Node as RFNode,
 } from "@xyflow/react";
 import type { Design } from "@av2i/model";
 import { cn } from "@/lib/utils";
 import { paletteItem, reg } from "../registry.ts";
 import { colorOf } from "../logic/colors.ts";
 import type { Analysis } from "../logic/analyze.ts";
-import { addEdge, removeEdges, removeNodes, subtree, updateNode } from "../logic/design.ts";
-import { buildFlow, type EdgeData, type NodeData, type Rect, type ResizeHandlers, type Selection } from "../logic/flow.ts";
+import { addEdge, addNode, removeEdges, removeNodes, subtree, updateNode } from "../logic/design.ts";
+import { buildFlow, type EdgeData, type NodeData, type NodeActions, type Rect, type ResizeHandlers, type Selection } from "../logic/flow.ts";
 import { absolute, containerAt, LEAF, sizeOf } from "../logic/layout.ts";
 import { canPlace, connect } from "../logic/placement.ts";
 import type { Lang, Strings } from "../i18n.ts";
 import { DRAG_TYPE } from "./Palette.tsx";
 import { LinkEdge } from "./LinkEdge.tsx";
+import { ResourceNode } from "./ResourceNode.tsx";
 import { EDGE_GROUPS, groupColor, type EdgeGroup } from "../logic/edges.ts";
 import { Eye, EyeOff } from "lucide-react";
-
-function ResourceNode({ id, data, selected }: NodeProps<RFNode<NodeData>>) {
-  const color = colorOf(data.service);
-  const sev = data.severity === "error" ? "bg-destructive" : data.severity === "warning" ? "bg-warning" : "bg-info";
-  return (
-    <div
-      className={cn(
-        "group relative h-full w-full rounded-lg border-[1.5px] px-2.5 py-1.5 text-xs",
-        data.container ? "bg-transparent" : "h-14 w-[150px] border-l-[5px] bg-card",
-        data.generated && "border-dashed opacity-60",
-        data.focused && "ring-[3px] ring-ring/60",
-      )}
-      style={{ borderColor: color, ...(data.container ? { background: `color-mix(in srgb, ${color} 7%, transparent)` } : {}) }}
-      data-svc={data.service}
-      data-testid={`node-${data.label}`}
-    >
-      {data.container && data.fit && data.resize && (
-        <NodeResizer
-          isVisible={selected}
-          minWidth={data.fit.w}
-          minHeight={data.fit.h}
-          color={color}
-          handleStyle={{ width: 10, height: 10, borderRadius: 3, background: "var(--background)", border: `2px solid ${color}` }}
-          lineStyle={{ borderColor: color, opacity: 0.6 }}
-          shouldResize={(_, p) => data.resize!.allowed(id, p)}
-          onResizeEnd={(_, p) => data.resize!.commit(id, p)}
-        />
-      )}
-      <Handle type="source" position={Position.Left} id="l" />
-      <Handle type="source" position={Position.Top} id="t" />
-      <Handle type="source" position={Position.Bottom} id="b" />
-      <div className={cn("flex items-center gap-1.5", data.container && "absolute inset-x-2.5 top-1.5")}>
-        <span className="truncate font-semibold">{data.label}</span>
-        {data.severity && <span className={cn("ml-auto size-2.5 flex-none rounded-full", sev)} title={data.severity} />}
-      </div>
-      {!data.container && (
-        <div className="truncate text-[11px] text-muted-foreground">{data.serviceTitle.replace(/ \(.*$/, "")}{data.detail ? ` · ${data.detail}` : ""}</div>
-      )}
-      <Handle type="source" position={Position.Right} id="r" />
-    </div>
-  );
-}
 
 const nodeTypes = { resource: ResourceNode };
 const edgeTypes = { link: LinkEdge };
@@ -143,14 +102,33 @@ function Flow({ design, analysis, selection, focus, lang, s, loadId, dark, onSel
     };
   }, [design, onEdit]);
 
+  const actions = useMemo<NodeActions>(() => ({
+    duplicate: (key) => {
+      const src = design.nodes.find((n) => n.key === key);
+      if (!src) return;
+      const at = src.position ? { x: src.position.x + 24, y: src.position.y + 24 } : undefined;
+      const r = addNode(reg, design, src.service, src.parent ?? null, at, JSON.parse(JSON.stringify(src.props)));
+      onEdit(() => r.design);
+      onSelect({ kind: "node", id: r.key });
+    },
+    remove: (key) => { onEdit((d) => removeNodes(d, [key])); onSelect(null); },
+  }), [design, onEdit, onSelect]);
+
+  const [connectFrom, setConnectFrom] = useState<string | null>(null);
+
   useEffect(() => {
     setNodes((prev) => flow.nodes.map((n) => ({
       ...n,
-      ...(n.data.container ? { data: { ...n.data, resize } } : {}),
+      data: {
+        ...n.data,
+        ...(n.data.container ? { resize } : {}),
+        ...(n.data.generated ? {} : { actions }),
+        ...(connectFrom && connectFrom !== n.id ? { connect: connect(reg, design, connectFrom, n.id).ok ? "valid" as const : "invalid" as const } : {}),
+      },
       measured: prev.find((p) => p.id === n.id)?.measured,
     })));
     setEdges(flow.edges);
-  }, [flow, resize, resync, setNodes, setEdges]);
+  }, [flow, resize, actions, connectFrom, design, resync, setNodes, setEdges]);
 
   const refuse = useCallback((what: string, reason: { vi: string; en: string }) => {
     onToast(`${what}: ${reason[lang]}`);
@@ -214,6 +192,8 @@ function Flow({ design, analysis, selection, focus, lang, s, loadId, dark, onSel
         onPaneClick={() => onSelect(null)}
         onNodeDragStop={onDragStop}
         onConnect={onConnect}
+        onConnectStart={(_, p) => setConnectFrom(p.nodeId)}
+        onConnectEnd={() => setConnectFrom(null)}
         isValidConnection={isValidConnection}
         onNodesDelete={(ns) => onEdit((d) => removeNodes(d, ns.map((n) => n.id)))}
         onEdgesDelete={(es) => onEdit((d) => removeEdges(d, es.map((e) => e.id)))}
@@ -224,12 +204,12 @@ function Flow({ design, analysis, selection, focus, lang, s, loadId, dark, onSel
         deleteKeyCode={["Backspace", "Delete"]}
         proOptions={{ hideAttribution: true }}
       >
-        <Background gap={20} />
+        <Background variant={BackgroundVariant.Dots} gap={22} size={1.4} />
         <Panel position="top-right" className="!m-2">
           <Legend s={s} hidden={hidden} toggle={toggle} />
         </Panel>
         <Controls showInteractive={false} />
-        <MiniMap pannable zoomable style={{ width: 150, height: 96 }} nodeColor="#8a96a8" maskColor="rgba(120,130,150,0.15)" />
+        <MiniMap pannable zoomable style={{ width: 150, height: 96 }} nodeColor={(n) => { const d = n.data as NodeData; return d.container ? `${colorOf(d.service)}33` : colorOf(d.service); }} nodeStrokeWidth={0} maskColor="rgba(120,130,150,0.15)" />
       </ReactFlow>
     </div>
   );

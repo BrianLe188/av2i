@@ -1,6 +1,7 @@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { PALETTE, reg } from "../registry.ts";
 import { colorOf } from "../logic/colors.ts";
+import { iconOf } from "../logic/icons.ts";
 import { title } from "../logic/placement.ts";
 import type { Lang, Strings } from "../i18n.ts";
 
@@ -15,7 +16,10 @@ export function Palette({ lang, s, onAdd }: { lang: Lang; s: Strings; onAdd: (se
       </div>
       <ScrollArea className="min-h-0 flex-1">
         <ul className="flex flex-col gap-1.5 px-3 pb-3">
-          {PALETTE.map(({ id, service, title: own }) => (
+          {PALETTE.map(({ id, service, title: own }) => {
+            const Icon = iconOf(service);
+            const color = colorOf(service);
+            return (
             <li key={id}>
               <button
                 type="button"
@@ -26,11 +30,14 @@ export function Palette({ lang, s, onAdd }: { lang: Lang; s: Strings; onAdd: (se
                 onDragStart={(e) => { e.dataTransfer.setData(DRAG_TYPE, id); e.dataTransfer.effectAllowed = "copy"; }}
                 onClick={() => onAdd(id)}
               >
-                <span className="size-2.5 flex-none rounded-[3px]" style={{ background: colorOf(service) }} />
+                <span className="flex size-6 flex-none items-center justify-center rounded-md" style={{ background: `color-mix(in srgb, ${color} 18%, transparent)`, color }}>
+                  <Icon className="size-3.5" strokeWidth={1.8} />
+                </span>
                 {own ? own[lang] : title(reg, service, lang)}
               </button>
             </li>
-          ))}
+            );
+          })}
         </ul>
       </ScrollArea>
     </aside>

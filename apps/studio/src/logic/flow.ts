@@ -3,6 +3,7 @@ import type { Design, Finding, Node as DNode } from "@av2i/model";
 import type { Edge as RFEdge, Node as RFNode } from "@xyflow/react";
 import type { Analysis } from "./analyze.ts";
 import { worstByNode } from "./analyze.ts";
+import { Graph, computeFacts } from "@av2i/engine";
 import { absolute, fitOf, isContainer, LEAF, sizeOf } from "./layout.ts";
 import { DRAWN, title } from "./placement.ts";
 import { groupOf, type EdgeGroup } from "./edges.ts";
@@ -20,6 +21,25 @@ export interface NodeData extends Record<string, unknown> {
   /** containers only: smallest size that still holds the children */
   fit?: { w: number; h: number };
   resize?: ResizeHandlers;
+  /** nesting depth of a container, so inner ones tint deeper */
+  depth: number;
+  /** subnets only: whether its route table sends traffic to an internet gateway */
+  subnetKind?: "public" | "private";
+  /** findings that point at this node: how many and which rules */
+  issues: { count: number; rules: string[] };
+  /** short tag shown on nodes the system created */
+  autoTag: string;
+  duplicateLabel: string;
+  deleteLabel: string;
+  kindLabels: { public: string; private: string };
+  /** while a connection is being dragged: can this node be its end? */
+  connect?: "valid" | "invalid";
+  actions?: NodeActions;
+}
+
+export interface NodeActions {
+  duplicate: (key: string) => void;
+  remove: (key: string) => void;
 }
 
 export interface Rect { x: number; y: number; width: number; height: number }
@@ -81,7 +101,7 @@ function edgeDetail(mech: string, props: Record<string, unknown> | undefined): s
 
 export function buildFlow(
   reg: Registry, design: Design, analysis: Analysis, selection: Selection, focus: ReadonlySet<string>, lang: Lang,
-  s: { mech: Record<string, string>; mechHint: Record<string, string> },
+  s: { mech: Record<string, string>; mechHint: Record<string, string>; autoTag: string; duplicate: string; delete: string; subnetPublic: string; subnetPrivate: string },
   hiddenGroups: ReadonlySet<EdgeGroup> = new Set(),
 ): { nodes: RFNode<NodeData>[]; edges: RFEdge<EdgeData>[] } {
   const { visual, generated } = visualDesign(design, analysis);
@@ -89,6 +109,20 @@ export function buildFlow(
   const depth = (n: DNode) => { let d = 0; for (let p = n.parent; p; p = visual.nodes.find((v) => v.key === p)?.parent) d++; return d; };
   const ordered = [...visual.nodes].sort((a, b) => depth(a) - depth(b));
   const pos = new Map(visual.nodes.filter((n) => n.position).map((n) => [n.key, n.position!]));
+
+  let publicSubnets = new Set<string>();
+  let knownSubnets = new Set<string>();
+  if (analysis.normalized) {
+    try {
+      const facts = computeFacts(new Graph(analysis.normalized));
+      knownSubnets = new Set(facts.subnets.keys());
+      publicSubnets = new Set([...facts.subnets].filter(([, f]) => f.public).map(([k]) => k));
+    } catch { /* an unfinished design has no facts yet; the subnets just carry no badge */ }
+  }
+  const issuesOf = (key: string) => {
+    const hits = analysis.findings.filter((f) => f.targets.includes(key));
+    return { count: hits.length, rules: [...new Set(hits.map((f) => f.rule))] };
+  };
 
   const nodes = ordered.map((n): RFNode<NodeData> => {
     const container = isContainer(n.service);
@@ -113,6 +147,13 @@ export function buildFlow(
         generated: isGenerated,
         focused: focus.has(n.key),
         detail: detailOf(n),
+        depth: depth(n),
+        issues: issuesOf(n.key),
+        autoTag: s.autoTag,
+        duplicateLabel: s.duplicate,
+        deleteLabel: s.delete,
+        kindLabels: { public: s.subnetPublic, private: s.subnetPrivate },
+        ...(n.service === "subnet" && knownSubnets.has(n.key) ? { subnetKind: publicSubnets.has(n.key) ? "public" as const : "private" as const } : {}),
         ...(container ? { fit: fitOf(visual, n.key, pos) } : {}),
       },
     };

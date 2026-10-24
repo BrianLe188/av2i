@@ -1,8 +1,8 @@
 import type { Design } from "@av2i/model";
 import { CONTAINERS } from "./placement.ts";
 
-export const LEAF = { w: 150, h: 56 };
-const MIN: Record<string, { w: number; h: number }> = { vpc: { w: 520, h: 300 }, subnet: { w: 230, h: 170 } };
+export const LEAF = { w: 176, h: 64 };
+const MIN: Record<string, { w: number; h: number }> = { vpc: { w: 520, h: 300 }, subnet: { w: 290, h: 180 } };
 const PAD = 24;
 const FLOOR = { w: 160, h: 100 };
 const HEADER = 44;

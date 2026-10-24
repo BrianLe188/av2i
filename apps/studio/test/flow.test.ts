@@ -56,4 +56,19 @@ describe("buildFlow", () => {
   it("gives every mechanism a tooltip", () => {
     for (const e of flow.edges) expect(String(e.data!.hint).length).toBeGreaterThan(0);
   });
+
+  it("tells public subnets from private ones and counts findings per node", () => {
+    expect(flow.nodes.find((n) => n.id === "pub_a")!.data.subnetKind).toBe("public");
+    expect(flow.nodes.find((n) => n.id === "app_a")!.data.subnetKind).toBe("private");
+    expect(flow.nodes.find((n) => n.id === "vpc")!.data.subnetKind).toBeUndefined();
+    const bad = fromTemplate(reg, "ec2-in-vpc", "no-instance-type");
+    const f = buildFlow(reg, bad, analyze(bad, reg), null, new Set(), "vi", s);
+    const hit = f.nodes.find((n) => n.data.severity)!;
+    expect(hit.data.issues.count).toBeGreaterThan(0);
+    expect(hit.data.issues.rules.length).toBeGreaterThan(0);
+  });
+  it("gives each node its nesting depth", () => {
+    expect(flow.nodes.find((n) => n.id === "vpc")!.data.depth).toBe(0);
+    expect(flow.nodes.find((n) => n.id === "app_a")!.data.depth).toBe(1);
+  });
 });

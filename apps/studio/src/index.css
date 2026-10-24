@@ -117,5 +117,7 @@
 .react-flow__edge { transition: opacity 0.15s; }
 .react-flow__node.selected > div { box-shadow: 0 0 0 2px var(--ring); }
 .react-flow__handle { width: 8px; height: 8px; background: var(--muted-foreground); border: 0; opacity: 0; transition: opacity 0.1s; }
+.leaf-node > .react-flow__handle { opacity: 0.4; }
+.react-flow__handle.connectingto, .react-flow__handle.valid { opacity: 1; background: var(--info); }
 .group:hover > .react-flow__handle, .react-flow__node.selected .react-flow__handle { opacity: 1; }
 .react-flow__minimap { border: 1px solid var(--border); }
