@@ -4,7 +4,7 @@ import { addNode, getIn, removeNodes, setIn, subtree } from "../src/logic/design
 import { analyze, worstByNode } from "../src/logic/analyze.ts";
 import { fieldsOf, parseInput } from "../src/logic/form.ts";
 import * as H from "../src/logic/history.ts";
-import { absolute, containerAt, sizeOf, withPositions } from "../src/logic/layout.ts";
+import { absolute, containerAt, nearestFree, placeFree, sizeOf, tidy, withPositions } from "../src/logic/layout.ts";
 import { canPlace, connect, findParent } from "../src/logic/placement.ts";
 import { blankDesign, fromTemplate, templates } from "../src/logic/templates.ts";
 import { PALETTE } from "../src/registry.ts";
@@ -269,5 +269,44 @@ describe("container size", () => {
     expect(sizeOf(grown, sub.key)).toEqual({ w: 900, h: 700 });
     const tiny = { ...d, nodes: d.nodes.map((n) => (n.key === sub.key ? { ...n, size: { w: 10, h: 10 } } : n)) };
     expect(sizeOf(tiny, sub.key).w).toBeGreaterThanOrEqual(160);
+  });
+});
+
+describe("overlaps", () => {
+  const rect = (d: ReturnType<typeof withPositions>, key: string) => {
+    const n = d.nodes.find((v) => v.key === key)!;
+    return { ...n.position!, ...sizeOf(d, key) };
+  };
+  const touch = (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) =>
+    a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  const base = () => withPositions(fromTemplate(reg, "ec2-in-vpc"));
+
+  it("moves a node dropped on top of a sibling to a free spot", () => {
+    const d = base();
+    const sub = d.nodes.find((n) => n.key === "pub_a")!;
+    const kids = d.nodes.filter((n) => n.parent === sub.key);
+    expect(kids.length).toBeGreaterThan(0);
+    const a = kids[0]!;
+    const stacked = { ...d, nodes: d.nodes.map((n) => (n.key === a.key ? { ...n, position: { ...kids[1]?.position ?? a.position! } } : n)) };
+    const fixed = placeFree(stacked, a.key);
+    const others = fixed.nodes.filter((n) => n.parent === sub.key && n.key !== a.key);
+    for (const o of others) expect(touch(rect(fixed, a.key), rect(fixed, o.key))).toBe(false);
+  });
+  it("leaves a node that already fits where it is", () => {
+    const d = base();
+    expect(placeFree(d, "nat_a")).toBe(d);
+  });
+  it("tidy separates every overlapping pair among siblings and keeps a clean design as it was", () => {
+    const d = base();
+    const piled = { ...d, nodes: d.nodes.map((n) => (n.parent === "pub_a" ? { ...n, position: { x: 30, y: 60 } } : n)) };
+    const t = tidy(piled);
+    const sibs = t.nodes.filter((n) => n.parent === "pub_a");
+    for (const a of sibs) for (const b of sibs) if (a.key < b.key) expect(touch(rect(t, a.key), rect(t, b.key))).toBe(false);
+    expect(tidy(t).nodes.map((n) => n.position)).toEqual(t.nodes.map((n) => n.position));
+  });
+  it("finds a spot that clears every sibling", () => {
+    const d = base();
+    const at = nearestFree(d, "pub_a", { x: 30, y: 60 }, { w: 176, h: 64 });
+    for (const n of d.nodes.filter((v) => v.parent === "pub_a")) expect(touch({ ...at, w: 176, h: 64 }, rect(d, n.key))).toBe(false);
   });
 });

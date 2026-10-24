@@ -5,6 +5,30 @@ import { colorOf } from "../logic/colors.ts";
 import { iconOf } from "../logic/icons.ts";
 import type { NodeData } from "../logic/flow.ts";
 
+/** Security groups, route tables and Elastic IPs ride on the node as chips; a click picks the one behind the chip. */
+function Chips({ data, className }: { data: NodeData; className?: string }) {
+  if (!data.badges.length) return null;
+  const shown = data.badges.slice(0, 3);
+  return (
+    <div className={cn("nodrag nopan flex flex-wrap gap-1", className)} data-testid="chips">
+      {shown.map((b) => (
+        <button
+          key={`${b.tag}-${b.key}`}
+          type="button"
+          title={`${b.tag}: ${b.label}`}
+          onClick={(e) => { e.stopPropagation(); data.actions?.select(b.key); }}
+          className="flex max-w-[96px] items-center gap-1 rounded border bg-background px-1 py-px text-[10px] leading-tight hover:bg-accent"
+          style={{ borderLeft: `3px solid ${colorOf(b.service)}` }}
+        >
+          <b className="font-semibold">{b.tag}</b>
+          <span className="truncate text-muted-foreground">{b.label}</span>
+        </button>
+      ))}
+      {data.badges.length > shown.length && <span className="rounded border bg-background px-1 py-px text-[10px] text-muted-foreground" title={data.badges.slice(3).map((b) => `${b.tag}: ${b.label}`).join(", ")}>+{data.badges.length - shown.length}</span>}
+    </div>
+  );
+}
+
 const SEVERITY_BG = { error: "bg-destructive text-white", warning: "bg-warning text-black", info: "bg-info text-white" } as const;
 
 function IssueBadge({ data }: { data: NodeData }) {
@@ -89,6 +113,7 @@ export function ResourceNode({ id, data, selected }: NodeProps<RFNode<NodeData>>
         <Handle type="source" position={Position.Top} id="t" />
         <Handle type="source" position={Position.Bottom} id="b" />
         <Handle type="source" position={Position.Right} id="r" />
+        <Chips data={data} className="absolute bottom-1.5 left-2 right-2" />
         <div className="absolute inset-x-0 top-0 flex h-9 items-center gap-2 rounded-t-xl border-b px-2" style={{ borderColor: `color-mix(in srgb, ${color} 25%, transparent)`, background: `color-mix(in srgb, ${color} 10%, transparent)` }}>
           <Tile service={data.service} size="sm" />
           <span className="truncate text-[13px] font-semibold">{data.label}</span>
@@ -108,7 +133,8 @@ export function ResourceNode({ id, data, selected }: NodeProps<RFNode<NodeData>>
   return (
     <div
       className={cn(
-        "leaf-node group relative flex h-full w-full items-center gap-2 rounded-[10px] border-[1.5px] bg-card px-2 shadow-sm transition-shadow hover:shadow-md",
+        "leaf-node group relative flex w-[176px] flex-col justify-center gap-1 rounded-[10px] border-[1.5px] bg-card px-2 shadow-sm transition-shadow hover:shadow-md",
+        data.compact ? "min-h-10 py-1" : "min-h-16 py-1.5",
         data.generated && "border-dashed opacity-75",
         state,
       )}
@@ -121,16 +147,19 @@ export function ResourceNode({ id, data, selected }: NodeProps<RFNode<NodeData>>
       <Handle type="source" position={Position.Top} id="t" className={handleCls} />
       <Handle type="source" position={Position.Bottom} id="b" className={handleCls} />
       <Handle type="source" position={Position.Right} id="r" className={handleCls} />
-      <Tile service={data.service} size="md" />
-      <div className="min-w-0 flex-1 text-xs leading-tight">
-        <div className="flex items-center gap-1">
-          <span className="truncate font-semibold">{data.label}</span>
-          {data.generated && <span className="flex-none rounded bg-muted px-1 text-[9px] uppercase tracking-wide text-muted-foreground">{data.autoTag}</span>}
+      <div className="flex items-center gap-2">
+        <Tile service={data.service} size={data.compact ? "sm" : "md"} />
+        <div className="min-w-0 flex-1 text-xs leading-tight">
+          <div className="flex items-center gap-1">
+            <span className="truncate font-semibold">{data.label}</span>
+            {data.generated && <span className="flex-none rounded bg-muted px-1 text-[9px] uppercase tracking-wide text-muted-foreground">{data.autoTag}</span>}
+          </div>
+          {!data.compact && <div className="truncate text-[11px] text-muted-foreground">{data.serviceTitle.replace(/ \(.*$/, "")}</div>}
+          {data.detail && <div className="mt-0.5 truncate"><span className="rounded bg-muted px-1 font-mono text-[10px] text-muted-foreground">{data.detail}</span></div>}
         </div>
-        <div className="truncate text-[11px] text-muted-foreground">{data.serviceTitle.replace(/ \(.*$/, "")}</div>
-        {data.detail && <div className="mt-0.5 truncate"><span className="rounded bg-muted px-1 font-mono text-[10px] text-muted-foreground">{data.detail}</span></div>}
+        <IssueBadge data={data} />
       </div>
-      <IssueBadge data={data} />
+      <Chips data={data} />
     </div>
   );
 }

@@ -4,7 +4,7 @@ import type { Edge as RFEdge, Node as RFNode } from "@xyflow/react";
 import type { Analysis } from "./analyze.ts";
 import { worstByNode } from "./analyze.ts";
 import { Graph, computeFacts } from "@av2i/engine";
-import { absolute, fitOf, isContainer, LEAF, sizeOf } from "./layout.ts";
+import { absolute, fitOf, isContainer, LEAF, nearestFree, sizeOf } from "./layout.ts";
 import { DRAWN, title } from "./placement.ts";
 import { groupOf, type EdgeGroup } from "./edges.ts";
 import type { Lang } from "../i18n.ts";
@@ -35,11 +35,23 @@ export interface NodeData extends Record<string, unknown> {
   /** while a connection is being dragged: can this node be its end? */
   connect?: "valid" | "invalid";
   actions?: NodeActions;
+  /** security groups, route tables and Elastic IPs attached to this node, shown as chips instead of lines */
+  badges: Badge[];
+  /** small cards for the helper services that mostly sit behind other nodes */
+  compact: boolean;
+}
+
+export interface Badge {
+  key: string;
+  tag: "SG" | "RT" | "EIP";
+  label: string;
+  service: string;
 }
 
 export interface NodeActions {
   duplicate: (key: string) => void;
   remove: (key: string) => void;
+  select: (key: string) => void;
 }
 
 export interface Rect { x: number; y: number; width: number; height: number }
@@ -81,7 +93,9 @@ function visualDesign(design: Design, analysis: Analysis): { visual: Design; gen
       continue;
     }
     const base = anchor?.position ?? { x: 24, y: 44 };
-    nodes.push({ ...n, parent: anchor?.parent ?? n.parent ?? null, position: { x: base.x, y: base.y + LEAF.h + 24 } });
+    const parent = anchor?.parent ?? n.parent ?? null;
+    const position = nearestFree({ ...design, nodes }, parent, { x: base.x, y: base.y + LEAF.h + 24 }, LEAF);
+    nodes.push({ ...n, parent, position });
   }
   return { visual: { ...design, nodes }, generated };
 }
@@ -103,6 +117,7 @@ export function buildFlow(
   reg: Registry, design: Design, analysis: Analysis, selection: Selection, focus: ReadonlySet<string>, lang: Lang,
   s: { mech: Record<string, string>; mechHint: Record<string, string>; autoTag: string; duplicate: string; delete: string; subnetPublic: string; subnetPrivate: string },
   hiddenGroups: ReadonlySet<EdgeGroup> = new Set(),
+  relatedOnly = false,
 ): { nodes: RFNode<NodeData>[]; edges: RFEdge<EdgeData>[] } {
   const { visual, generated } = visualDesign(design, analysis);
   const severity = worstByNode(analysis.findings);
@@ -124,6 +139,42 @@ export function buildFlow(
     return { count: hits.length, rules: [...new Set(hits.map((f) => f.rule))] };
   };
 
+  const BADGE_TAG: Record<string, Badge["tag"]> = { "sg-attach": "SG", "route-association": "RT", "eip-attach": "EIP" };
+  const HELPERS = ["security-group", "route-table", "elastic-ip"];
+  const nodeByKey = new Map(visual.nodes.map((n) => [n.key, n]));
+  const allEdges = [
+    ...design.edges,
+    ...(analysis.normalized?.edges ?? []).filter((e) => e.origin === "generated" && !design.edges.some((d) => d.id === e.id)),
+  ].filter((e) => nodeByKey.has(e.from) && nodeByKey.has(e.to));
+  const badgesOf = new Map<string, Badge[]>();
+  for (const e of allEdges) {
+    const tag = BADGE_TAG[e.mechanism];
+    if (!tag) continue;
+    const a = nodeByKey.get(e.from)!, b = nodeByKey.get(e.to)!;
+    const [owner, other] = HELPERS.includes(a.service) && !HELPERS.includes(b.service) ? [b, a] : !HELPERS.includes(a.service) && HELPERS.includes(b.service) ? [a, b] : [null, null];
+    if (!owner || !other) continue;
+    badgesOf.set(owner.key, [...(badgesOf.get(owner.key) ?? []), { key: other.key, tag, label: other.label, service: other.service }]);
+  }
+
+  /** With "related only" on, a selection keeps itself, what it touches and the containers around them. */
+  let visible: Set<string> | null = null;
+  if (relatedOnly && selection) {
+    const core = new Set<string>();
+    if (selection.kind === "edge") {
+      const e = allEdges.find((x) => x.id === selection.id);
+      if (e) { core.add(e.from); core.add(e.to); }
+    } else {
+      core.add(selection.id);
+      for (let grew = true; grew; ) {
+        grew = false;
+        for (const n of visual.nodes) if (n.parent && core.has(n.parent) && !core.has(n.key)) { core.add(n.key); grew = true; }
+      }
+      for (const e of allEdges) { if (core.has(e.from)) core.add(e.to); if (core.has(e.to)) core.add(e.from); }
+    }
+    for (const k of [...core]) for (let p = nodeByKey.get(k)?.parent; p; p = nodeByKey.get(p)?.parent) core.add(p);
+    visible = core;
+  }
+
   const nodes = ordered.map((n): RFNode<NodeData> => {
     const container = isContainer(n.service);
     const size = sizeOf(visual, n.key, pos);
@@ -138,6 +189,7 @@ export function buildFlow(
       selected: selection?.kind === "node" && selection.id === n.key,
       draggable: !isGenerated,
       deletable: !isGenerated,
+      ...(visible && !visible.has(n.key) ? { hidden: true } : {}),
       data: {
         label: n.label,
         service: n.service,
@@ -153,6 +205,8 @@ export function buildFlow(
         duplicateLabel: s.duplicate,
         deleteLabel: s.delete,
         kindLabels: { public: s.subnetPublic, private: s.subnetPrivate },
+        badges: badgesOf.get(n.key) ?? [],
+        compact: HELPERS.includes(n.service),
         ...(n.service === "subnet" && knownSubnets.has(n.key) ? { subnetKind: publicSubnets.has(n.key) ? "public" as const : "private" as const } : {}),
         ...(container ? { fit: fitOf(visual, n.key, pos) } : {}),
       },
@@ -177,11 +231,14 @@ export function buildFlow(
   const flaggedPair = (id: string, from: string, to: string) =>
     analysis.findings.some((f) => f.targets.includes(id) || (f.targets.includes(from) && f.targets.includes(to) && f.severity !== "info"));
   const selectedNode = selection?.kind === "node" ? selection.id : null;
+  /** a hidden family still shows the lines of the node or connection you picked */
+  const touchesSelection = (e: { id: string; from: string; to: string }) =>
+    selection !== null && (selection.kind === "node" ? e.from === selection.id || e.to === selection.id : selection.id === e.id);
   const make = (e: { id: string; from: string; to: string; mechanism: string }, label: string, detail: string | undefined, generatedEdge: boolean): RFEdge<EdgeData> => {
     const group = groupOf(e.mechanism);
     return {
       id: e.id, source: e.from, target: e.to, ...handles(e.from, e.to), label, type: "link",
-      hidden: hiddenGroups.has(group),
+      hidden: (hiddenGroups.has(group) && !touchesSelection(e)) || (visible !== null && !(visible.has(e.from) && visible.has(e.to))),
       selected: selection?.kind === "edge" && selection.id === e.id,
       ...(generatedEdge ? { deletable: false } : {}),
       data: {

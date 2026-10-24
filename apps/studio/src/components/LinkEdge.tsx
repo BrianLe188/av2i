@@ -4,14 +4,14 @@ import { cn } from "@/lib/utils";
 import { groupColor, hasArrow, type EdgeGroup } from "../logic/edges.ts";
 import type { EdgeData } from "../logic/flow.ts";
 
-const ICON: Record<EdgeGroup, LucideIcon> = { traffic: Network, access: KeyRound, attach: Link2 };
+const ICON: Record<EdgeGroup, LucideIcon> = { traffic: Network, access: KeyRound, attach: Link2, wiring: Link2 };
 
 /** A connection drawn by what it is for: colour and stroke by family, an arrow where something is called or granted, a chip that names it. */
 export function LinkEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label, selected, data }: EdgeProps<RFEdge<EdgeData>>) {
   if (!data) return null;
   const [path, lx, ly] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, borderRadius: 10 });
   const color = data.flagged ? "var(--edge-error)" : groupColor(data.group);
-  const dash = data.generated ? "2 5" : data.group === "access" ? "9 5" : undefined;
+  const dash = data.generated ? "2 5" : data.group === "access" ? "9 5" : data.group === "wiring" ? "3 3" : undefined;
   const Icon = data.flagged ? TriangleAlert : ICON[data.group];
   const text = typeof label === "string" ? label : "";
   const prefix = data.detail && text.endsWith(data.detail) ? text.slice(0, text.length - data.detail.length).replace(/ · $/, "") : text;
@@ -30,7 +30,7 @@ export function LinkEdge({ id, sourceX, sourceY, targetX, targetY, sourcePositio
         path={path}
         interactionWidth={18}
         markerEnd={hasArrow(data.group) ? `url(#${marker})` : undefined}
-        style={{ stroke: color, strokeWidth: selected ? 3 : data.group === "attach" ? 1.4 : 2, strokeDasharray: dash }}
+        style={{ stroke: color, strokeWidth: selected ? 3 : data.group === "attach" || data.group === "wiring" ? 1.4 : 2, strokeDasharray: dash }}
       />
       <EdgeLabelRenderer>
         <div

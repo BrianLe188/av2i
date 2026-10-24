@@ -100,3 +100,65 @@ export function containerAt(design: Design, point: { x: number; y: number }, ski
   }
   return best?.key ?? null;
 }
+
+const MARGIN = 12;
+const clear = (a: Rect, b: Rect) => a.x + a.w + MARGIN <= b.x || b.x + b.w + MARGIN <= a.x || a.y + a.h + MARGIN <= b.y || b.y + b.h + MARGIN <= a.y;
+
+/** The sibling rectangles a node must not overlap, relative to their shared parent. */
+function siblingRects(design: Design, parent: string | null, skip: string, only?: ReadonlySet<string>): Rect[] {
+  const pos = positions(design);
+  return design.nodes
+    .filter((n) => (n.parent ?? null) === parent && n.key !== skip && pos.has(n.key) && (!only || only.has(n.key)))
+    .map((n) => ({ ...pos.get(n.key)!, ...sizeOf(design, n.key, pos) }));
+}
+
+/** The free spot closest to `want` among the siblings in `parent`, scanning outwards on a 20px grid. */
+export function nearestFree(
+  design: Design, parent: string | null, want: { x: number; y: number }, size: { w: number; h: number }, skip = "", only?: ReadonlySet<string>,
+): { x: number; y: number } {
+  const taken = siblingRects(design, parent, skip, only);
+  const x0 = Math.max(8, want.x), y0 = Math.max(HEADER, want.y);
+  const ok = (x: number, y: number) => x >= 8 && y >= HEADER && taken.every((t) => clear({ x, y, ...size }, t));
+  if (ok(x0, y0)) return { x: x0, y: y0 };
+  for (let r = 1; r <= 80; r++) {
+    let best: { x: number; y: number; d: number } | null = null;
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dy = -r; dy <= r; dy++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        const x = x0 + dx * 20, y = y0 + dy * 20;
+        if (!ok(x, y)) continue;
+        const d = dx * dx + dy * dy;
+        if (!best || d < best.d) best = { x, y, d };
+      }
+    }
+    if (best) return { x: best.x, y: best.y };
+  }
+  return { x: x0, y: y0 };
+}
+
+/** Move one node to the nearest free spot among its siblings, leaving it where it is when it already fits. */
+export function placeFree(design: Design, key: string): Design {
+  const node = design.nodes.find((n) => n.key === key);
+  if (!node?.position) return design;
+  const spot = nearestFree(design, node.parent ?? null, node.position, sizeOf(design, key), key);
+  if (spot.x === node.position.x && spot.y === node.position.y) return design;
+  return { ...design, nodes: design.nodes.map((n) => (n.key === key ? { ...n, position: spot } : n)) };
+}
+
+/** Separate every overlapping pair: deepest containers first so their sizes are settled before their siblings are checked. */
+export function tidy(design: Design): Design {
+  let d = withPositions(design);
+  const depthOf = (key: string) => { let n = 0; for (let p = d.nodes.find((v) => v.key === key)?.parent; p; p = d.nodes.find((v) => v.key === p)?.parent) n++; return n; };
+  const groups = [...new Set(d.nodes.map((n) => n.parent ?? null))].sort((a, b) => (b === null ? -1 : depthOf(b)) - (a === null ? -1 : depthOf(a)));
+  for (const parent of groups) {
+    const kids = d.nodes.filter((n) => (n.parent ?? null) === parent).sort((a, b) => a.position!.y - b.position!.y || a.position!.x - b.position!.x);
+    const placed = new Set<string>();
+    for (const k of kids) {
+      const cur = d.nodes.find((n) => n.key === k.key)!;
+      const spot = nearestFree(d, parent, cur.position!, sizeOf(d, k.key), k.key, placed);
+      if (spot.x !== cur.position!.x || spot.y !== cur.position!.y) d = { ...d, nodes: d.nodes.map((n) => (n.key === k.key ? { ...n, position: spot } : n)) };
+      placed.add(k.key);
+    }
+  }
+  return d;
+}

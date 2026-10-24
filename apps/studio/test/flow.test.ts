@@ -7,6 +7,7 @@ import { fromTemplate } from "../src/logic/templates.ts";
 
 const reg = getRegistry();
 const s = strings("vi");
+const hide = new Set(["wiring"] as const);
 
 describe("buildFlow", () => {
   const design = fromTemplate(reg, "ec2-in-vpc");
@@ -42,7 +43,7 @@ describe("buildFlow", () => {
   });
 
   it("sorts every drawn connection into a family and hides a family on request", () => {
-    expect(flow.edges.every((e) => ["traffic", "access", "attach"].includes(e.data!.group as string))).toBe(true);
+    expect(flow.edges.every((e) => ["traffic", "access", "attach", "wiring"].includes(e.data!.group as string))).toBe(true);
     expect(flow.edges.some((e) => e.data!.group === "attach")).toBe(true);
     const hidden = buildFlow(reg, design, analyze(design, reg), null, new Set(), "vi", s, new Set(["attach"]));
     expect(hidden.edges.filter((e) => e.hidden).every((e) => e.data!.group === "attach")).toBe(true);
@@ -70,5 +71,33 @@ describe("buildFlow", () => {
   it("gives each node its nesting depth", () => {
     expect(flow.nodes.find((n) => n.id === "vpc")!.data.depth).toBe(0);
     expect(flow.nodes.find((n) => n.id === "app_a")!.data.depth).toBe(1);
+  });
+
+  it("shows security groups, route tables and Elastic IPs as chips on their owner and hides the lines", () => {
+    const f = buildFlow(reg, design, analyze(design, reg), null, new Set(), "vi", s, hide);
+    const nat = f.nodes.find((n) => n.id === "nat_a")!;
+    expect(nat.data.badges.some((b) => b.tag === "EIP")).toBe(true);
+    expect(f.nodes.find((n) => n.id === "app_a")!.data.badges.some((b) => b.tag === "RT")).toBe(true);
+    const wiring = f.edges.filter((e) => e.data!.group === "wiring");
+    expect(wiring.length).toBeGreaterThan(0);
+    expect(wiring.every((e) => e.hidden)).toBe(true);
+    expect(f.nodes.find((n) => n.id === "sg_app")!.data.compact).toBe(true);
+  });
+  it("still draws the hidden lines of the node you select", () => {
+    const f = buildFlow(reg, design, analyze(design, reg), { kind: "node", id: "nat_a" }, new Set(), "vi", s, hide);
+    const own = f.edges.filter((e) => e.data!.group === "wiring" && (e.source === "nat_a" || e.target === "nat_a"));
+    expect(own.length).toBeGreaterThan(0);
+    expect(own.every((e) => !e.hidden)).toBe(true);
+  });
+  it("with related-only on, keeps the selection, what it touches and the containers around them", () => {
+    const f = buildFlow(reg, design, analyze(design, reg), { kind: "node", id: "app" }, new Set(), "vi", s, new Set(), true);
+    const shown = new Set(f.nodes.filter((n) => !n.hidden).map((n) => n.id));
+    expect(shown.has("app")).toBe(true);
+    expect(shown.has("app_a")).toBe(true);
+    expect(shown.has("vpc")).toBe(true);
+    expect(f.nodes.some((n) => n.hidden)).toBe(true);
+    for (const e of f.edges.filter((e) => !e.hidden)) expect(shown.has(e.source) && shown.has(e.target)).toBe(true);
+    const all = buildFlow(reg, design, analyze(design, reg), { kind: "node", id: "app" }, new Set(), "vi", s, new Set(), false);
+    expect(all.nodes.some((n) => n.hidden)).toBe(false);
   });
 });
