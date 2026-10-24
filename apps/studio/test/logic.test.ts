@@ -8,6 +8,7 @@ import { absolute, containerAt, nearestFree, placeFree, sizeOf, tidy, withPositi
 import { canPlace, connect, findParent } from "../src/logic/placement.ts";
 import { blankDesign, fromTemplate, templates } from "../src/logic/templates.ts";
 import { PALETTE } from "../src/registry.ts";
+import { strings } from "../src/i18n.ts";
 
 const reg = getRegistry();
 
@@ -308,5 +309,18 @@ describe("overlaps", () => {
     const d = base();
     const at = nearestFree(d, "pub_a", { x: 30, y: 60 }, { w: 176, h: 64 });
     for (const n of d.nodes.filter((v) => v.parent === "pub_a")) expect(touch({ ...at, w: 176, h: 64 }, rect(d, n.key))).toBe(false);
+  });
+});
+
+describe("strings", () => {
+  const keys = (o: unknown, prefix = ""): string[] =>
+    o && typeof o === "object" ? Object.entries(o).flatMap(([k, v]) => keys(v, `${prefix}${k}.`)) : [prefix.slice(0, -1)];
+  it("have the same keys in Vietnamese and English, and no empty text", () => {
+    const vi = keys(strings("vi")).sort();
+    const en = keys(strings("en")).sort();
+    expect(en).toEqual(vi);
+    const empty = (o: unknown): boolean => (typeof o === "string" ? o.trim() === "" : o && typeof o === "object" ? Object.values(o).some(empty) : false);
+    expect(empty(strings("vi"))).toBe(false);
+    expect(empty(strings("en"))).toBe(false);
   });
 });

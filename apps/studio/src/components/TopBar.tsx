@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { Download, FolderOpen, KeyRound, Layers, LogOut, Moon, Redo2, Save, Sun, Undo2, UserRound, Users } from "lucide-react";
+import { ArrowLeft, Download, FolderOpen, KeyRound, Layers, LogOut, Moon, Redo2, Save, Sun, Undo2, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent,
@@ -30,8 +30,8 @@ interface Props {
   onLang: (l: Lang) => void;
   onTheme: () => void;
   user: User;
-  canManageUsers: boolean;
-  onAccount: (what: "password" | "users" | "logout") => void;
+  onHome: () => void;
+  onAccount: (what: "account" | "logout") => void;
 }
 
 export function TopBar(p: Props) {
@@ -39,7 +39,8 @@ export function TopBar(p: Props) {
   const { s } = p;
   return (
     <header className="flex items-center gap-2 border-b bg-card px-3" style={{ gridArea: "top" }}>
-      <strong className="flex-none whitespace-nowrap text-[15px]">{s.app}</strong>
+      <Button variant="ghost" size="sm" onClick={p.onHome} data-testid="back-home" title={s.nav.home}><ArrowLeft />{s.nav.dashboard}</Button>
+      <span className="h-5 w-px bg-border" />
       <span className="max-w-56 truncate text-muted-foreground" title={p.name}>{p.name}</span>
       <div className="flex-1" />
       <Button variant="outline" size="sm" onClick={p.onUndo} disabled={!p.canUndo} data-testid="undo"><Undo2 />{s.undo}</Button>
@@ -96,8 +97,7 @@ export function TopBar(p: Props) {
             <div className="truncate font-medium">{p.user.displayName || p.user.username}</div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => p.onAccount("password")} data-testid="menu-password"><KeyRound />{s.acct.changePassword}</DropdownMenuItem>
-          {p.canManageUsers && <DropdownMenuItem onSelect={() => p.onAccount("users")} data-testid="menu-users"><Users />{s.acct.manageUsers}</DropdownMenuItem>}
+          <DropdownMenuItem onSelect={() => p.onAccount("account")} data-testid="menu-account"><KeyRound />{s.nav.account}</DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => p.onAccount("logout")} data-testid="menu-logout"><LogOut />{s.acct.signOut}</DropdownMenuItem>
         </DropdownMenuContent>

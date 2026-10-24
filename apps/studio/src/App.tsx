@@ -11,11 +11,10 @@ import { Inspector } from "./components/Inspector.tsx";
 import { Palette } from "./components/Palette.tsx";
 import { TopBar } from "./components/TopBar.tsx";
 import { strings } from "./i18n.ts";
+import { useNavigate, useSearchParams } from "react-router";
 import { useAuth, type User } from "./auth.tsx";
-import { ChangePasswordForm } from "./components/auth/Screens.tsx";
-import { UsersDialog } from "./components/UsersDialog.tsx";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { store, type Prefs } from "./prefs.ts";
+import { draftKey, loadDraft } from "./drafts.ts";
 import { analyze } from "./logic/analyze.ts";
 import { addNode } from "./logic/design.ts";
 import { download, zipFiles } from "./logic/files.ts";
@@ -27,22 +26,6 @@ import { paletteItem } from "./registry.ts";
 import { blankDesign, fromTemplate, templates } from "./logic/templates.ts";
 import { reg } from "./registry.ts";
 
-/** Drafts are kept per person: two people on one browser must not see each other's work. */
-const draftKey = (userId: string) => `draft.${userId}`;
-
-function loadDraft(userId: string): Design | null {
-  // a draft made before there were accounts goes to the first person who signs in
-  const legacy = store.get("draft");
-  if (legacy && !store.get(draftKey(userId))) store.set(draftKey(userId), legacy);
-  store.remove("draft");
-  const raw = store.get(draftKey(userId));
-  if (!raw) return null;
-  try {
-    const d = JSON.parse(raw) as Design;
-    return d.schema === 1 && Array.isArray(d.nodes) && Array.isArray(d.edges) ? d : null;
-  } catch { return null; }
-}
-
 export function App({ prefs, user }: { prefs: Prefs; user: User }) {
   const draft = useMemo(() => loadDraft(user.id), [user.id]);
   const [hist, setHist] = useState(() => H.start(draft ?? blankDesign()));
@@ -50,7 +33,8 @@ export function App({ prefs, user }: { prefs: Prefs; user: User }) {
   const [focus, setFocus] = useState<ReadonlySet<string>>(new Set());
   const { lang, setLang, dark } = prefs;
   const auth = useAuth();
-  const [dialog, setDialog] = useState<null | "password" | "users">(null);
+  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
   const [tab, setTab] = useState<Tab>(() => (["problems", "terraform", "resources"].includes(store.get("tab") ?? "") ? (store.get("tab") as Tab) : "problems"));
   const [loadId, setLoadId] = useState(0);
 
@@ -66,6 +50,15 @@ export function App({ prefs, user }: { prefs: Prefs; user: User }) {
 
   const edit = useCallback((f: (d: Design) => Design) => setHist((h) => H.push(h, f(h.present))), []);
   const replace = useCallback((d: Design) => { setHist(H.start(d)); setSelection(null); setFocus(new Set()); setLoadId((n) => n + 1); }, []);
+  // the dashboard opens the canvas with ?template=<id> or ?new=1: apply it once and leave the address clean
+  useEffect(() => {
+    const t = params.get("template");
+    const fresh = params.get("new");
+    if (!t && !fresh) return;
+    try { replace(t ? fromTemplate(reg, t) : blankDesign()); } catch { /* an unknown template id leaves the draft as it is */ }
+    setParams({}, { replace: true });
+  }, [params, setParams, replace]);
+
   const select = useCallback((sel: Selection, f?: string[]) => { setSelection(sel); setFocus(new Set(f ?? [])); }, []);
 
   const add = useCallback((itemId: string, parent: string | null | undefined, position?: { x: number; y: number }) => {
@@ -130,8 +123,8 @@ export function App({ prefs, user }: { prefs: Prefs; user: User }) {
         onLang={setLang}
         onTheme={prefs.toggleDark}
         user={user}
-        canManageUsers={auth.can("user:List")}
-        onAccount={(what) => (what === "logout" ? void auth.logout() : setDialog(what))}
+        onHome={() => navigate("/dashboard")}
+        onAccount={(what) => (what === "logout" ? void auth.logout() : navigate("/account"))}
       />
       <Palette lang={lang} s={s} onAdd={(service) => add(service, undefined)} />
       <main className="relative min-h-0 min-w-0" style={{ gridArea: "main" }}>
@@ -154,16 +147,6 @@ export function App({ prefs, user }: { prefs: Prefs; user: User }) {
       <Inspector design={design} analysis={analysis} selection={selection} lang={lang} s={s} onEdit={edit} onSelect={select} />
       <Bottom analysis={analysis} lang={lang} s={s} tab={tab} onTab={setTab} onSelect={select} nameOf={nameOf} />
     </div>
-    <Dialog open={dialog === "password"} onOpenChange={(o) => !o && setDialog(null)}>
-      <DialogContent className="sm:max-w-sm" data-testid="password-dialog">
-        <DialogHeader>
-          <DialogTitle>{s.acct.changePassword}</DialogTitle>
-          <DialogDescription>{user.username}</DialogDescription>
-        </DialogHeader>
-        <ChangePasswordForm s={s} username={user.username} onDone={() => { setDialog(null); toast(s.acct.passwordChanged); }} />
-      </DialogContent>
-    </Dialog>
-    <UsersDialog open={dialog === "users"} onClose={() => setDialog(null)} s={s} selfId={user.id} />
     <Toaster theme={dark ? "dark" : "light"} position="bottom-center" />
     </TooltipProvider>
   );

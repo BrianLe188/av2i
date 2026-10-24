@@ -68,3 +68,10 @@ export function useAuth(): Auth {
   if (!a) throw new Error("useAuth outside AuthProvider");
   return a;
 }
+
+/** The signed-in person; only valid below the Gate, which shows nothing else until there is one. */
+export function useUser(): User {
+  const { state } = useAuth();
+  if (state.status !== "ready") throw new Error("useUser outside a signed-in session");
+  return state.user;
+}

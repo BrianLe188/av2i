@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import type { Lang } from "./i18n.ts";
+import { createContext, createElement, useContext, useEffect, useState, type ReactNode } from "react";
+import { strings, type Lang, type Strings } from "./i18n.ts";
 
 export const store = {
   get(k: string): string | null { try { return localStorage.getItem(`av2i.${k}`); } catch { return null; } },
@@ -22,3 +22,18 @@ export function usePrefs(): Prefs {
   useEffect(() => { document.documentElement.classList.toggle("dark", dark); store.set("theme", dark ? "dark" : "light"); }, [dark]);
   return { lang, setLang, dark, toggleDark: () => setDark((d) => !d) };
 }
+
+const PrefsCtx = createContext<Prefs | null>(null);
+
+/** Makes one set of preferences available to every screen under it. */
+export function PrefsProvider({ prefs, children }: { prefs: Prefs; children: ReactNode }) {
+  return createElement(PrefsCtx.Provider, { value: prefs }, children);
+}
+
+export function usePrefsContext(): Prefs {
+  const p = useContext(PrefsCtx);
+  if (!p) throw new Error("usePrefsContext outside PrefsProvider");
+  return p;
+}
+
+export const useStrings = (): Strings => strings(usePrefsContext().lang);

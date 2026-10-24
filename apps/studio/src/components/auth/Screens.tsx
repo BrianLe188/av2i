@@ -101,6 +101,9 @@ export function ChangePasswordForm({ s, username, submitLabel, onDone, extra }: 
     setBusy(true);
     try {
       await changePassword(current, next);
+      setCurrent("");
+      setNext("");
+      setAgain("");
       onDone?.();
     } catch (err) {
       setError(describe(err, s));
