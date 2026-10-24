@@ -4,7 +4,9 @@ import {
   type Connection, type Node as RFNode, type NodeProps,
 } from "@xyflow/react";
 import type { Design } from "@av2i/model";
+import { cn } from "@/lib/utils";
 import { paletteItem, reg } from "../registry.ts";
+import { colorOf } from "../logic/colors.ts";
 import type { Analysis } from "../logic/analyze.ts";
 import { addEdge, removeEdges, removeNodes, subtree, updateNode } from "../logic/design.ts";
 import { buildFlow, type EdgeData, type NodeData, type Selection } from "../logic/flow.ts";
@@ -14,17 +16,30 @@ import type { Lang, Strings } from "../i18n.ts";
 import { DRAG_TYPE } from "./Palette.tsx";
 
 function ResourceNode({ data }: NodeProps<RFNode<NodeData>>) {
-  const cls = ["rnode", data.container ? "container" : "leaf", data.generated ? "generated" : "", data.focused ? "focused" : "", data.severity ? `sev-${data.severity}` : ""].join(" ");
+  const color = colorOf(data.service);
+  const sev = data.severity === "error" ? "bg-destructive" : data.severity === "warning" ? "bg-warning" : "bg-info";
   return (
-    <div className={cls} data-svc={data.service} data-testid={`node-${data.label}`}>
+    <div
+      className={cn(
+        "group relative h-full w-full rounded-lg border-[1.5px] px-2.5 py-1.5 text-xs",
+        data.container ? "bg-transparent" : "h-14 w-[150px] border-l-[5px] bg-card",
+        data.generated && "border-dashed opacity-60",
+        data.focused && "ring-[3px] ring-ring/60",
+      )}
+      style={{ borderColor: color, ...(data.container ? { background: `color-mix(in srgb, ${color} 7%, transparent)` } : {}) }}
+      data-svc={data.service}
+      data-testid={`node-${data.label}`}
+    >
       <Handle type="source" position={Position.Left} id="l" />
       <Handle type="source" position={Position.Top} id="t" />
       <Handle type="source" position={Position.Bottom} id="b" />
-      <div className="rhead">
-        <span className="rtitle">{data.label}</span>
-        {data.severity && <span className={`badge sev-${data.severity}`} title={data.severity} />}
+      <div className={cn("flex items-center gap-1.5", data.container && "absolute inset-x-2.5 top-1.5")}>
+        <span className="truncate font-semibold">{data.label}</span>
+        {data.severity && <span className={cn("ml-auto size-2.5 flex-none rounded-full", sev)} title={data.severity} />}
       </div>
-      <div className="rsub">{data.serviceTitle.replace(/ \(.*$/, "")}{data.detail ? ` · ${data.detail}` : ""}</div>
+      {!data.container && (
+        <div className="truncate text-[11px] text-muted-foreground">{data.serviceTitle.replace(/ \(.*$/, "")}{data.detail ? ` · ${data.detail}` : ""}</div>
+      )}
       <Handle type="source" position={Position.Right} id="r" />
     </div>
   );
@@ -40,13 +55,14 @@ interface Props {
   lang: Lang;
   s: Strings;
   loadId: number;
+  dark: boolean;
   onSelect: (sel: Selection) => void;
   onEdit: (f: (d: Design) => Design) => void;
   onAdd: (service: string, parent: string | null, position?: { x: number; y: number }) => void;
   onToast: (message: string) => void;
 }
 
-function Flow({ design, analysis, selection, focus, lang, s, loadId, onSelect, onEdit, onAdd, onToast }: Props) {
+function Flow({ design, analysis, selection, focus, lang, s, loadId, dark, onSelect, onEdit, onAdd, onToast }: Props) {
   const flow = useMemo(() => buildFlow(reg, design, analysis, selection, focus, lang, s), [design, analysis, selection, focus, lang, s]);
   const [nodes, setNodes, onNodesChange] = useNodesState<RFNode<NodeData>>(flow.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(flow.edges);
@@ -105,9 +121,10 @@ function Flow({ design, analysis, selection, focus, lang, s, loadId, onSelect, o
   const isValidConnection = useCallback((c: { source: string; target: string }) => connect(reg, design, c.source, c.target).ok, [design]);
 
   return (
-    <div className="canvas" onDragOver={(e) => { if (e.dataTransfer.types.includes(DRAG_TYPE)) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } }} onDrop={onDrop}>
+    <div className="h-full w-full" onDragOver={(e) => { if (e.dataTransfer.types.includes(DRAG_TYPE)) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } }} onDrop={onDrop}>
       <ReactFlow<RFNode<NodeData>, import("@xyflow/react").Edge<EdgeData>>
         key={loadId}
+        colorMode={dark ? "dark" : "light"}
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}

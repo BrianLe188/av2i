@@ -41,6 +41,7 @@ inspector on the right, and a bottom panel with three tabs: problems, Terraform,
 
 ## Design choices
 
+- The interface is built from shadcn/ui components (`apps/studio/src/components/ui`, style new-york, base colour neutral, Tailwind v4, Radix and lucide icons), configured by `apps/studio/components.json`; more are added with `npx shadcn@latest add <name>` from `apps/studio`. Colours come from the shadcn tokens in `src/index.css` (light and dark, the `dark` class on the root), plus `warning`, `info` and `success`; the canvas follows them through React Flow's `colorMode`. A property left empty means "use the default", which Radix `Select` cannot hold as an empty value, so `ui/option-select.tsx` wraps it with a sentinel. Notices are `sonner` toasts. Service colours live in `src/logic/colors.ts`.
 - Undo and redo keep snapshots of the design; every edit is also expressible as patch operations (DD-008).
 - A node's `position` is relative to its parent. Containers have a `size`; both are layout only and never affect rules or
   output.

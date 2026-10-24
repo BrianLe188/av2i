@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Design } from "@av2i/model";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { Bottom, type Tab } from "./components/Bottom.tsx";
 import { Canvas } from "./components/Canvas.tsx";
 import { Inspector } from "./components/Inspector.tsx";
@@ -38,7 +43,7 @@ export function App() {
   const [focus, setFocus] = useState<ReadonlySet<string>>(new Set());
   const [lang, setLang] = useState<Lang>(() => (store.get("lang") === "en" ? "en" : "vi"));
   const [tab, setTab] = useState<Tab>(() => (["problems", "terraform", "resources"].includes(store.get("tab") ?? "") ? (store.get("tab") as Tab) : "problems"));
-  const [toast, setToast] = useState<string | null>(draft ? "draft" : null);
+  const [dark, setDark] = useState(() => { const t = store.get("theme"); return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; });
   const [loadId, setLoadId] = useState(0);
 
   const s = strings(lang);
@@ -49,11 +54,9 @@ export function App() {
   useEffect(() => { store.set("draft", JSON.stringify(design)); }, [design]);
   useEffect(() => { store.set("lang", lang); document.documentElement.lang = lang; }, [lang]);
   useEffect(() => { store.set("tab", tab); }, [tab]);
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 3500);
-    return () => clearTimeout(t);
-  }, [toast]);
+  useEffect(() => { document.documentElement.classList.toggle("dark", dark); store.set("theme", dark ? "dark" : "light"); }, [dark]);
+  const setToast = useCallback((message: string) => { toast(message); }, []);
+  useEffect(() => { if (draft) toast(strings(store.get("lang") === "en" ? "en" : "vi").draftRestored); }, [draft]);
 
   const edit = useCallback((f: (d: Design) => Design) => setHist((h) => H.push(h, f(h.present))), []);
   const replace = useCallback((d: Design) => { setHist(H.start(d)); setSelection(null); setFocus(new Set()); setLoadId((n) => n + 1); }, []);
@@ -105,13 +108,13 @@ export function App() {
     setToast(s.exported);
   };
 
-  const toastText = toast === "draft" ? s.draftRestored : toast;
   const empty = design.nodes.length === 0;
 
   return (
-    <div className="app" data-testid="app">
+    <TooltipProvider>
+    <div className="grid h-full grid-cols-[200px_minmax(0,1fr)_320px] grid-rows-[48px_minmax(0,1fr)_300px]" style={{ gridTemplateAreas: '"top top top" "pal main insp" "bot bot bot"' }} data-testid="app">
       <TopBar
-        s={s} lang={lang} name={design.name === "untitled" ? s.untitled : design.name}
+        s={s} lang={lang} dark={dark} name={design.name === "untitled" ? s.untitled : design.name}
         canUndo={hist.past.length > 0} canRedo={hist.future.length > 0} canExport={analysis.files !== null} templates={tpls}
         onUndo={undo} onRedo={redo} onOpenFile={openFile}
         onSave={() => download(`${design.name || "design"}.json`, JSON.stringify(design, null, 2), "application/json")}
@@ -119,26 +122,30 @@ export function App() {
         onBlank={() => replace(blankDesign(design.settings.region))}
         onTemplate={(id, v) => replace(fromTemplate(reg, id, v))}
         onLang={setLang}
-        onTheme={() => { const root = document.documentElement; const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; root.dataset.theme = dark ? "light" : "dark"; }}
+        onTheme={() => setDark((d) => !d)}
       />
       <Palette lang={lang} s={s} onAdd={(service) => add(service, undefined)} />
-      <main className="main">
+      <main className="relative min-h-0 min-w-0" style={{ gridArea: "main" }}>
         <Canvas
-          design={design} analysis={analysis} selection={selection} focus={focus} lang={lang} s={s} loadId={loadId}
+          design={design} analysis={analysis} selection={selection} focus={focus} lang={lang} s={s} loadId={loadId} dark={dark}
           onSelect={select} onEdit={edit} onAdd={add} onToast={setToast}
         />
         {empty && (
-          <div className="welcome" data-testid="welcome">
-            <h2>{s.welcomeTitle}</h2>
-            <p>{s.welcomeText}</p>
-            <button type="button" className="primary" onClick={() => replace(fromTemplate(reg, "ec2-in-vpc"))}>{s.startTemplate}</button>
-          </div>
+          <Card className="absolute inset-0 m-auto h-fit w-[360px] text-center shadow-lg" data-testid="welcome">
+            <CardHeader>
+              <CardTitle className="text-base">{s.welcomeTitle}</CardTitle>
+              <CardDescription>{s.welcomeText}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button onClick={() => replace(fromTemplate(reg, "ec2-in-vpc"))}>{s.startTemplate}</Button>
+            </CardContent>
+          </Card>
         )}
-        {toastText && <div className="toast" role="status" data-testid="toast">{toastText}</div>}
       </main>
       <Inspector design={design} analysis={analysis} selection={selection} lang={lang} s={s} onEdit={edit} onSelect={select} />
       <Bottom analysis={analysis} lang={lang} s={s} tab={tab} onTab={setTab} onSelect={select} nameOf={nameOf} />
     </div>
+    <Toaster theme={dark ? "dark" : "light"} position="bottom-center" />
+    </TooltipProvider>
   );
 }
-

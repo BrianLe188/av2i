@@ -1,10 +1,19 @@
 import { useRef } from "react";
+import { Download, FolderOpen, Layers, Moon, Redo2, Save, Sun, Undo2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent,
+  DropdownMenuSubTrigger, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Template } from "../logic/templates.ts";
 import type { Lang, Strings } from "../i18n.ts";
 
 interface Props {
   s: Strings;
   lang: Lang;
+  dark: boolean;
   name: string;
   canUndo: boolean;
   canRedo: boolean;
@@ -25,40 +34,55 @@ export function TopBar(p: Props) {
   const input = useRef<HTMLInputElement>(null);
   const { s } = p;
   return (
-    <header className="topbar">
-      <strong className="brand">{s.app}</strong>
-      <span className="design-name" title={p.name}>{p.name}</span>
-      <div className="spacer" />
-      <button type="button" onClick={p.onUndo} disabled={!p.canUndo} data-testid="undo">↶ {s.undo}</button>
-      <button type="button" onClick={p.onRedo} disabled={!p.canRedo} data-testid="redo">↷ {s.redo}</button>
-      <details className="menu">
-        <summary data-testid="templates">{s.templates}</summary>
-        <div className="menu-body">
-          <button type="button" onClick={(e) => { p.onBlank(); (e.currentTarget.closest("details") as HTMLDetailsElement).open = false; }}>{s.blank}</button>
+    <header className="flex items-center gap-2 border-b bg-card px-3" style={{ gridArea: "top" }}>
+      <strong className="flex-none whitespace-nowrap text-[15px]">{s.app}</strong>
+      <span className="max-w-56 truncate text-muted-foreground" title={p.name}>{p.name}</span>
+      <div className="flex-1" />
+      <Button variant="outline" size="sm" onClick={p.onUndo} disabled={!p.canUndo} data-testid="undo"><Undo2 />{s.undo}</Button>
+      <Button variant="outline" size="sm" onClick={p.onRedo} disabled={!p.canRedo} data-testid="redo"><Redo2 />{s.redo}</Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm" data-testid="templates"><Layers />{s.templates}</Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-96 max-h-[70vh] overflow-y-auto">
+          <DropdownMenuItem onSelect={p.onBlank}>{s.blank}</DropdownMenuItem>
+          <DropdownMenuSeparator />
           {p.templates.map((t) => (
             <div key={t.id}>
-              <button type="button" data-testid={`template-${t.id}`} onClick={(e) => { p.onTemplate(t.id); (e.currentTarget.closest("details") as HTMLDetailsElement).open = false; }}>{t.title[p.lang]}</button>
+              <DropdownMenuItem data-testid={`template-${t.id}`} onSelect={() => p.onTemplate(t.id)} className="whitespace-normal">{t.title[p.lang]}</DropdownMenuItem>
               {t.variants.length > 0 && (
-                <details className="variants">
-                  <summary>{s.variantsOf} {t.id} ({t.variants.length})</summary>
-                  {t.variants.map((v) => (
-                    <button key={v.id} type="button" title={v.change} data-testid={`variant-${v.id}`} onClick={(e) => { p.onTemplate(t.id, v.id); (e.currentTarget.closest("details.menu") as HTMLDetailsElement).open = false; }}>{v.change}</button>
-                  ))}
-                </details>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger className="text-xs text-muted-foreground">{s.variantsOf} {t.id} ({t.variants.length})</DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="w-96 max-h-[70vh] overflow-y-auto">
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">{t.title[p.lang]}</DropdownMenuLabel>
+                    {t.variants.map((v) => (
+                      <DropdownMenuItem key={v.id} data-testid={`variant-${v.id}`} title={v.change} className="whitespace-normal text-xs" onSelect={() => p.onTemplate(t.id, v.id)}>{v.change}</DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
               )}
+              <DropdownMenuSeparator />
             </div>
           ))}
-        </div>
-      </details>
-      <button type="button" onClick={() => input.current?.click()}>{s.open}</button>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <Button variant="outline" size="sm" onClick={() => input.current?.click()}><FolderOpen />{s.open}</Button>
       <input ref={input} type="file" accept="application/json,.json" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) p.onOpenFile(f); e.target.value = ""; }} />
-      <button type="button" onClick={p.onSave}>{s.save}</button>
-      <select value={p.lang} aria-label={s.language} onChange={(e) => p.onLang(e.target.value as Lang)}>
-        <option value="vi">Tiếng Việt</option>
-        <option value="en">English</option>
-      </select>
-      <button type="button" onClick={p.onTheme} aria-label={s.theme}>◐</button>
-      <button type="button" className="primary" onClick={p.onExport} disabled={!p.canExport} title={p.canExport ? undefined : s.cannotExport} data-testid="export">{s.exportTf}</button>
+      <Button variant="outline" size="sm" onClick={p.onSave}><Save />{s.save}</Button>
+      <Select value={p.lang} onValueChange={(v) => p.onLang(v as Lang)}>
+        <SelectTrigger size="sm" aria-label={s.language} className="w-32">{p.lang === "vi" ? "Tiếng Việt" : "English"}</SelectTrigger>
+        <SelectContent>
+          <SelectItem value="vi">Tiếng Việt</SelectItem>
+          <SelectItem value="en">English</SelectItem>
+        </SelectContent>
+      </Select>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="outline" size="icon-sm" onClick={p.onTheme} aria-label={s.theme}>{p.dark ? <Sun /> : <Moon />}</Button>
+        </TooltipTrigger>
+        <TooltipContent>{s.theme}</TooltipContent>
+      </Tooltip>
+      <Button size="sm" onClick={p.onExport} disabled={!p.canExport} title={p.canExport ? undefined : s.cannotExport} data-testid="export"><Download />{s.exportTf}</Button>
     </header>
   );
 }

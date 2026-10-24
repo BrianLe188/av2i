@@ -1,4 +1,6 @@
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
+import { resolve } from "node:path";
 import { defineConfig, type Plugin } from "vite";
 import { compile, specRoot } from "@av2i/registry";
 
@@ -29,6 +31,7 @@ function registry(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), registry()],
+  plugins: [react(), tailwindcss(), registry()],
+  resolve: { alias: { "@": resolve(import.meta.dirname, "src") } },
   server: { port: 5173, fs: { allow: ["../.."] } },
 });
