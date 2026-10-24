@@ -1,6 +1,33 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "studio", "runtimeExecutable": "npx", "runtimeArgs": ["-y", "pnpm@12.15.0", "--filter", "@av2i/studio", "dev"], "port": 5173 }
+    {
+      "name": "api",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "DATABASE_URL=postgres://av2i:av2i@127.0.0.1:55432/av2i",
+        "PORT=3000",
+        "HOST=127.0.0.1",
+        "npx",
+        "-y",
+        "pnpm@12.15.0",
+        "--filter",
+        "@av2i/api",
+        "start"
+      ],
+      "port": 3000
+    },
+    {
+      "name": "studio",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "-y",
+        "pnpm@12.15.0",
+        "--filter",
+        "@av2i/studio",
+        "dev"
+      ],
+      "port": 5173
+    }
   ]
 }

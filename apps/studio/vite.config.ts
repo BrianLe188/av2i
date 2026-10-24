@@ -33,5 +33,10 @@ function registry(): Plugin {
 export default defineConfig({
   plugins: [react(), tailwindcss(), registry()],
   resolve: { alias: { "@": resolve(import.meta.dirname, "src") } },
-  server: { port: 5173, fs: { allow: ["../.."] } },
+  server: {
+    port: 5173,
+    fs: { allow: ["../.."] },
+    // the API of apps/api; start it with `pnpm api` (DATABASE_URL is required)
+    proxy: { "/api": process.env.API_URL ?? "http://127.0.0.1:3000" },
+  },
 });

@@ -25,6 +25,7 @@ Numbered `DD-nnn` to keep them apart from the specification's `D-nnn` ([../spec/
 | DD-018 | decided | Certificates, validation records and provider aliases |
 | DD-019 | decided | One bucket policy per bucket, from every relation |
 | DD-020 | decided | The deployer policy |
+| DD-021 | decided | Accounts, sessions and IAM-style authorization on a server |
 
 ## DD-001 Language and runtime
 
@@ -240,4 +241,65 @@ managed and customer policies the design names, so the deployer cannot attach `A
 permissions; instance profile and customer policy management on their exact ARNs, only when the design has them. The platform
 neither creates the deployer nor holds its credentials (DD-010). The policy does not list what other services need; those actions follow
 from the resources in the files and are not enumerated yet.
+
+## DD-021 Accounts, sessions and IAM-style authorization on a server
+
+Status: decided (recommendation accepted; supersedes the deferral in DD-007 for accounts).
+
+The platform is open source and installed by whoever runs it, who lets several people in. So it needs a server (`apps/api`) with
+accounts, and the studio sits behind a login. The engine still runs in the browser; the server stores designs and decides who may do
+what. It never holds AWS credentials (DD-010).
+
+**Runtime.** One Node process serves the API and the built studio. Database: PostgreSQL (the default and only target), with
+numbered SQL migrations run at start. Layers: routes, services, `packages/authz` (a pure evaluator), repositories (Kysely).
+
+**First start.** When no user exists the server creates `admin` with `ADMIN_INITIAL_PASSWORD` or, if unset, `admin`, and attaches the
+built-in `Administrator` policy. `must_change_password` is true unless the password came from the environment and is strong. Until it
+is changed every route except `GET /auth/me`, `POST /auth/change-password` and `POST /auth/logout` answers
+`403 password_change_required`. A new password needs at least 12 characters and must differ from the username, from `admin` and from
+the old one.
+
+**Sessions.** Server side, not JWT, so that disabling an account or changing a permission takes effect at once. The cookie holds a
+random 256-bit token (`HttpOnly`, `SameSite=Lax`, `Secure` when the request is HTTPS); the database holds only its SHA-256. A session
+has an idle and an absolute expiry. Changing or resetting a password revokes the person's other sessions. State-changing requests
+must carry the header `X-Requested-With: av2i` on top of `SameSite`.
+
+**Login hardening.** Attempts are counted per username and IP in `login_throttle` and per user in `failed_attempts`; failures add a
+growing delay and then a temporary lock; the answer is the same whether the username exists or not, and a dummy hash is checked when
+it does not, so timing does not tell either.
+
+**Authorization.** Principals are users and groups (a user may be in several). Policies are JSON documents of statements with
+`Effect`, `Action` and `Resource` (`*` matches any run of characters), attached to users or groups. Evaluation: collect the policies of
+the user and of their groups; a matching `Deny` refuses; a matching `Allow` permits; otherwise refuse. Resources are named
+`av2i:project/<id>`, `av2i:user/<id>`, `av2i:group/<id>`, `av2i:policy/<name>`. Actions: `project:{Create,List,Read,Write,Delete,Share}`,
+`user:{Create,List,Read,Update,Disable,ResetPassword}`, `group:Manage`, `policy:Manage`, `audit:Read`. For a project two more sources add
+to the allows: the owner, and a share with the role `viewer` (`project:Read`) or `editor` (`project:Read`, `project:Write`); a `Deny`
+still wins. Built-in policies (`builtin`, read only): `Administrator`, `ProjectEditor`, `ProjectViewer`, `UserManager`. The last
+administrator cannot be deleted, disabled or detached from `Administrator`. Exporting Terraform is not a permission: the engine runs in
+the browser, so it could not be enforced, and whoever may read a design can generate its code.
+
+**Projects.** `projects.design` is the working copy, saved with the revision it was based on (`rev`) and refused with `409` when
+another save came first. `project_versions` holds snapshots: the ones a person saves with a note and one taken automatically when the
+last is old enough. Deleting a project only sets `deleted_at`. The audit log is append only and keeps the actor's username so it
+still reads after the account is deleted.
+
+```mermaid
+erDiagram
+  users ||--o{ sessions : has
+  users ||--o{ group_members : in
+  groups ||--o{ group_members : has
+  users ||--o{ policy_attachments : gets
+  groups ||--o{ policy_attachments : gets
+  policies ||--o{ policy_attachments : attached
+  users ||--o{ projects : owns
+  projects ||--o{ project_versions : snapshots
+  projects ||--o{ project_shares : shared
+  users ||--o{ project_shares : receives
+  groups ||--o{ project_shares : receives
+  users ||--o{ audit_log : acts
+```
+
+`policy_attachments` and `project_shares` have a `user_id` and a `group_id` column with a check that exactly one is set, so every
+reference keeps its foreign key. Names are `citext`. Staging: A1 (server, login, forced change, throttle, audit, user management,
+login screen), A2 (projects and versions), A3 (groups and policies in the interface), A4 (sharing, audit view, API tokens, SSO later).
 

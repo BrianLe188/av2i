@@ -8,7 +8,8 @@
     "test": "pnpm -r test",
     "spec:check": "pnpm --filter @av2i/registry check",
     "spec:build": "pnpm --filter @av2i/registry build",
-    "studio": "pnpm --filter @av2i/studio dev"
+    "studio": "pnpm --filter @av2i/studio dev",
+    "api": "pnpm --filter @av2i/api start"
   },
   "devDependencies": {
     "@types/node": "^26.0.0",

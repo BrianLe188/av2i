@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { Download, FolderOpen, Layers, Moon, Redo2, Save, Sun, Undo2 } from "lucide-react";
+import { Download, FolderOpen, KeyRound, Layers, LogOut, Moon, Redo2, Save, Sun, Undo2, UserRound, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent,
@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/u
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Template } from "../logic/templates.ts";
 import type { Lang, Strings } from "../i18n.ts";
+import type { User } from "../auth.tsx";
 
 interface Props {
   s: Strings;
@@ -28,6 +29,9 @@ interface Props {
   onTemplate: (id: string, variant?: string) => void;
   onLang: (l: Lang) => void;
   onTheme: () => void;
+  user: User;
+  canManageUsers: boolean;
+  onAccount: (what: "password" | "users" | "logout") => void;
 }
 
 export function TopBar(p: Props) {
@@ -82,6 +86,22 @@ export function TopBar(p: Props) {
         </TooltipTrigger>
         <TooltipContent>{s.theme}</TooltipContent>
       </Tooltip>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm" data-testid="account"><UserRound /><span className="max-w-24 truncate">{p.user.username}</span></Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuLabel className="font-normal">
+            <div className="text-xs text-muted-foreground">{s.acct.signedInAs}</div>
+            <div className="truncate font-medium">{p.user.displayName || p.user.username}</div>
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => p.onAccount("password")} data-testid="menu-password"><KeyRound />{s.acct.changePassword}</DropdownMenuItem>
+          {p.canManageUsers && <DropdownMenuItem onSelect={() => p.onAccount("users")} data-testid="menu-users"><Users />{s.acct.manageUsers}</DropdownMenuItem>}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => p.onAccount("logout")} data-testid="menu-logout"><LogOut />{s.acct.signOut}</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <Button size="sm" onClick={p.onExport} disabled={!p.canExport} title={p.canExport ? undefined : s.cannotExport} data-testid="export"><Download />{s.exportTf}</Button>
     </header>
   );

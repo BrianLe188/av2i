@@ -2,33 +2,23 @@
   "name": "@av2i/api",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "build": "nest build -p tsconfig.build.json",
-    "start": "node dist/main.js",
-    "start:dev": "nest start --watch",
-    "migration:generate": "nest build && typeorm migration:generate -d dist/data-source.js",
-    "migration:run": "nest build && typeorm migration:run -d dist/data-source.js",
-    "schema:log": "nest build && typeorm schema:log -d dist/data-source.js",
-    "test": "tsc -p tsconfig.json --noEmit false --outDir dist-test && node --test dist-test/e2e.spec.js"
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "dev": "node --watch src/main.ts",
+    "start": "node src/main.ts"
   },
   "dependencies": {
-    "@av2i/core": "*",
-    "@nestjs/common": "^11.0.0",
-    "@nestjs/core": "^11.0.0",
-    "@nestjs/platform-express": "^11.0.0",
-    "@nestjs/typeorm": "^11.0.0",
-    "class-transformer": "^0.5.1",
-    "class-validator": "^0.14.0",
-    "pg": "^8.12.0",
-    "reflect-metadata": "^0.2.0",
-    "rxjs": "^7.8.0",
-    "sql.js": "^1.11.0",
-    "typeorm": "^0.3.20"
+    "@av2i/authz": "workspace:*",
+    "@fastify/cookie": "^11.1.3",
+    "@fastify/static": "^10.1.7",
+    "@node-rs/argon2": "^2.2.2",
+    "fastify": "^5.12.7",
+    "kysely": "^0.29.7",
+    "pg": "^8.23.1"
   },
   "devDependencies": {
-    "@nestjs/cli": "^11.0.0",
-    "@types/express": "^5.0.0",
-    "@types/node": "^22.0.0",
-    "typescript": "^5.6.0"
+    "@types/pg": "^8.23.1"
   }
 }

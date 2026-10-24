@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@av2i/authz": "workspace:*",
     "@av2i/engine": "workspace:*",
     "@av2i/generator": "workspace:*",
     "@av2i/model": "workspace:*",

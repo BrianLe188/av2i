@@ -10,7 +10,12 @@ import { Canvas } from "./components/Canvas.tsx";
 import { Inspector } from "./components/Inspector.tsx";
 import { Palette } from "./components/Palette.tsx";
 import { TopBar } from "./components/TopBar.tsx";
-import { strings, type Lang } from "./i18n.ts";
+import { strings } from "./i18n.ts";
+import { useAuth, type User } from "./auth.tsx";
+import { ChangePasswordForm } from "./components/auth/Screens.tsx";
+import { UsersDialog } from "./components/UsersDialog.tsx";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { store, type Prefs } from "./prefs.ts";
 import { analyze } from "./logic/analyze.ts";
 import { addNode } from "./logic/design.ts";
 import { download, zipFiles } from "./logic/files.ts";
@@ -22,13 +27,15 @@ import { paletteItem } from "./registry.ts";
 import { blankDesign, fromTemplate, templates } from "./logic/templates.ts";
 import { reg } from "./registry.ts";
 
-const store = {
-  get(k: string): string | null { try { return localStorage.getItem(`av2i.${k}`); } catch { return null; } },
-  set(k: string, v: string): void { try { localStorage.setItem(`av2i.${k}`, v); } catch { /* storage may be blocked */ } },
-};
+/** Drafts are kept per person: two people on one browser must not see each other's work. */
+const draftKey = (userId: string) => `draft.${userId}`;
 
-function loadDraft(): Design | null {
-  const raw = store.get("draft");
+function loadDraft(userId: string): Design | null {
+  // a draft made before there were accounts goes to the first person who signs in
+  const legacy = store.get("draft");
+  if (legacy && !store.get(draftKey(userId))) store.set(draftKey(userId), legacy);
+  store.remove("draft");
+  const raw = store.get(draftKey(userId));
   if (!raw) return null;
   try {
     const d = JSON.parse(raw) as Design;
@@ -36,14 +43,15 @@ function loadDraft(): Design | null {
   } catch { return null; }
 }
 
-export function App() {
-  const draft = useMemo(loadDraft, []);
+export function App({ prefs, user }: { prefs: Prefs; user: User }) {
+  const draft = useMemo(() => loadDraft(user.id), [user.id]);
   const [hist, setHist] = useState(() => H.start(draft ?? blankDesign()));
   const [selection, setSelection] = useState<Selection>(null);
   const [focus, setFocus] = useState<ReadonlySet<string>>(new Set());
-  const [lang, setLang] = useState<Lang>(() => (store.get("lang") === "en" ? "en" : "vi"));
+  const { lang, setLang, dark } = prefs;
+  const auth = useAuth();
+  const [dialog, setDialog] = useState<null | "password" | "users">(null);
   const [tab, setTab] = useState<Tab>(() => (["problems", "terraform", "resources"].includes(store.get("tab") ?? "") ? (store.get("tab") as Tab) : "problems"));
-  const [dark, setDark] = useState(() => { const t = store.get("theme"); return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; });
   const [loadId, setLoadId] = useState(0);
 
   const s = strings(lang);
@@ -51,10 +59,8 @@ export function App() {
   const analysis = useMemo(() => analyze(design, reg), [design]);
   const tpls = useMemo(() => templates(reg), []);
 
-  useEffect(() => { store.set("draft", JSON.stringify(design)); }, [design]);
-  useEffect(() => { store.set("lang", lang); document.documentElement.lang = lang; }, [lang]);
+  useEffect(() => { store.set(draftKey(user.id), JSON.stringify(design)); }, [design, user.id]);
   useEffect(() => { store.set("tab", tab); }, [tab]);
-  useEffect(() => { document.documentElement.classList.toggle("dark", dark); store.set("theme", dark ? "dark" : "light"); }, [dark]);
   const setToast = useCallback((message: string) => { toast(message); }, []);
   useEffect(() => { if (draft) toast(strings(store.get("lang") === "en" ? "en" : "vi").draftRestored); }, [draft]);
 
@@ -122,7 +128,10 @@ export function App() {
         onBlank={() => replace(blankDesign(design.settings.region))}
         onTemplate={(id, v) => replace(fromTemplate(reg, id, v))}
         onLang={setLang}
-        onTheme={() => setDark((d) => !d)}
+        onTheme={prefs.toggleDark}
+        user={user}
+        canManageUsers={auth.can("user:List")}
+        onAccount={(what) => (what === "logout" ? void auth.logout() : setDialog(what))}
       />
       <Palette lang={lang} s={s} onAdd={(service) => add(service, undefined)} />
       <main className="relative min-h-0 min-w-0" style={{ gridArea: "main" }}>
@@ -145,6 +154,16 @@ export function App() {
       <Inspector design={design} analysis={analysis} selection={selection} lang={lang} s={s} onEdit={edit} onSelect={select} />
       <Bottom analysis={analysis} lang={lang} s={s} tab={tab} onTab={setTab} onSelect={select} nameOf={nameOf} />
     </div>
+    <Dialog open={dialog === "password"} onOpenChange={(o) => !o && setDialog(null)}>
+      <DialogContent className="sm:max-w-sm" data-testid="password-dialog">
+        <DialogHeader>
+          <DialogTitle>{s.acct.changePassword}</DialogTitle>
+          <DialogDescription>{user.username}</DialogDescription>
+        </DialogHeader>
+        <ChangePasswordForm s={s} username={user.username} onDone={() => { setDialog(null); toast(s.acct.passwordChanged); }} />
+      </DialogContent>
+    </Dialog>
+    <UsersDialog open={dialog === "users"} onClose={() => setDialog(null)} s={s} selfId={user.id} />
     <Toaster theme={dark ? "dark" : "light"} position="bottom-center" />
     </TooltipProvider>
   );
