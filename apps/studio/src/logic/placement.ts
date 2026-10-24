@@ -5,12 +5,12 @@ type Text = { vi: string; en: string };
 export type Verdict<T = object> = ({ ok: true } & T) | { ok: false; reason: Text };
 
 /** Mechanisms a user draws as an edge; the others come from nesting or from the engine. */
-export const DRAWN = ["route", "route-association", "sg-attach", "eip-attach", "image-source", "network-access", "assume-role", "grant", "db-subnet-group", "containment"] as const;
+export const DRAWN = ["route", "route-association", "sg-attach", "eip-attach", "image-source", "network-access", "assume-role", "grant", "db-subnet-group", "containment", "listener-target", "cert-attach", "dns-alias", "origin", "resource-policy"] as const;
 const PLACEMENT = ["containment", "igw-attach", "nat-placement"];
 /** Where an undirected mechanism starts: the owner of the relation. */
-const SOURCE_FIRST = ["route-table", "security-group", "elastic-ip", "iam-role", "ecr"];
+const SOURCE_FIRST = ["route-table", "security-group", "elastic-ip", "iam-role", "ecr", "acm", "route53", "cloudfront", "alb"];
 /** Services that may sit in several subnets: a subnet connected to one by a containment line adds a subnet. */
-const SPANS = ["ecs", "lambda"];
+const SPANS = ["ecs", "lambda", "alb"];
 
 export const CONTAINERS = ["vpc", "subnet"];
 

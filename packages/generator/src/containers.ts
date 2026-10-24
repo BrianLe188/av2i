@@ -1,6 +1,8 @@
 import type { Value } from "@av2i/model";
 import { call, ref, type Block, type Expr } from "./hcl.ts";
 import { blocksOf, hyphen, resource, template, toExpr, type PlanCtx } from "./ctx.ts";
+import { targetGroupsOf, listenersOf } from "@av2i/engine";
+import { listenerName } from "./delivery.ts";
 import { roleDependencies, roleRef } from "./iam.ts";
 
 /** `repository_url:tag` of the ECR repository connected to a consumer, else the image written on the node. */
@@ -69,7 +71,13 @@ export function planContainers(c: PlanCtx): void {
       ],
     });
     if (strategy) blocks.push(...blocksOf("capacity_provider_strategy", strategy as Value));
-    const deps = roleDependencies(g, n.key);
+    // behind a load balancer: the service registers its tasks in the target group, after the listener exists
+    const listeners: Expr[] = [];
+    for (const t of targetGroupsOf(g).filter((x) => x.targets.some((y) => y.key === n.key))) {
+      blocks.push({ type: "load_balancer", labels: [], args: [["target_group_arn", ref(`aws_lb_target_group.${t.id}.arn`)], ["container_name", containerName], ["container_port", t.port ?? (n.props.container_port as number)]] });
+      for (const l of listenersOf(g, t.alb)) listeners.push(ref(`aws_lb_listener.${listenerName(t.alb, l.port)}`));
+    }
+    const deps = [...roleDependencies(g, n.key), ...listeners];
     if (deps.length) args.push(["depends_on", deps]);
     add("compute.tf", resource("aws_ecs_service", n.key, args, blocks), n.key);
   }

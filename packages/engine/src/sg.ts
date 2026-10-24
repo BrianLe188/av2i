@@ -52,7 +52,9 @@ export function accesses(g: Graph): Access[] {
     if (typeof named === "string" && groups.includes(named)) return named;
     return groups.length === 1 ? groups[0] : undefined;
   };
-  for (const e of g.edges("network-access")) {
+  // a load balancer reaches its targets like any other caller (relations/listener-target.md); a function target has no group
+  const calls = [...g.edges("network-access"), ...g.edges("listener-target").filter((e) => g.node(e.to)?.service !== "lambda")];
+  for (const e of calls) {
     const callerSg = pick(e.from, e.props?.caller_sg);
     const calleeSg = pick(e.to, e.props?.callee_sg);
     const calleePort = servicePort(g, e.to);

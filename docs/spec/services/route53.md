@@ -14,6 +14,14 @@ sources:
   S6: https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/routing-to-elb-load-balancer.html
   S7: https://docs.aws.amazon.com/acm/latest/userguide/dns-validation.html
 scope_note: "Public hosted zones, simple A and AAAA alias records to ALB and CloudFront, and the CNAME records that validate ACM certificates. Domain registration, private hosted zones, every routing policy other than simple, health checks, DNSSEC, query logging, Resolver and traffic flow are out of scope (decision D-020)"
+properties:
+  # what a node of this service carries in props: a public hosted zone and the records the user writes on it (D-020).
+  # Alias records to an ALB or a distribution come from dns-alias connections; validation records from cert-validation.
+  - { key: name, type: string, required: true, constraints: ["the domain name; a subdomain zone also needs an NS record in the parent zone"], src: [S1], status: verified }
+  - { key: comment, type: string, default: "Managed by Terraform", src: [S1], status: verified }
+  - { key: force_destroy, type: boolean, default: false, constraints: ["true deletes every record in the zone on destroy, including records created outside Terraform"], src: [S1], status: verified }
+  - { key: private, type: boolean, default: false, constraints: ["a private zone needs a VPC association and is out of scope (D-020); true is reported by VAL-088 when a distribution points at it"], src: [S1], status: verified }
+  - { key: records, type: json, constraints: ["a list of { name, type, ttl, records } or { name, type, alias } written by hand; the platform generates the alias and validation records itself"], src: [S2], status: verified }
 parts:
   hosted_zone:
     - { key: name, type: string, required: true, constraints: ["the domain name; a subdomain zone also needs an NS record in the parent zone"], src: [S1], status: verified }

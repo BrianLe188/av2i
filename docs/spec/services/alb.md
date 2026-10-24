@@ -19,6 +19,15 @@ sources:
   S8: https://docs.aws.amazon.com/elasticloadbalancing/latest/application/create-https-listener.html
   S9: https://docs.aws.amazon.com/elasticloadbalancing/latest/application/enable-access-logging.html
 scope_note: "Application Load Balancer only. Network and Gateway load balancers, listener rules, authentication actions (Cognito, OIDC, JWT), mutual TLS, WAF, IPAM pools, Local Zone and Outpost subnets, weighted target groups, gRPC and HTTP/2 to targets, target optimizer and dual-stack are out of scope (decision D-019)"
+properties:
+  # what an ALB node carries in props. Target groups are not nodes: each listener-target connection makes one (DD-017).
+  - { key: name, type: string, constraints: ["up to 32 characters", "alphanumeric or hyphens only", "no leading or trailing hyphen", "unique in the account"], src: [S1, S6], status: verified, note: "defaults to the node key with hyphens" }
+  - { key: internal, type: boolean, default: false, src: [S1], status: verified }
+  - { key: listeners, type: json, constraints: ["a list of { port, protocol, ssl_policy, default_action }", "default_action is { type: forward } (to the connected targets, or to the one named in target), { type: redirect, status_code, port, protocol } or { type: fixed-response, status_code, content_type, message_body }"], src: [S2], status: verified }
+  - { key: idle_timeout, type: number, default: 60, src: [S1], status: verified }
+  - { key: enable_deletion_protection, type: boolean, default: false, src: [S1], status: verified }
+  - { key: drop_invalid_header_fields, type: boolean, default: false, src: [S1, S5], status: verified }
+  - { key: access_logs, type: object, fields: { enabled: { default: false }, prefix: {} }, constraints: ["the bucket is the one the ALB is connected to through resource-policy"], src: [S1, S9], status: verified }
 parts:
   load_balancer:
     - { key: name, type: string, required: true, force_new: unverified, constraints: ["up to 32 characters", "alphanumeric or hyphens only", "no leading or trailing hyphen", "unique in the account"], src: [S1, S6], status: verified }

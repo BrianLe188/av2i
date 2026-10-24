@@ -6,6 +6,7 @@ import { planContainers } from "./containers.ts";
 import { planDatabase } from "./database.ts";
 import { planIam } from "./iam.ts";
 import { planStorage } from "./storage.ts";
+import { planDelivery } from "./delivery.ts";
 
 export { type FileName, type PlannedResource } from "./ctx.ts";
 
@@ -26,7 +27,8 @@ export function plan(design: Design): PlannedResource[] {
     names.set(k, n);
     return n === 1 ? base : `${base}_${n}`;
   };
-  const ctx: PlanCtx = { nd, g, add, unique, tags, optional: (n, keys) => keys.filter((k) => n.props[k] !== undefined).map((k) => [k, toExpr(n.props[k]!)]) };
+  const seen = new Set<string>();
+  const ctx: PlanCtx = { nd, g, add, unique, tags, once: (key, f) => { if (!seen.has(key)) { seen.add(key); f(); } }, optional: (n, keys) => keys.filter((k) => n.props[k] !== undefined).map((k) => [k, toExpr(n.props[k]!)]) };
   const igwOf = (key: string): NormalizedNode | undefined => {
     const vpc = g.vpcOf(key);
     return vpc ? g.nodesOf("internet-gateway").find((i) => g.vpcOf(i.key)?.key === vpc.key) : undefined;
@@ -136,6 +138,7 @@ export function plan(design: Design): PlannedResource[] {
     add("compute.tf", resource("aws_eip_association", e.from, [["allocation_id", ref(`aws_eip.${e.from}.id`)], ["instance_id", ref(`aws_instance.${e.to}.id`)]]), e.id);
   }
   planStorage(ctx);
+  planDelivery(ctx);
   planContainers(ctx);
   planDatabase(ctx);
   planIam(ctx);

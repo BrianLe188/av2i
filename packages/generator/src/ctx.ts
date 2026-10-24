@@ -3,7 +3,7 @@ import type { NormalizedDesign, NormalizedNode, Value } from "@av2i/model";
 import type { Block, Expr } from "./hcl.ts";
 import { ref } from "./hcl.ts";
 
-export type FileName = "network.tf" | "security.tf" | "compute.tf" | "storage.tf" | "database.tf" | "iam.tf" | "variables.tf";
+export type FileName = "network.tf" | "security.tf" | "compute.tf" | "storage.tf" | "database.tf" | "iam.tf" | "variables.tf" | "delivery.tf" | "dns.tf" | "cdn.tf";
 
 export interface PlannedResource {
   file: FileName;
@@ -20,6 +20,8 @@ export interface PlanCtx {
   unique: (type: string, base: string) => string;
   tags: (n: NormalizedNode) => [string, Expr];
   optional: (n: NormalizedNode, keys: string[]) => [string, Expr][];
+  /** run `f` the first time `key` is seen: for blocks several services share, such as the account data source */
+  once: (key: string, f: () => void) => void;
 }
 
 export const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "x";
@@ -28,7 +30,17 @@ export function resource(type: string, name: string, args: [string, Expr][], blo
   return { type: "resource", labels: [type, name], args, blocks };
 }
 
-export const toExpr = (v: Value): Expr => (Array.isArray(v) ? v.map(toExpr) : v !== null && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, toExpr(x)])) : (v as Expr));
+/** A value of a design as an expression; `{ $ref }` and `{ $template }` (see the engine's policy statements) become Terraform references. */
+export const toExpr = (v: Value): Expr => {
+  if (Array.isArray(v)) return v.map(toExpr);
+  if (v !== null && typeof v === "object") {
+    const keys = Object.keys(v);
+    if (keys.length === 1 && keys[0] === "$ref" && typeof v.$ref === "string") return ref(v.$ref);
+    if (keys.length === 1 && keys[0] === "$template" && typeof v.$template === "string") return template(v.$template);
+    return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, toExpr(x)]));
+  }
+  return v as Expr;
+};
 
 /** A double-quoted Terraform template that mixes text with references, such as `"${aws_s3_bucket.x.arn}/*"`. */
 export const template = (code: string) => ref(`"${code}"`);

@@ -16,6 +16,8 @@ must fire (see [conventions section 11](../00-conventions.md#11-scenario-files))
 | Scenario | Shows |
 |---|---|
 | [ec2-in-vpc](ec2-in-vpc.md) | the first **executable** scenario: a full design with machine-applied patches, run by the engine in `packages/testkit` |
+| [alb-web](alb-web.md) | the executable scenario of M4 for load balancers: an HTTPS ALB in front of a Fargate service with a certificate, an alias record and access logs, with 35 variants |
+| [static-site](static-site.md) | the executable scenario of M4 for delivery: a private bucket behind CloudFront with a us-east-1 certificate and Route 53 records, with 31 variants |
 | [container-backend](container-backend.md) | the second **executable** scenario (M3): ECS Fargate, ECR, RDS, S3 and Lambda in a VPC, with 70 variants |
 | [three-tier-web](three-tier-web.md) | public, private and database tiers, NAT per AZ, ALB, Multi-AZ RDS, certificate and DNS |
 | [serverless-api](serverless-api.md) | Lambda behind an ALB, one function in the VPC and one outside, image from ECR |

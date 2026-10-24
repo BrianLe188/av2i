@@ -11,6 +11,9 @@ import * as storage from "./storage.ts";
 import * as database from "./database.ts";
 import * as containers from "./containers.ts";
 import * as iam from "./iam.ts";
+import * as alb from "./alb.ts";
+import * as dns from "./dns.ts";
+import * as cdn from "./cdn.ts";
 
 export type { Ctx, Hit, RuleImpl } from "./context.ts";
 
@@ -21,7 +24,7 @@ function collect(...modules: Record<string, unknown>[]): Partial<Record<RuleId, 
   return out as Partial<Record<RuleId, RuleImpl>>;
 }
 
-export const implementations = collect(network, securitygroup, sgmeta, compute, elasticip, storage, database, containers, iam);
+export const implementations = collect(network, securitygroup, sgmeta, compute, elasticip, storage, database, containers, iam, alb, dns, cdn);
 
 export function runRules(design: Design, registry: Registry): Finding[] {
   const ctx = makeContext(normalize(design));

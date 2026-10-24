@@ -1,0 +1,350 @@
+{
+  "schema": 1,
+  "name": "alb-web",
+  "settings": {
+    "region": "ap-southeast-1"
+  },
+  "nodes": [
+    {
+      "key": "vpc",
+      "label": "Web",
+      "service": "vpc",
+      "props": {
+        "cidr_block": "10.3.0.0/16",
+        "enable_dns_support": true,
+        "enable_dns_hostnames": true
+      }
+    },
+    {
+      "key": "igw",
+      "label": "Internet gateway",
+      "service": "internet-gateway",
+      "parent": "vpc",
+      "props": {}
+    },
+    {
+      "key": "pub_a",
+      "label": "Public A",
+      "service": "subnet",
+      "parent": "vpc",
+      "props": {
+        "cidr_block": "10.3.0.0/24",
+        "availability_zone": "ap-southeast-1a"
+      }
+    },
+    {
+      "key": "pub_b",
+      "label": "Public B",
+      "service": "subnet",
+      "parent": "vpc",
+      "props": {
+        "cidr_block": "10.3.1.0/24",
+        "availability_zone": "ap-southeast-1b"
+      }
+    },
+    {
+      "key": "app_a",
+      "label": "App A",
+      "service": "subnet",
+      "parent": "vpc",
+      "props": {
+        "cidr_block": "10.3.10.0/24",
+        "availability_zone": "ap-southeast-1a"
+      }
+    },
+    {
+      "key": "app_b",
+      "label": "App B",
+      "service": "subnet",
+      "parent": "vpc",
+      "props": {
+        "cidr_block": "10.3.11.0/24",
+        "availability_zone": "ap-southeast-1b"
+      }
+    },
+    {
+      "key": "nat_a",
+      "label": "NAT A",
+      "service": "nat-gateway",
+      "parent": "pub_a",
+      "props": {
+        "availability_mode": "zonal",
+        "connectivity_type": "public"
+      }
+    },
+    {
+      "key": "nat_b",
+      "label": "NAT B",
+      "service": "nat-gateway",
+      "parent": "pub_b",
+      "props": {
+        "availability_mode": "zonal",
+        "connectivity_type": "public"
+      }
+    },
+    {
+      "key": "rt_public",
+      "label": "Public routes",
+      "service": "route-table",
+      "parent": "vpc",
+      "props": {}
+    },
+    {
+      "key": "rt_app_a",
+      "label": "App A routes",
+      "service": "route-table",
+      "parent": "vpc",
+      "props": {}
+    },
+    {
+      "key": "rt_app_b",
+      "label": "App B routes",
+      "service": "route-table",
+      "parent": "vpc",
+      "props": {}
+    },
+    {
+      "key": "sg_alb",
+      "label": "alb-sg",
+      "service": "security-group",
+      "parent": "vpc",
+      "props": {
+        "name": "alb-sg",
+        "description": "Load balancer",
+        "ingress_rules": [
+          {
+            "ip_protocol": "tcp",
+            "from_port": 80,
+            "to_port": 80,
+            "cidr_ipv4": "0.0.0.0/0",
+            "description": "http"
+          },
+          {
+            "ip_protocol": "tcp",
+            "from_port": 443,
+            "to_port": 443,
+            "cidr_ipv4": "0.0.0.0/0",
+            "description": "https"
+          }
+        ]
+      }
+    },
+    {
+      "key": "sg_task",
+      "label": "task-sg",
+      "service": "security-group",
+      "parent": "vpc",
+      "props": {
+        "name": "task-sg",
+        "description": "ECS tasks"
+      }
+    },
+    {
+      "key": "alb",
+      "label": "Web ALB",
+      "service": "alb",
+      "parent": "pub_a",
+      "props": {
+        "name": "web-alb",
+        "drop_invalid_header_fields": true,
+        "enable_deletion_protection": true,
+        "access_logs": {
+          "enabled": true,
+          "prefix": "alb"
+        },
+        "listeners": [
+          {
+            "port": 443,
+            "protocol": "HTTPS",
+            "ssl_policy": "ELBSecurityPolicy-TLS13-1-2-2021-06",
+            "default_action": {
+              "type": "forward"
+            }
+          },
+          {
+            "port": 80,
+            "protocol": "HTTP",
+            "default_action": {
+              "type": "redirect",
+              "status_code": "HTTP_301",
+              "port": "443",
+              "protocol": "HTTPS"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "key": "logs",
+      "label": "ALB logs",
+      "service": "s3",
+      "props": {
+        "bucket": "av2i-example-alb-logs",
+        "bucket_policy": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "DenyInsecureTransport",
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": [
+                "arn:aws:s3:::av2i-example-alb-logs",
+                "arn:aws:s3:::av2i-example-alb-logs/*"
+              ],
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "key": "cluster",
+      "label": "Web cluster",
+      "service": "ecs",
+      "props": {
+        "part": "cluster",
+        "name": "web"
+      }
+    },
+    {
+      "key": "web",
+      "label": "Web",
+      "service": "ecs",
+      "parent": "app_a",
+      "props": {
+        "part": "service",
+        "name": "web",
+        "cluster": "cluster",
+        "desired_count": 2,
+        "container_port": 8080,
+        "image": "public.ecr.aws/nginx/nginx:stable"
+      }
+    },
+    {
+      "key": "cert",
+      "label": "Certificate",
+      "service": "acm",
+      "props": {
+        "domain_name": "app.example.com",
+        "validation_method": "DNS"
+      }
+    },
+    {
+      "key": "zone",
+      "label": "example.com",
+      "service": "route53",
+      "props": {
+        "name": "example.com"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_rt_public_igw",
+      "mechanism": "route",
+      "from": "rt_public",
+      "to": "igw",
+      "props": {
+        "destination_cidr_block": "0.0.0.0/0"
+      }
+    },
+    {
+      "id": "e_rt_public_a",
+      "mechanism": "route-association",
+      "from": "rt_public",
+      "to": "pub_a"
+    },
+    {
+      "id": "e_rt_public_b",
+      "mechanism": "route-association",
+      "from": "rt_public",
+      "to": "pub_b"
+    },
+    {
+      "id": "e_rt_app_a_nat",
+      "mechanism": "route",
+      "from": "rt_app_a",
+      "to": "nat_a",
+      "props": {
+        "destination_cidr_block": "0.0.0.0/0"
+      }
+    },
+    {
+      "id": "e_rt_app_b_nat",
+      "mechanism": "route",
+      "from": "rt_app_b",
+      "to": "nat_b",
+      "props": {
+        "destination_cidr_block": "0.0.0.0/0"
+      }
+    },
+    {
+      "id": "e_rt_app_a_app",
+      "mechanism": "route-association",
+      "from": "rt_app_a",
+      "to": "app_a"
+    },
+    {
+      "id": "e_rt_app_b_app",
+      "mechanism": "route-association",
+      "from": "rt_app_b",
+      "to": "app_b"
+    },
+    {
+      "id": "e_alb_b",
+      "mechanism": "containment",
+      "from": "pub_b",
+      "to": "alb"
+    },
+    {
+      "id": "e_web_b",
+      "mechanism": "containment",
+      "from": "app_b",
+      "to": "web"
+    },
+    {
+      "id": "e_sg_alb",
+      "mechanism": "sg-attach",
+      "from": "sg_alb",
+      "to": "alb"
+    },
+    {
+      "id": "e_sg_task",
+      "mechanism": "sg-attach",
+      "from": "sg_task",
+      "to": "web"
+    },
+    {
+      "id": "e_alb_web",
+      "mechanism": "listener-target",
+      "from": "alb",
+      "to": "web"
+    },
+    {
+      "id": "e_cert_alb",
+      "mechanism": "cert-attach",
+      "from": "cert",
+      "to": "alb"
+    },
+    {
+      "id": "e_zone_alb",
+      "mechanism": "dns-alias",
+      "from": "zone",
+      "to": "alb",
+      "props": {
+        "name": "app.example.com"
+      }
+    },
+    {
+      "id": "e_alb_logs",
+      "mechanism": "resource-policy",
+      "from": "alb",
+      "to": "logs"
+    }
+  ]
+}

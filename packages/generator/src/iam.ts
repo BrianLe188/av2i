@@ -107,17 +107,13 @@ const trustPolicy = (principals: string[], ecsTask: false | string): Expr => ({
 
 export function planIam(c: PlanCtx): void {
   const { g, add } = c;
-  let needsIdentity = false;
   for (const role of g.nodesOf("iam-role")) {
     if (!isEmitted(g, role)) continue;
     const principals = [...new Set(g.consumersOf(role.key).flatMap((x) => (x.slot ? [slotFor(x.consumer.service, x.slot)?.trust] : [])).filter((x): x is string => !!x))].sort();
     const name = typeof role.props.name === "string" && role.props.name ? role.props.name : role.key.replace(/_/g, "-");
     const consumers = g.consumersOf(role.key);
     const ecsTask = consumers.every((x) => x.consumer.service === "ecs" && x.slot === "task") ? c.nd.settings.region : false;
-    if (ecsTask && !needsIdentity) {
-      needsIdentity = true;
-      add("iam.tf", { type: "data", labels: ["aws_caller_identity", "current"], args: [] }, role.key);
-    }
+    if (ecsTask) c.once("identity", () => add("iam.tf", { type: "data", labels: ["aws_caller_identity", "current"], args: [] }, role.key));
     add("iam.tf", resource("aws_iam_role", role.key, [["name", name], ["assume_role_policy", call("jsonencode", trustPolicy(principals, ecsTask))], c.tags(role)]), role.key);
     for (const arn of managedOf(g, role)) {
       add("iam.tf", resource("aws_iam_role_policy_attachment", attachmentName(role.key, arn), [["role", ref(`aws_iam_role.${role.key}.name`)], ["policy_arn", arn]]), role.key);

@@ -4,7 +4,7 @@ import type { Design, Edge, Node, Props, Value } from "@av2i/model";
 const KEY_BASE: Record<string, string> = {
   vpc: "vpc", subnet: "subnet", "internet-gateway": "igw", "nat-gateway": "nat", "elastic-ip": "eip",
   "route-table": "rt", "vpc-endpoint-s3": "s3ep", "security-group": "sg", ec2: "ec2",
-  ecr: "repo", s3: "bucket", rds: "db", lambda: "fn", "iam-role": "role",
+  ecr: "repo", s3: "bucket", rds: "db", lambda: "fn", "iam-role": "role", alb: "alb", acm: "cert", route53: "zone", cloudfront: "cdn",
 };
 
 /** Keys are immutable and become Terraform local names (DD-011): lowercase, digits and underscores. */
@@ -37,6 +37,21 @@ export function defaultProps(service: string, design: Design, parent: string | n
       return { function_name: hyphen(key), filename: "lambda.zip", handler: "index.handler", runtime: "nodejs22.x" };
     case "iam-role":
       return { name: hyphen(key) };
+    case "alb":
+      return {
+        name: hyphen(key),
+        drop_invalid_header_fields: true,
+        listeners: [
+          { port: 443, protocol: "HTTPS", ssl_policy: "ELBSecurityPolicy-TLS13-1-2-2021-06", default_action: { type: "forward" } },
+          { port: 80, protocol: "HTTP", default_action: { type: "redirect", status_code: "HTTP_301", port: "443", protocol: "HTTPS" } },
+        ],
+      };
+    case "acm":
+      return { domain_name: "", region: design.settings.region, validation_method: "DNS" };
+    case "route53":
+      return { name: "example.com" };
+    case "cloudfront":
+      return { enabled: true };
     case "vpc":
       return { cidr_block: `10.${design.nodes.filter((n) => n.service === "vpc").length}.0.0/16`, enable_dns_support: true, enable_dns_hostnames: true };
     case "subnet": {

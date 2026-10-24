@@ -1,4 +1,6 @@
 import { slotOfEdge, type SlotId } from "./roles.ts";
+import { Graph } from "./graph.ts";
+import { certNames, zoneFor } from "./delivery.ts";
 import type { Design, NormalizedDesign, NormalizedEdge, NormalizedNode } from "@av2i/model";
 
 function freshKey(taken: Set<string>, base: string): string {
@@ -52,6 +54,13 @@ export function normalize(design: Design): NormalizedDesign {
     const key = freshKey(taken, n.service === "ecs" ? `role_${n.key}_exec` : `role_${n.key}`);
     nodes.push({ key, label: `Role of ${n.label}`, service: "iam-role", props: { name: key.replace(/_/g, "-") }, origin: "generated", because: n.key });
     edges.push({ id: `generated:assume-role:${key}:${n.key}`, mechanism: "assume-role", from: key, to: n.key, props: { slot }, origin: "generated", because: n.key });
+  }
+
+  // DNS validation of every certificate: one edge to each hosted zone that holds one of its names (relations/cert-validation.md)
+  const g = new Graph({ name: design.name, settings: design.settings, nodes, edges });
+  for (const cert of nodes.filter((n) => n.service === "acm")) {
+    const zones = new Set(certNames(cert).map((n) => zoneFor(g, n)?.key).filter((k): k is string => !!k));
+    for (const z of zones) edges.push({ id: `derived:cert-validation:${cert.key}:${z}`, mechanism: "cert-validation", from: cert.key, to: z, origin: "derived", because: cert.key });
   }
 
   return { name: design.name, settings: structuredClone(design.settings), nodes, edges };

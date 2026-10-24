@@ -4,13 +4,13 @@ The first interface runs entirely in the browser on the same engine as the CLI (
 
 ## Scope of the first version
 
-- Services: the fifteen that have rules today: the nine of the network and compute groups (VPC, subnet, internet gateway, NAT
+- Services: the nineteen that have rules today: the nine of the network and compute groups (VPC, subnet, internet gateway, NAT
   gateway, Elastic IP, route table, S3 gateway endpoint, security group, EC2) and, since M3, ECS (cluster and service are two
-  palette entries), ECR, Lambda, RDS, S3 and IAM role. The palette, the property forms and the connection rules are read from the registry, so a
+  palette entries), ECR, Lambda, RDS, S3, IAM role and, since M4, ALB, ACM, Route 53 and CloudFront. The palette, the property forms and the connection rules are read from the registry, so a
   new service appears when its spec file is added.
 - Persistence: the design is a `design.json` file the user opens and saves; a draft is kept in `localStorage` (decision
   DD-006 defers a server). Language, theme and the open tab are kept there too.
-- Not in the first version: accounts, sharing, cost estimates, import from existing Terraform, services outside the fifteen,
+- Not in the first version: accounts, sharing, cost estimates, import from existing Terraform, services outside the nineteen,
   automatic layout.
 
 ## Screen
@@ -27,7 +27,7 @@ inspector on the right, and a bottom panel with three tabs: problems, Terraform,
    pair (route, route-association, sg-attach, eip-attach, image-source, network-access, assume-role, grant, db-subnet-group, and a
    containment line from a subnet to an ECS service or a Lambda function, which adds a subnet, DD-014). A route gets the default
    destination `0.0.0.0/0` for gateways. The inspector of a connection edits what it carries: the role slot of an assume-role, the
-   level of a grant, the port and groups of a network access.
+   level of a grant, the port and groups of a network access, the port, health check path and target group of a listener-target, the name of an alias record for a load balancer, and the access of a CloudFront origin.
 4. Edit properties in the inspector. Forms come from the service's `properties`; types the form cannot show (lists of
    objects, maps, policy documents) are edited as JSON.
 5. Every change re-runs normalize, the rules and the generator. Findings are listed with their fix; selecting one selects

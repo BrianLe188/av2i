@@ -166,6 +166,46 @@ function EdgeProps({ edge, design, s, onEdit }: { edge: Design["edges"][number];
   if (edge.mechanism === "grant" && target && LEVELS[target.service]) {
     return select("level", s.level, LEVELS[target.service]!.map((v) => ({ value: v, label: v })), LEVELS[target.service]![0]);
   }
+  if (edge.mechanism === "listener-target") {
+    const port = edge.props?.port;
+    const health = edge.props?.health_check;
+    const path = health !== null && typeof health === "object" && !Array.isArray(health) ? (health as Record<string, Value>).path : undefined;
+    return (
+      <>
+        <label className="frow">
+          <span className="flabel">{s.port}</span>
+          <input type="number" defaultValue={typeof port === "number" ? port : ""} key={String(port)} placeholder={s.portDefault} data-testid="edge-port" onBlur={(e) => set("port", e.target.value === "" ? undefined : Number(e.target.value))} />
+        </label>
+        <label className="frow">
+          <span className="flabel">{s.healthPath}</span>
+          <input defaultValue={typeof path === "string" ? path : ""} key={String(path)} placeholder="/" data-testid="edge-health" onBlur={(e) => set("health_check", e.target.value === "" ? undefined : { ...(health !== null && typeof health === "object" && !Array.isArray(health) ? health : {}), path: e.target.value })} />
+        </label>
+        <label className="frow">
+          <span className="flabel">{s.targetGroup}</span>
+          <input defaultValue={typeof edge.props?.target_group === "string" ? edge.props.target_group : ""} key={String(edge.props?.target_group)} data-testid="edge-target-group" onBlur={(e) => set("target_group", e.target.value === "" ? undefined : e.target.value)} />
+        </label>
+      </>
+    );
+  }
+  if (edge.mechanism === "dns-alias" && target?.service === "alb") {
+    return (
+      <label className="frow">
+        <span className="flabel">{s.recordName}</span>
+        <input defaultValue={typeof edge.props?.name === "string" ? edge.props.name : ""} key={String(edge.props?.name)} data-testid="edge-name" onBlur={(e) => set("name", e.target.value === "" ? undefined : e.target.value)} />
+      </label>
+    );
+  }
+  if (edge.mechanism === "origin" && target?.service === "s3") {
+    return (
+      <>
+        {select("access", s.originAccess, [{ value: "none", label: "none (public bucket)" }], "origin access control")}
+        <label className="frow">
+          <span className="flabel">{s.originPath}</span>
+          <input defaultValue={typeof edge.props?.origin_path === "string" ? edge.props.origin_path : ""} key={String(edge.props?.origin_path)} data-testid="edge-origin-path" onBlur={(e) => set("origin_path", e.target.value === "" ? undefined : e.target.value)} />
+        </label>
+      </>
+    );
+  }
   if (edge.mechanism === "network-access") {
     const port = edge.props?.port;
     return (

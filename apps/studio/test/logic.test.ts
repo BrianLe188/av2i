@@ -219,3 +219,43 @@ describe("the M3 services", () => {
     expect(a.files?.["iam.tf"]).toContain("aws_iam_role");
   });
 });
+
+describe("the M4 services", () => {
+  const web = { ...fromTemplate(reg, "alb-web"), edges: [] as ReturnType<typeof fromTemplate>["edges"] };
+  const site = { ...fromTemplate(reg, "static-site"), edges: [] as ReturnType<typeof fromTemplate>["edges"] };
+
+  it("draws the delivery connections in the direction the matrix gives", () => {
+    const is = (d: typeof web, a: string, b: string, mechanism: string, from: string) => {
+      const v = connect(reg, d, a, b);
+      expect(v.ok, `${a} ${b}`).toBe(true);
+      if (v.ok) expect([v.edge.mechanism, v.edge.from]).toEqual([mechanism, from]);
+    };
+    is(web, "web", "alb", "listener-target", "alb");
+    is(web, "cert", "alb", "cert-attach", "cert");
+    is(web, "alb", "zone", "dns-alias", "zone");
+    is(web, "alb", "logs", "resource-policy", "alb");
+    is(web, "pub_a", "alb", "containment", "pub_a");
+    is(site, "site", "cdn", "origin", "cdn");
+    is(site, "cdn", "cert", "cert-attach", "cert");
+    is(site, "cdn", "zone", "dns-alias", "zone");
+  });
+
+  it("places an ALB in a subnet and the other services at the top level", () => {
+    expect(canPlace(reg, "subnet", "alb").ok).toBe(true);
+    expect(canPlace(reg, null, "alb").ok).toBe(false);
+    for (const s of ["acm", "route53", "cloudfront"]) expect(canPlace(reg, null, s).ok, s).toBe(true);
+  });
+
+  it("both templates analyse without errors and generate their files", () => {
+    for (const id of ["alb-web", "static-site"]) {
+      const a = analyze(fromTemplate(reg, id), reg);
+      expect(a.structural, id).toEqual([]);
+      expect(a.files, id).not.toBeNull();
+    }
+  });
+
+  it("does not draw the derived validation edge", () => {
+    const a = analyze(fromTemplate(reg, "static-site"), reg);
+    expect(a.normalized?.edges.some((e) => e.mechanism === "cert-validation" && e.origin === "derived")).toBe(true);
+  });
+});

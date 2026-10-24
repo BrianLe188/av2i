@@ -1,0 +1,72 @@
+{
+  "schema": 1,
+  "name": "static-site",
+  "settings": {
+    "region": "ap-southeast-1"
+  },
+  "nodes": [
+    {
+      "key": "site",
+      "label": "Site",
+      "service": "s3",
+      "props": {
+        "bucket": "av2i-example-site"
+      }
+    },
+    {
+      "key": "cdn",
+      "label": "CDN",
+      "service": "cloudfront",
+      "props": {
+        "enabled": true,
+        "aliases": [
+          "example.com",
+          "www.example.com"
+        ],
+        "is_ipv6_enabled": true,
+        "default_root_object": "index.html"
+      }
+    },
+    {
+      "key": "cert",
+      "label": "Certificate",
+      "service": "acm",
+      "props": {
+        "region": "us-east-1",
+        "domain_name": "example.com",
+        "subject_alternative_names": [
+          "www.example.com"
+        ],
+        "validation_method": "DNS"
+      }
+    },
+    {
+      "key": "zone",
+      "label": "example.com",
+      "service": "route53",
+      "props": {
+        "name": "example.com"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_cdn_site",
+      "mechanism": "origin",
+      "from": "cdn",
+      "to": "site"
+    },
+    {
+      "id": "e_cert_cdn",
+      "mechanism": "cert-attach",
+      "from": "cert",
+      "to": "cdn"
+    },
+    {
+      "id": "e_zone_cdn",
+      "mechanism": "dns-alias",
+      "from": "zone",
+      "to": "cdn"
+    }
+  ]
+}

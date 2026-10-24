@@ -21,6 +21,9 @@ Numbered `DD-nnn` to keep them apart from the specification's `D-nnn` ([../spec/
 | DD-014 | decided | Workloads in several subnets, ECS parts and the DB subnet group |
 | DD-015 | decided | Required roles are derived; a drawn role carries its own policies |
 | DD-016 | decided | Network access becomes security group rules |
+| DD-017 | decided | Listeners and target groups are not nodes |
+| DD-018 | decided | Certificates, validation records and provider aliases |
+| DD-019 | decided | One bucket policy per bucket, from every relation |
 
 ## DD-001 Language and runtime
 
@@ -184,4 +187,43 @@ else the one the edge names in `caller_sg` or `callee_sg`; an edge with no resol
 that restricts egress also gets a rule toward the callee's group. Both sets live in the engine (`effectiveIngress`,
 `effectiveEgress`) so rules and the planner read the same rules. A port the edge overrides is checked against the callee's
 (VAL-068).
+
+## DD-017 Listeners and target groups are not nodes
+
+Status: decided (the implementer's choice while building M4; the owner can change it).
+
+The spec describes an ALB as three resources. Making listeners and target groups nodes would triple the canvas for what is, in
+D-019's scope, a handful of properties. Chosen: an ALB node carries its `listeners` as a list in `props` (port, protocol,
+`ssl_policy`, `default_action`), and each `listener-target` connection makes one target group, whose type follows the target
+(instance for EC2, ip for a Fargate service, lambda for a function), whose port is the connection's `port` or the target's own,
+and whose health check is the connection's `health_check`. Connections that name the same `target_group` share one group.
+A forward action sends to every group of the ALB, or to the one holding the target it names. The target type can be overridden on
+the connection so that a wrong one is a visible error (VAL-043, VAL-079). An ECS service registers its tasks itself through a
+`load_balancer` block and waits for the listeners; an EC2 instance and a function get an attachment, and a function also gets
+`aws_lambda_permission`. Listener rules stay the first follow-up of D-019.
+
+## DD-018 Certificates, validation records and provider aliases
+
+Status: decided (applies D-022).
+
+A certificate is created in `props.region`, which defaults to the design's Region; one that feeds CloudFront must be in
+`us-east-1` (VAL-101), which the user sets. Any Region other than the design's is created through a provider alias named after
+the Region (`aws.us_east_1`), written in `versions.tf`, and set as `provider` on the certificate and its validation resource.
+DNS validation is derived (`cert-validation` edges from the certificate to the hosted zone holding each of its names, the longest
+matching zone wins, a wildcard is read without its star). Each zone gets one record set built with `for_each` over the
+certificate's `domain_validation_options`, keyed by name so the apex and its wildcard share one record, with `allow_overwrite`;
+when a certificate spans several zones each set is filtered to the names of its zone. Listeners and distributions take the ARN
+from the validation resource so the certificate is issued before it is used, and the certificate has `create_before_destroy`.
+A name no zone of the design holds is VAL-100.
+
+## DD-019 One bucket policy per bucket, from every relation
+
+Status: decided (applies resource-policy.md).
+
+The engine builds the statements a bucket needs (`bucketPolicy`): the ones written in the bucket's `bucket_policy` first, then the
+generated ones ordered by `Sid`: one for every CloudFront distribution that reads the bucket through origin access control
+(`cloudfront.amazonaws.com`, `AWS:SourceArn` the distribution) and one for every ALB that logs to it. The generator emits one
+`aws_s3_bucket_policy`, after the public access block, so two policy resources for one bucket cannot happen (VAL-051 holds by
+construction). Rules read the same statements, so SEC-015, VAL-052, VAL-053 and VAL-117 judge what will be written. Statements
+carry references as `{ $ref }` and `{ $template }` markers that the generator turns into expressions.
 

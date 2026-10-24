@@ -25,6 +25,11 @@ properties:
     constraints: ["at most 10 domain names per certificate by default, adjustable to 100", "clearing the list to [] recreates the certificate"]
     src: [S1, S4]
     status: verified
+  - key: region
+    type: string
+    constraints: ["the Region the certificate is created in; defaults to the design's Region", "a certificate that feeds CloudFront must be in us-east-1 (VAL-101); another Region than the design's is created through a provider alias (D-022)"]
+    src: [S1]
+    status: verified
   - key: validation_method
     type: enum
     values: [DNS]
@@ -36,9 +41,9 @@ properties:
     constraints: ["the provider page points to ACM's certificate characteristics for the values; RSA and ECDSA are the families, ACM issues RSA keys up to 2048 bits (S6); exact values unverified"]
     src: [S1, S6]
     status: verified
-  - key: options.certificate_transparency_logging_preference
-    type: enum
-    values: [ENABLED, DISABLED]
+  - key: options
+    type: object
+    fields: { certificate_transparency_logging_preference: { values: [ENABLED, DISABLED] } }
     src: [S1]
     status: verified
   - key: tags

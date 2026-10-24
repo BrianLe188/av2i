@@ -87,14 +87,13 @@ properties:
     type: object
     required: true
     fields:
-      target_origin_id: { required: true }
-      viewer_protocol_policy: { values: [allow-all, https-only, redirect-to-https], required: true }
-      allowed_methods: { required: true }
-      cached_methods: { required: true }
-      cache_policy_id: { required: "unless the deprecated forwarded_values is used" }
-      origin_request_policy_id: {}
-      response_headers_policy_id: {}
-      compress: { default: false }
+      # the platform builds target_origin_id from the origin connections, allowed and cached methods from `methods`, and
+      # cache and origin request policies by data source on the managed policy name (D-021)
+      viewer_protocol_policy: { values: [allow-all, https-only, redirect-to-https], default: redirect-to-https, required: true }
+      methods: { values: [read-only, all], default: read-only, note: "read-only is GET and HEAD, all adds OPTIONS, PUT, POST, PATCH and DELETE" }
+      cache_policy: { default: Managed-CachingOptimized, note: "a managed cache policy by name; Managed-CachingDisabled suits a dynamic origin" }
+      origin_request_policy: { note: "a managed origin request policy by name, for example Managed-AllViewer" }
+      compress: { default: true, provider_default: false }
     constraints: ["no path_pattern on the default behaviour", "forwarded_values is deprecated in favour of cache_policy_id"]
     src: [S1]
     status: verified
@@ -103,20 +102,20 @@ properties:
     constraints: ["path_pattern required", "at most 75 cache behaviours per distribution in total"]
     src: [S1, S5]
     status: verified
-  - key: restrictions.geo_restriction
+  - key: restrictions
     type: object
-    fields: { restriction_type: { values: [none, whitelist, blacklist], required: true }, locations: { required: true, note: "ISO 3166-1 alpha-2 codes; empty when none" } }
+    fields: { restriction_type: { values: [none, whitelist, blacklist], default: none }, locations: { note: "ISO 3166-1 alpha-2 codes, a list; empty when none" } }
+    constraints: ["written as restrictions.geo_restriction in the provider"]
     src: [S1]
     status: verified
   - key: viewer_certificate
     type: object
     required: true
     fields:
-      cloudfront_default_certificate: {}
-      acm_certificate_arn: { constraints: ["the ACM certificate must be in us-east-1"] }
-      iam_certificate_id: {}
-      ssl_support_method: { values: [sni-only, vip, static-ip], required: "with an ACM or IAM certificate", note: "vip may cost extra" }
-      minimum_protocol_version: { default: TLSv1, examples: [TLSv1.2_2019, TLSv1.2_2021] }
+      # acm_certificate_arn comes from the connected certificate (cert-attach)
+      cloudfront_default_certificate: { default: false, note: "true uses the *.cloudfront.net certificate; not allowed with aliases (VAL-094)" }
+      ssl_support_method: { values: [sni-only, vip, static-ip], default: sni-only, note: "vip may cost extra" }
+      minimum_protocol_version: { default: TLSv1.2_2021, provider_default: TLSv1, examples: [TLSv1.2_2019, TLSv1.2_2021] }
     constraints: ["exactly one of acm_certificate_arn, iam_certificate_id, cloudfront_default_certificate", "only one certificate per distribution", "the provider page's rules on minimum_protocol_version conflict with each other for the default certificate; check before relying on them"]
     src: [S1, S4, S5]
     status: verified

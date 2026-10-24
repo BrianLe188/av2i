@@ -130,5 +130,5 @@ export function buildFlow(
 function detailOf(n: DNode): string | undefined {
   const p = n.props;
   const pick = (k: string) => (typeof p[k] === "string" && p[k] !== "" ? String(p[k]) : undefined);
-  return pick("cidr_block") ?? pick("instance_type") ?? pick("name") ?? pick("bucket") ?? pick("function_name") ?? pick("engine");
+  return pick("cidr_block") ?? pick("instance_type") ?? pick("name") ?? pick("bucket") ?? pick("function_name") ?? pick("engine") ?? pick("domain_name");
 }
