@@ -40,4 +40,20 @@ describe("buildFlow", () => {
     const f = buildFlow(reg, bad, analyze(bad, reg), null, new Set(), "vi", s);
     expect(f.nodes.find((n) => n.id === "app")?.data.severity).toBe("error");
   });
+
+  it("sorts every drawn connection into a family and hides a family on request", () => {
+    expect(flow.edges.every((e) => ["traffic", "access", "attach"].includes(e.data!.group as string))).toBe(true);
+    expect(flow.edges.some((e) => e.data!.group === "attach")).toBe(true);
+    const hidden = buildFlow(reg, design, analyze(design, reg), null, new Set(), "vi", s, new Set(["attach"]));
+    expect(hidden.edges.filter((e) => e.hidden).every((e) => e.data!.group === "attach")).toBe(true);
+    expect(hidden.edges.some((e) => e.hidden)).toBe(true);
+  });
+  it("dims connections that do not touch the selected node", () => {
+    const f = buildFlow(reg, design, analyze(design, reg), { kind: "node", id: "vpc" }, new Set(), "vi", s);
+    for (const e of f.edges) expect(e.data!.dimmed).toBe(e.source !== "vpc" && e.target !== "vpc");
+    expect(flow.edges.every((e) => !e.data!.dimmed)).toBe(true);
+  });
+  it("gives every mechanism a tooltip", () => {
+    for (const e of flow.edges) expect(String(e.data!.hint).length).toBeGreaterThan(0);
+  });
 });

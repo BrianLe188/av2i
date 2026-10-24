@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Background, ConnectionMode, Controls, Handle, MiniMap, NodeResizer, Position, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useReactFlow,
+  Background, ConnectionMode, Controls, Handle, MiniMap, NodeResizer, Panel, Position, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useReactFlow,
   type Connection, type Node as RFNode, type NodeProps,
 } from "@xyflow/react";
 import type { Design } from "@av2i/model";
@@ -14,6 +14,9 @@ import { absolute, containerAt, LEAF, sizeOf } from "../logic/layout.ts";
 import { canPlace, connect } from "../logic/placement.ts";
 import type { Lang, Strings } from "../i18n.ts";
 import { DRAG_TYPE } from "./Palette.tsx";
+import { LinkEdge } from "./LinkEdge.tsx";
+import { EDGE_GROUPS, groupColor, type EdgeGroup } from "../logic/edges.ts";
+import { Eye, EyeOff } from "lucide-react";
 
 function ResourceNode({ id, data, selected }: NodeProps<RFNode<NodeData>>) {
   const color = colorOf(data.service);
@@ -58,6 +61,32 @@ function ResourceNode({ id, data, selected }: NodeProps<RFNode<NodeData>>) {
 }
 
 const nodeTypes = { resource: ResourceNode };
+const edgeTypes = { link: LinkEdge };
+
+function Legend({ s, hidden, toggle }: { s: Strings; hidden: ReadonlySet<EdgeGroup>; toggle: (g: EdgeGroup) => void }) {
+  const dash = (g: EdgeGroup) => (g === "access" ? "5 3" : undefined);
+  return (
+    <div className="w-48 rounded-lg border bg-card/95 p-2 text-[11px] shadow-sm backdrop-blur" data-testid="legend">
+      <div className="mb-1 font-semibold text-muted-foreground">{s.legend}</div>
+      {EDGE_GROUPS.map((g) => (
+        <button
+          key={g}
+          type="button"
+          title={s.edgeGroupHint[g]}
+          aria-pressed={!hidden.has(g)}
+          onClick={() => toggle(g)}
+          className={cn("flex w-full items-center gap-2 rounded px-1 py-1 text-left hover:bg-accent", hidden.has(g) && "opacity-45")}
+          data-testid={`legend-${g}`}
+        >
+          <svg width="26" height="8" className="flex-none"><line x1="1" y1="4" x2={g === "attach" ? 25 : 20} y2="4" stroke={groupColor(g)} strokeWidth={g === "attach" ? 1.4 : 2} strokeDasharray={dash(g)} />{g !== "attach" && <path d="M19,0.5 L25,4 L19,7.5 z" fill={groupColor(g)} />}</svg>
+          <span className="flex-1 truncate">{s.edgeGroups[g]}</span>
+          {hidden.has(g) ? <EyeOff className="size-3" /> : <Eye className="size-3" />}
+        </button>
+      ))}
+      <div className="mt-1 border-t pt-1 text-muted-foreground">{s.generatedLine}</div>
+    </div>
+  );
+}
 
 interface Props {
   design: Design;
@@ -75,7 +104,9 @@ interface Props {
 }
 
 function Flow({ design, analysis, selection, focus, lang, s, loadId, dark, onSelect, onEdit, onAdd, onToast }: Props) {
-  const flow = useMemo(() => buildFlow(reg, design, analysis, selection, focus, lang, s), [design, analysis, selection, focus, lang, s]);
+  const [hidden, setHidden] = useState<ReadonlySet<EdgeGroup>>(new Set());
+  const toggle = useCallback((g: EdgeGroup) => setHidden((h) => { const n = new Set(h); if (!n.delete(g)) n.add(g); return n; }), []);
+  const flow = useMemo(() => buildFlow(reg, design, analysis, selection, focus, lang, s, hidden), [design, analysis, selection, focus, lang, s, hidden]);
   const [nodes, setNodes, onNodesChange] = useNodesState<RFNode<NodeData>>(flow.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(flow.edges);
   const [resync, setResync] = useState(0);
@@ -175,6 +206,7 @@ function Flow({ design, analysis, selection, focus, lang, s, loadId, dark, onSel
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={(_, n) => onSelect({ kind: "node", id: n.id })}
@@ -193,6 +225,9 @@ function Flow({ design, analysis, selection, focus, lang, s, loadId, dark, onSel
         proOptions={{ hideAttribution: true }}
       >
         <Background gap={20} />
+        <Panel position="top-right" className="!m-2">
+          <Legend s={s} hidden={hidden} toggle={toggle} />
+        </Panel>
         <Controls showInteractive={false} />
         <MiniMap pannable zoomable style={{ width: 150, height: 96 }} nodeColor="#8a96a8" maskColor="rgba(120,130,150,0.15)" />
       </ReactFlow>

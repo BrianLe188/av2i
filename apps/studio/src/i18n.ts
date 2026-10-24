@@ -29,6 +29,16 @@ const dict = {
     targetGroup: "Nhóm target", healthPath: "Đường dẫn health check", recordName: "Tên bản ghi", originAccess: "Truy cập origin", originPath: "Đường dẫn origin",
     slot: "Vai trò của role", slotTask: "task role (ứng dụng)", slotExecution: "execution role (kéo image, ghi log)", level: "Mức quyền", port: "Cổng", portDefault: "mặc định của dịch vụ đích",
     callerGroup: "SG phía gọi", calleeGroup: "SG phía được gọi", networkAccessHint: "Hệ thống tự sinh rule ingress trên SG của phía được gọi.",
+    edgeGroups: { traffic: "Lưu lượng", access: "Quyền (IAM)", attach: "Gắn kết (hạ tầng)" },
+    edgeGroupHint: { traffic: "Ai gọi ai qua mạng", access: "Ai được làm gì", attach: "Đi dây hạ tầng: SG, route, image, chứng chỉ" },
+    legend: "Chú giải", generatedLine: "nét mờ: hệ thống tự tạo",
+    mechHint: {
+      route: "Định tuyến lưu lượng tới đích qua một cổng hoặc NAT.", "route-association": "Gắn bảng định tuyến vào subnet.", "sg-attach": "Gắn security group vào dịch vụ.",
+      "eip-attach": "Gán Elastic IP cố định.", "image-source": "Dịch vụ kéo image container từ ECR.", "network-access": "Bên gọi được phép kết nối tới bên được gọi; hệ thống sinh rule ingress trên SG.",
+      "assume-role": "Dịch vụ chạy bằng role này.", grant: "Role được cấp quyền truy cập tài nguyên; sinh chính sách IAM.", "db-subnet-group": "Subnet mà database được đặt vào.",
+      containment: "Thêm một subnet cho dịch vụ trải nhiều subnet.", "listener-target": "Listener của ALB chuyển lưu lượng tới target; sinh target group.", "cert-attach": "Gắn chứng chỉ ACM.",
+      "dns-alias": "Bản ghi DNS trỏ tới dịch vụ.", origin: "Nguồn mà CloudFront lấy nội dung.", "resource-policy": "Dịch vụ được phép ghi log vào bucket; gộp vào bucket policy.",
+    },
     origin: { user: "do bạn vẽ", derived: "suy ra", generated: "hệ thống tự tạo" },
   },
   en: {
@@ -59,6 +69,16 @@ const dict = {
     targetGroup: "Target group", healthPath: "Health check path", recordName: "Record name", originAccess: "Origin access", originPath: "Origin path",
     slot: "Role slot", slotTask: "task role (application)", slotExecution: "execution role (image pull, logs)", level: "Access level", port: "Port", portDefault: "the target's own port",
     callerGroup: "Caller security group", calleeGroup: "Callee security group", networkAccessHint: "The system generates the ingress rule on the callee's security group.",
+    edgeGroups: { traffic: "Traffic", access: "Permissions (IAM)", attach: "Wiring (infrastructure)" },
+    edgeGroupHint: { traffic: "Who calls whom over the network", access: "Who may do what", attach: "Infrastructure wiring: security groups, routes, images, certificates" },
+    legend: "Legend", generatedLine: "faded line: created by the system",
+    mechHint: {
+      route: "Sends traffic for the destination through a gateway or NAT.", "route-association": "Attaches the route table to the subnet.", "sg-attach": "Attaches the security group to the service.",
+      "eip-attach": "Assigns a fixed Elastic IP.", "image-source": "The service pulls its container image from ECR.", "network-access": "The caller may connect to the callee; the system generates the ingress rule on the security group.",
+      "assume-role": "The service runs as this role.", grant: "The role may access the resource; generates an IAM policy.", "db-subnet-group": "The subnets the database is placed in.",
+      containment: "Adds a subnet to a service that spans several.", "listener-target": "The ALB listener forwards traffic to the target; generates a target group.", "cert-attach": "Attaches the ACM certificate.",
+      "dns-alias": "A DNS record that points at the service.", origin: "Where CloudFront fetches content from.", "resource-policy": "The service may write logs to the bucket; merged into the bucket policy.",
+    },
     origin: { user: "drawn by you", derived: "derived", generated: "created by the system" },
   },
 } as const;

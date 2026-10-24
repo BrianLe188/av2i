@@ -5,6 +5,7 @@ import type { Analysis } from "./analyze.ts";
 import { worstByNode } from "./analyze.ts";
 import { absolute, fitOf, isContainer, LEAF, sizeOf } from "./layout.ts";
 import { DRAWN, title } from "./placement.ts";
+import { groupOf, type EdgeGroup } from "./edges.ts";
 import type { Lang } from "../i18n.ts";
 
 export interface NodeData extends Record<string, unknown> {
@@ -30,6 +31,15 @@ export interface ResizeHandlers {
 export interface EdgeData extends Record<string, unknown> {
   mechanism: string;
   generated: boolean;
+  group: EdgeGroup;
+  /** one line on what the connection does, for the tooltip */
+  hint: string;
+  /** a finding points at both ends of this connection */
+  flagged: boolean;
+  /** a node is selected and this connection is not one of its own */
+  dimmed: boolean;
+  /** the label chip carries the detail (port, level, destination) */
+  detail?: string;
 }
 
 export type Selection = { kind: "node" | "edge"; id: string } | null;
@@ -63,9 +73,16 @@ const edgeLabel = (mech: string, props: Record<string, unknown> | undefined, s: 
   return detail === undefined ? (s.mech[mech] ?? mech) : `${s.mech[mech] ?? mech} · ${String(detail)}`;
 };
 
+/** The part of the label worth showing in bold: a port, an access level, a role slot, a destination. */
+function edgeDetail(mech: string, props: Record<string, unknown> | undefined): string | undefined {
+  const v = mech === "route" ? props?.destination_cidr_block : mech === "grant" ? props?.level : mech === "assume-role" ? props?.slot : mech === "network-access" ? props?.port : undefined;
+  return v === undefined || v === "" ? undefined : String(v);
+}
+
 export function buildFlow(
   reg: Registry, design: Design, analysis: Analysis, selection: Selection, focus: ReadonlySet<string>, lang: Lang,
-  s: { mech: Record<string, string> },
+  s: { mech: Record<string, string>; mechHint: Record<string, string> },
+  hiddenGroups: ReadonlySet<EdgeGroup> = new Set(),
 ): { nodes: RFNode<NodeData>[]; edges: RFEdge<EdgeData>[] } {
   const { visual, generated } = visualDesign(design, analysis);
   const severity = worstByNode(analysis.findings);
@@ -116,22 +133,32 @@ export function buildFlow(
   };
   const edges: RFEdge<EdgeData>[] = [];
   const seen = new Set<string>();
+  const flaggedPair = (id: string, from: string, to: string) =>
+    analysis.findings.some((f) => f.targets.includes(id) || (f.targets.includes(from) && f.targets.includes(to) && f.severity !== "info"));
+  const selectedNode = selection?.kind === "node" ? selection.id : null;
+  const make = (e: { id: string; from: string; to: string; mechanism: string }, label: string, detail: string | undefined, generatedEdge: boolean): RFEdge<EdgeData> => {
+    const group = groupOf(e.mechanism);
+    return {
+      id: e.id, source: e.from, target: e.to, ...handles(e.from, e.to), label, type: "link",
+      hidden: hiddenGroups.has(group),
+      selected: selection?.kind === "edge" && selection.id === e.id,
+      ...(generatedEdge ? { deletable: false } : {}),
+      data: {
+        mechanism: e.mechanism, generated: generatedEdge, group, hint: s.mechHint[e.mechanism] ?? "",
+        flagged: flaggedPair(e.id, e.from, e.to),
+        dimmed: selectedNode !== null && e.from !== selectedNode && e.to !== selectedNode,
+        ...(detail !== undefined ? { detail } : {}),
+      },
+    };
+  };
   for (const e of design.edges) {
     if (!ids.has(e.from) || !ids.has(e.to)) continue;
     seen.add(e.id);
-    edges.push({
-      id: e.id, source: e.from, target: e.to, ...handles(e.from, e.to), label: edgeLabel(e.mechanism, e.props, s), type: "smoothstep",
-      selected: selection?.kind === "edge" && selection.id === e.id,
-      data: { mechanism: e.mechanism, generated: false },
-    });
+    edges.push(make(e, edgeLabel(e.mechanism, e.props, s), edgeDetail(e.mechanism, e.props), false));
   }
   for (const e of analysis.normalized?.edges ?? []) {
     if (e.origin !== "generated" || seen.has(e.id) || !(DRAWN as readonly string[]).includes(e.mechanism) || !ids.has(e.from) || !ids.has(e.to)) continue;
-    edges.push({
-      id: e.id, source: e.from, target: e.to, ...handles(e.from, e.to), label: s.mech[e.mechanism] ?? e.mechanism, type: "smoothstep", deletable: false,
-      selected: selection?.kind === "edge" && selection.id === e.id,
-      data: { mechanism: e.mechanism, generated: true },
-    });
+    edges.push(make(e, s.mech[e.mechanism] ?? e.mechanism, undefined, true));
   }
   return { nodes, edges };
 }

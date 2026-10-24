@@ -95,6 +95,10 @@
   }
 }
 
+/* connection families: traffic, permissions, wiring */
+:root { --edge-traffic: oklch(0.55 0.19 250); --edge-access: oklch(0.65 0.17 55); --edge-attach: oklch(0.62 0.03 250); --edge-error: var(--destructive); }
+.dark { --edge-traffic: oklch(0.72 0.14 250); --edge-access: oklch(0.78 0.15 65); --edge-attach: oklch(0.65 0.03 250); }
+
 /* React Flow follows the shadcn tokens */
 .react-flow {
   --xy-background-color: var(--background);
@@ -110,6 +114,7 @@
 }
 .react-flow__edge-text { font-size: 11px; }
 .react-flow__edge-path { stroke-width: 1.8; }
+.react-flow__edge { transition: opacity 0.15s; }
 .react-flow__node.selected > div { box-shadow: 0 0 0 2px var(--ring); }
 .react-flow__handle { width: 8px; height: 8px; background: var(--muted-foreground); border: 0; opacity: 0; transition: opacity 0.1s; }
 .group:hover > .react-flow__handle, .react-flow__node.selected .react-flow__handle { opacity: 1; }
