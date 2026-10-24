@@ -71,7 +71,11 @@ variants:
   - { id: wide-port-range, change: "1000 ports from the VPC range", patch: [{ op: set, node: sg_app, path: props.ingress_rules, value: [{ ip_protocol: tcp, from_port: 1000, to_port: 2000, cidr_ipv4: "10.0.0.0/8" }] }], fires: [SEC-003], severity: warning }
   - { id: imds-v1, change: "IMDSv1 accepted", patch: [{ op: set, node: app, path: props.metadata_options.http_tokens, value: optional }], fires: [SEC-006], severity: warning }
   - { id: root-unencrypted, change: "root volume not encrypted", patch: [{ op: set, node: app, path: props.root_block_device.encrypted, value: false }], fires: [SEC-007], severity: warning }
-  - { id: no-ami, change: "no AMI", patch: [{ op: unset, node: app, path: props.ami }], fires: [VAL-030], severity: error }
+  - { id: no-instance-type, change: "no instance type", patch: [{ op: unset, node: app, path: props.instance_type }], fires: [VAL-030], severity: error }
+  - { id: ami-lookup, change: "no AMI: the latest Amazon Linux 2023 image is looked up", patch: [{ op: unset, node: app, path: props.ami }], fires: [], severity: info }
+  - { id: ami-lookup-arm, change: "an Ubuntu image for a Graviton instance type", patch: [{ op: unset, node: app, path: props.ami }, { op: set, node: app, path: props.ami_family, value: ubuntu-24-04 }, { op: set, node: app, path: props.instance_type, value: t4g.micro }], fires: [], severity: info }
+  - { id: ami-unknown-family, change: "no AMI and an unknown family", patch: [{ op: unset, node: app, path: props.ami }, { op: set, node: app, path: props.ami_family, value: nope }], fires: [VAL-030], severity: error }
+  - { id: key-name, change: "an existing key pair", patch: [{ op: set, node: app, path: props.key_name, value: my-key }], fires: [], severity: info }
   - { id: eip-idle, change: "an Elastic IP attached to nothing", patch: [{ op: add-node, node: { key: eip_idle, label: "Idle", service: elastic-ip, props: {} } }], fires: [VAL-128], severity: warning }
   - { id: eip-on-private-instance, change: "an Elastic IP on the instance in the private subnet", patch: [{ op: add-node, node: { key: eip_app, label: "App IP", service: elastic-ip, props: {} } }, { op: add-edge, edge: { id: e_eip_app, mechanism: eip-attach, from: eip_app, to: app } }], fires: [VAL-031], severity: warning }
   - { id: dns-hostnames-off, change: "DNS hostnames off with an S3 endpoint", patch: [{ op: set, node: vpc, path: props.enable_dns_hostnames, value: false }], fires: [VAL-124], severity: warning }

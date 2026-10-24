@@ -67,7 +67,7 @@ export function defaultProps(service: string, design: Design, parent: string | n
     case "security-group":
       return { name: key.replace(/_/g, "-"), description: "Managed by av2i", ingress_rules: [] };
     case "ec2":
-      return { ami: "", instance_type: "t3.micro", metadata_options: { http_tokens: "required" }, root_block_device: { encrypted: true } };
+      return { instance_type: "t3.micro", metadata_options: { http_tokens: "required" }, root_block_device: { encrypted: true } };
     default:
       return {};
   }

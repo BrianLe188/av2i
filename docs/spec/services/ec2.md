@@ -18,10 +18,16 @@ sources:
 properties:
   - key: ami
     type: string
-    required: true            # platform choice; the provider allows a launch template instead
-    constraints: ["AMI must exist in the instance's Region", "architecture must match instance_type (unverified)"]
+    constraints: ["optional: when empty the platform looks up the latest image of ami_family by data source (D-014)", "an AMI written here must exist in the instance's Region", "architecture must match instance_type (unverified)"]
     src: [S1]
     status: verified          # requirement verified; the Region and architecture constraints are unverified
+  - key: ami_family
+    type: enum
+    values: [amazon-linux-2023, ubuntu-24-04]
+    default: amazon-linux-2023
+    constraints: ["used only when ami is empty: the newest image of the family for the architecture of instance_type (Graviton types such as t4g and m7g get arm64)", "a new image replaces nothing: the instance ignores later changes of the looked-up ami"]
+    src: [S1]
+    status: verified          # the lookup is a platform choice (D-014); the filter patterns are general knowledge and unverified
   - key: instance_type
     type: string
     required: true            # platform choice; same reason

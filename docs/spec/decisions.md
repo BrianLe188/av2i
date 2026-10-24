@@ -151,6 +151,8 @@ the latest Amazon Linux, or a free text), and how key pairs are handled (existin
 Recommendation: AMI by data-source lookup with a pinned family, key name as an existing-key reference, no
 launch templates in the first version.
 
+Consequence (done): `ami_family` (Amazon Linux 2023 or Ubuntu 24.04, default Amazon Linux 2023) is looked up through `data "aws_ami"` when `ami` is empty, with the architecture taken from the instance type (Arm for Graviton families), and the instance ignores later changes of the looked-up image; `key_name` is emitted when set; VAL-030 accepts either an `ami` or a known family.
+
 ## D-015 RDS scope
 
 Status: **decided** (recommendation accepted). One `aws_db_instance` running PostgreSQL or MySQL, with optional Multi-AZ instance deployment. Out of

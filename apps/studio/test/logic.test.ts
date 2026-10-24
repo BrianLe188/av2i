@@ -120,7 +120,7 @@ describe("analyze", () => {
     expect(a.resources.every((r) => a.normalized!.nodes.some((n) => n.key === r.from) || a.normalized!.edges.some((e) => e.id === r.from))).toBe(true);
   });
   it("withholds the files when there is an error and reports it per node", () => {
-    const a = analyze(fromTemplate(reg, "ec2-in-vpc", "no-ami"), reg);
+    const a = analyze(fromTemplate(reg, "ec2-in-vpc", "no-instance-type"), reg);
     expect(a.files).toBeNull();
     expect(worstByNode(a.findings).get("app")).toBe("error");
   });

@@ -7,6 +7,7 @@ import { planDatabase } from "./database.ts";
 import { planIam } from "./iam.ts";
 import { planStorage } from "./storage.ts";
 import { planDelivery } from "./delivery.ts";
+import { lookupAmi } from "./ami.ts";
 
 export { type FileName, type PlannedResource } from "./ctx.ts";
 
@@ -120,10 +121,11 @@ export function plan(design: Design): PlannedResource[] {
 
   for (const n of nd.nodes.filter((x) => x.service === "ec2")) {
     const subnet = g.subnetOf(n.key)!;
-    const args: [string, Expr][] = [["ami", n.props.ami as string], ["instance_type", n.props.instance_type as string], ["subnet_id", ref(`aws_subnet.${subnet.key}.id`)]];
+    const written = typeof n.props.ami === "string" && n.props.ami !== "";
+    const args: [string, Expr][] = [["ami", written ? (n.props.ami as string) : lookupAmi(ctx, n)], ["instance_type", n.props.instance_type as string], ["subnet_id", ref(`aws_subnet.${subnet.key}.id`)]];
     const sgs = g.securityGroupsOf(n.key);
     if (sgs.length) args.push(["vpc_security_group_ids", sgs.map((s) => ref(`aws_security_group.${s.key}.id`))]);
-    args.push(...optional(n, ["associate_public_ip_address"]));
+    args.push(...optional(n, ["associate_public_ip_address", "key_name"]));
     if (g.rolesOf(n.key).length) args.push(["iam_instance_profile", ref(`aws_iam_instance_profile.${n.key}.name`)]);
     args.push(tags(n));
     const blocks: Block[] = [];
@@ -132,6 +134,8 @@ export function plan(design: Design): PlannedResource[] {
       if (v && typeof v === "object" && !Array.isArray(v)) blocks.push({ type: k, labels: [], args: Object.entries(v).map(([a, b]) => [a, toExpr(b)] as [string, Expr]) });
     }
     if (g.elasticIpsOf(n.key).length || n.props.associate_public_ip_address === true) args.push(...dependsOnIgw(n.key));
+    // a looked-up image changes whenever a new one is published; the instance keeps the one it started with
+    if (!written) blocks.push({ type: "lifecycle", labels: [], args: [["ignore_changes", [ref("ami")]]] });
     add("compute.tf", resource("aws_instance", n.key, args, blocks), n.key);
   }
   for (const e of nd.edges.filter((x) => x.mechanism === "eip-attach" && g.node(x.to)?.service === "ec2")) {

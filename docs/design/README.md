@@ -111,7 +111,7 @@ These are gaps found while designing, to be fixed in the spec rather than worked
 1. **Scenario variants are prose.** `change` is a sentence. A test needs a patch (add, remove, set on the Design). DD-008.
 2. **Case inputs are ad hoc.** Each case in `cases.md` uses its own keys. Each needs a fixture adapter, or to be rewritten as
    a small Design. DD-009.
-3. **Rule checks that bundle conditions** (11 listed in `needs_split`) must be split into atomic rules first.
+3. **Rule checks that bundle conditions** (12 listed in `needs_split`): ten are implemented and tested one condition per case in `packages/testkit/test/splits.test.ts`; VAL-066 and SEC-016 are deferred in the registry.
 4. **No JSON Schema yet** for service, relation and rule files; the conventions are prose. M0 writes them.
 5. **Heterogeneous front matter.** Service `properties`, mechanism `properties` and registry tables use different shapes.
    M0 either normalizes them in the compiler or tightens the conventions.

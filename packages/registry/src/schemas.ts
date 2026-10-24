@@ -97,6 +97,9 @@ const rule: Schema = {
     fix: i18n,
     source: { type: ["string", "null"] },
     status,
+    // a rule with no implementation says why: it cannot be broken (holds_by) or it waits for something (deferred)
+    holds_by: { type: "string", minLength: 10 },
+    deferred: { type: "string", minLength: 10 },
   },
   additionalProperties: false,
   // a verified rule must cite a source (conventions section 9)

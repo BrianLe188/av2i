@@ -36,7 +36,7 @@ describe("buildFlow", () => {
     expect(Number(vpc.style!.width)).toBeGreaterThan(Number(subnet.style!.width));
   });
   it("marks the worst finding on a node", () => {
-    const bad = fromTemplate(reg, "ec2-in-vpc", "no-ami");
+    const bad = fromTemplate(reg, "ec2-in-vpc", "no-instance-type");
     const f = buildFlow(reg, bad, analyze(bad, reg), null, new Set(), "vi", s);
     expect(f.nodes.find((n) => n.id === "app")?.data.severity).toBe("error");
   });

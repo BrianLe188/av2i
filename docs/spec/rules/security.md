@@ -154,6 +154,7 @@ AWS-DEFSG https://docs.aws.amazon.com/vpc/latest/userguide/default-security-grou
   status: unverified          # general knowledge; confirm against the S3 documentation and the merge rule for the single policy
 
 - id: SEC-016
+  deferred: "a heuristic with no precise check: it stays a text hint (cases.md needs_split)"
   severity: info
   applies_to: [s3]
   check: "a bucket name contains information that identifies a person, project or secret"
@@ -365,6 +366,7 @@ AWS-DEFSG https://docs.aws.amazon.com/vpc/latest/userguide/default-security-grou
   status: verified
 
 - id: SEC-039
+  holds_by: "the platform writes every trust policy from the consumers' service principals, never a wildcard principal"
   severity: error
   applies_to: [iam-role, assume-role]
   check: "a role trust policy has Principal * or {AWS: *} without a restricting condition"
@@ -374,6 +376,7 @@ AWS-DEFSG https://docs.aws.amazon.com/vpc/latest/userguide/default-security-grou
   status: unverified          # the page says the two forms differ in a trust policy; the risk itself is general knowledge
 
 - id: SEC-040
+  holds_by: "the trust policy of a role that only ECS tasks assume carries aws:SourceAccount and aws:SourceArn (DD-015)"
   severity: info
   applies_to: [iam-role, assume-role, ecs]
   check: "an ECS task role trust policy lacks aws:SourceAccount and aws:SourceArn conditions"

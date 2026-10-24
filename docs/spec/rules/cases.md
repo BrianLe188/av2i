@@ -8,18 +8,18 @@ format:
   notes: "a value in <angle brackets> stands for a property the case does not care about"
   executable: "a case with patch is run by the test kit: patch (DD-012 operations) is applied to the base design (a scenario ID, default ec2-in-vpc) and the rule must fire exactly when fires is true. A case with unrepresentable names why the model cannot express the input. A case with neither is not converted yet (DD-009)"
 needs_split:
-  - { rule: VAL-018, why: "name length, character set and the sg- prefix are three checks" }
-  - { rule: VAL-050, why: "length, characters, shape, prefixes, suffixes and the -an namespace rule are six or more checks" }
-  - { rule: VAL-056, why: "one configuration, rule fields, filter shape and the versioning dependency are four checks" }
-  - { rule: VAL-076, why: "forward, redirect and fixed-response each have their own constraints, plus protocol and port" }
-  - { rule: VAL-092, why: "default behaviour, ordered behaviours, origin references and custom error responses are four checks" }
-  - { rule: VAL-108, why: "trust policy size, inline total and managed policy size use different limits" }
-  - { rule: VAL-117, why: "identity statement, trust statement, version and character set are four checks" }
-  - { rule: VAL-060, why: "required fields and the password alternative are two checks" }
-  - { rule: VAL-082, why: "load balancer side and target side are separate checks" }
-  - { rule: VAL-083, why: "five numeric ranges and the lambda rule are separate checks" }
-  - { rule: VAL-066, why: "depends on the approved dedicated instance class list in services/rds.md, which a test must load" }
-  - { rule: SEC-016, why: "heuristic; no precise check exists. Keep it a text hint, not a tested rule" }
+  - { rule: VAL-018, why: "name length, character set and the sg- prefix are three checks", tested: "packages/testkit/test/splits.test.ts, one case per condition" }
+  - { rule: VAL-050, why: "length, characters, shape, prefixes, suffixes and the -an namespace rule are six or more checks", tested: "packages/testkit/test/splits.test.ts, one case per condition" }
+  - { rule: VAL-056, why: "one configuration, rule fields, filter shape and the versioning dependency are four checks", tested: "packages/testkit/test/splits.test.ts, one case per condition" }
+  - { rule: VAL-076, why: "forward, redirect and fixed-response each have their own constraints, plus protocol and port", tested: "packages/testkit/test/splits.test.ts, one case per condition" }
+  - { rule: VAL-092, why: "default behaviour, ordered behaviours, origin references and custom error responses are four checks", tested: "packages/testkit/test/splits.test.ts, one case per condition" }
+  - { rule: VAL-108, why: "trust policy size, inline total and managed policy size use different limits", tested: "packages/testkit/test/splits.test.ts, one case per condition" }
+  - { rule: VAL-117, why: "identity statement, trust statement, version and character set are four checks", tested: "packages/testkit/test/splits.test.ts, one case per condition" }
+  - { rule: VAL-060, why: "required fields and the password alternative are two checks", tested: "packages/testkit/test/splits.test.ts, one case per condition" }
+  - { rule: VAL-082, why: "load balancer side and target side are separate checks", tested: "packages/testkit/test/splits.test.ts, one case per condition" }
+  - { rule: VAL-083, why: "five numeric ranges and the lambda rule are separate checks", tested: "packages/testkit/test/splits.test.ts, one case per condition" }
+  - { rule: VAL-066, why: "depends on the approved dedicated instance class list in services/rds.md, which a test must load", tested: "deferred in the registry, see the rule" }
+  - { rule: SEC-016, why: "heuristic; no precise check exists. Keep it a text hint, not a tested rule", tested: "deferred in the registry, see the rule" }
 status: unverified
 cases:
   # networking
@@ -147,7 +147,9 @@ cases:
   - rule: VAL-030
     cases:
       - { name: complete, in: { ec2: { ami: "<id>", instance_type: t3.micro, subnets: [s1] } }, fires: false, patch: [] }
-      - { name: no-ami, in: { ec2: { instance_type: t3.micro, subnets: [s1] } }, fires: true, patch: [{"op":"unset","node":"app","path":"props.ami"}] }
+      - { name: ami-lookup, in: { ec2: { instance_type: t3.micro, subnets: [s1] } }, fires: false, patch: [{"op":"unset","node":"app","path":"props.ami"}] }
+      - { name: unknown-family, in: { ec2: { ami_family: nope, instance_type: t3.micro, subnets: [s1] } }, fires: true, patch: [{"op":"unset","node":"app","path":"props.ami"},{"op":"set","node":"app","path":"props.ami_family","value":"nope"}] }
+      - { name: no-instance-type, in: { ec2: { ami: "<id>", subnets: [s1] } }, fires: true, patch: [{"op":"unset","node":"app","path":"props.instance_type"}] }
       - { name: two-subnets, unrepresentable: "a node has one parent, so an instance cannot be in two subnets", in: { ec2: { ami: "<id>", instance_type: t3.micro, subnets: [s1, s2] } }, fires: true }
       - { name: sg-other-vpc, in: { ec2: { ami: "<id>", instance_type: t3.micro, subnets: [s1], subnet_vpc: A, security_group_vpc: B } }, fires: false, patch: [{"op":"add-node","node":{"key":"vpc2","label":"vpc2","service":"vpc","props":{"cidr_block":"10.1.0.0/16"}}},{"op":"add-node","node":{"key":"sg2","label":"sg2","service":"security-group","parent":"vpc2","props":{"name":"other","description":"Other"}}},{"op":"add-edge","edge":{"id":"e_x","mechanism":"sg-attach","from":"sg2","to":"app"}}] }
   - rule: VAL-033

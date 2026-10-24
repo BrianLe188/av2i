@@ -299,9 +299,9 @@ Source aliases used below:
 - id: VAL-030
   severity: error
   applies_to: [ec2]
-  check: "an EC2 instance has ami, instance_type and exactly one subnet (security groups in another VPC are VAL-027)"
-  message: { vi: "EC2 cần AMI, loại instance và đúng một subnet.", en: "An EC2 instance needs an AMI, an instance type and exactly one subnet." }
-  fix: { vi: "Điền đủ ba thông tin và đặt vào một subnet.", en: "Fill in all three and place it in one subnet." }
+  check: "an EC2 instance has instance_type, exactly one subnet and either an ami or a known ami_family (security groups in another VPC are VAL-027)"
+  message: { vi: "EC2 cần loại instance, đúng một subnet và một AMI hoặc họ AMI hợp lệ.", en: "An EC2 instance needs an instance type, exactly one subnet and an AMI or a known AMI family." }
+  fix: { vi: "Điền loại instance, đặt vào một subnet và chọn họ AMI hoặc nhập AMI.", en: "Fill in the instance type, place it in one subnet and choose an AMI family or write an AMI." }
   source: https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.66.0/website/docs/r/instance.html.markdown
   status: verified            # the provider allows a launch template instead of ami and instance_type; the platform does not model it
 
@@ -342,6 +342,7 @@ Source aliases used below:
   status: verified            # the provider page lists 32768 MB for memory, which applies to Managed Instances; the AWS quotas page is used for classic functions
 
 - id: VAL-035
+  deferred: "needs the image's architecture and size, which the design does not carry"
   severity: error
   applies_to: [image-source, lambda, ecr]
   check: "a Lambda function's container image is in an ECR repository in the same Region, targets one architecture matching architectures, and is at most 10 GB uncompressed"
@@ -488,6 +489,7 @@ Source aliases used below:
   status: verified            # global uniqueness cannot be checked at design time
 
 - id: VAL-051
+  holds_by: "the generator emits one aws_s3_bucket_policy per bucket from every statement the relations need (DD-019)"
   severity: error
   applies_to: [resource-policy, s3]
   check: "the generated configuration has at most one bucket policy resource per bucket, built from all statements that relations require"
@@ -623,6 +625,7 @@ Source aliases used below:
   status: verified
 
 - id: VAL-066
+  deferred: "needs the approved dedicated instance classes of services/rds.md as data"
   severity: error
   applies_to: [rds, vpc]
   check: "in a VPC with instance_tenancy dedicated, the DB instance class is an approved dedicated instance class"
@@ -749,6 +752,7 @@ Source aliases used below:
   status: verified
 
 - id: VAL-080
+  holds_by: "an ip target is always a task or function of the design, in a subnet of the VPC, never a public address"
   severity: error
   applies_to: [alb, listener-target]
   check: "an ip target is in a subnet of the target group's VPC or in 10.0.0.0/8, 100.64.0.0/10, 172.16.0.0/12 or 192.168.0.0/16, and is never a public address"
@@ -758,6 +762,7 @@ Source aliases used below:
   status: verified
 
 - id: VAL-081
+  holds_by: "the generator writes aws_lambda_permission for every Lambda function behind a load balancer and the attachment depends on it (DD-017)"
   severity: error
   applies_to: [alb, lambda, resource-policy]
   check: "a Lambda function used as an ALB target has an aws_lambda_permission allowing elasticloadbalancing.amazonaws.com, and the target group attachment depends on it"
@@ -803,6 +808,7 @@ Source aliases used below:
   status: verified
 
 - id: VAL-086
+  holds_by: "alias records take the name and zone ID from the target resource's own attributes"
   severity: error
   applies_to: [dns-alias]
   check: "an alias record's zone_id is the hosted zone ID of its target (the load balancer's zone, or CloudFront's global zone), and its name is the target's DNS name"
@@ -830,6 +836,7 @@ Source aliases used below:
   status: verified
 
 - id: VAL-089
+  holds_by: "the generator writes an AAAA alias next to every A alias of a distribution that has is_ipv6_enabled"
   severity: warning
   applies_to: [dns-alias, cloudfront]
   check: "when a distribution has is_ipv6_enabled, each of its alias names has both an A and an AAAA alias record"
@@ -911,6 +918,7 @@ Source aliases used below:
   status: verified
 
 - id: VAL-098
+  deferred: "needs the origin's domain name to compare with the load balancer certificate; the design does not carry it"
   severity: warning
   applies_to: [cloudfront, origin, cert-attach]
   check: "when CloudFront reaches an ALB origin over HTTPS, a name in the ALB certificate matches the origin domain name"
@@ -967,6 +975,7 @@ Source aliases used below:
   status: verified
 
 - id: VAL-104
+  holds_by: "the platform writes every trust policy with Effect Allow, sts:AssumeRole and the consumers' service principals"
   severity: error
   applies_to: [iam-role, assume-role]
   check: "a role's trust policy has at least one statement with Effect Allow, Action sts:AssumeRole and a Principal that is a service principal from the assume-role registry"
@@ -976,6 +985,7 @@ Source aliases used below:
   status: verified
 
 - id: VAL-105
+  holds_by: "the trust policy lists the service principal of every consumer of the role, generated from the assume-role connections"
   severity: error
   applies_to: [assume-role]
   check: "the trust policy of a role lists the service principal of every consumer that uses it in a given slot (ec2.amazonaws.com, lambda.amazonaws.com, ecs-tasks.amazonaws.com, monitoring.rds.amazonaws.com)"
@@ -1066,6 +1076,7 @@ Source aliases used below:
   status: verified            # trust principal and policy name verified; the ARN path of the managed policy is not
 
 - id: VAL-115
+  holds_by: "a design has one account: roles and the services they are passed to are always in it"
   severity: error
   applies_to: [assume-role]
   check: "a role and the service it is passed to are in the same AWS account"
@@ -1093,6 +1104,7 @@ Source aliases used below:
   status: unverified          # the elements and the Resource requirement are verified; that an identity policy must not carry a Principal was not stated on the pages read
 
 - id: VAL-118
+  holds_by: "the generator uses only aws_iam_role_policy and aws_iam_role_policy_attachment, never inline arguments or aws_iam_policy_attachment"
   severity: error
   applies_to: [iam-role]
   check: "a role's policies are managed either with inline_policy and managed_policy_arns on the role or with aws_iam_role_policy and aws_iam_role_policy_attachment, never both; the platform uses the separate resources only, and never aws_iam_policy_attachment"
@@ -1102,6 +1114,7 @@ Source aliases used below:
   status: verified
 
 - id: VAL-119
+  holds_by: "grant statements are generated from the grant registry with the target's exact ARN"
   severity: error
   applies_to: [grant]
   check: "a grant names a target kind and level from the grant registry, and its generated statements use the target's exact ARN (bucket versus objects, repository, database user)"
@@ -1165,6 +1178,7 @@ Source aliases used below:
   status: verified
 
 - id: VAL-126
+  holds_by: "a design has one Region, so a bucket and its endpoint cannot be in different ones"
   severity: warning
   applies_to: [vpc-endpoint-s3, s3, egress-path]
   check: "a workload that uses a bucket in a Region other than the Region of its VPC has internet_egress = true, because a gateway endpoint does not carry traffic to another Region"
@@ -1174,6 +1188,7 @@ Source aliases used below:
   status: verified
 
 - id: VAL-127
+  holds_by: "the engine adds the S3 prefix list egress rule to a restricting group whose workload reaches S3 through an endpoint"
   severity: warning
   applies_to: [vpc-endpoint-s3, security-group, sg-attach]
   check: "when the security groups of a workload restrict outbound traffic and its route table is associated with an S3 gateway endpoint, they allow tcp 443 to the S3 prefix list (or to 0.0.0.0/0); the platform emits that egress rule"

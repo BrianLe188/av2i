@@ -146,3 +146,32 @@ describe("rules that need a large input", () => {
     expect(runRules(empty, getRegistry())).toEqual([]);
   });
 });
+
+describe("AMI lookup (D-014)", () => {
+  const ec2 = executableScenarios().find((s) => s.id === "ec2-in-vpc")!.design;
+  const look = (...p: PatchOp[]) => generate(applyPatch(ec2, [{ op: "unset", node: "app", path: "props.ami" }, ...p]))["compute.tf"]!;
+
+  it("writes the AMI that is given and no data source", () => {
+    expect(generate(ec2)["compute.tf"]).toMatch(/ami\s+= "ami-0123456789abcdef0"/);
+    expect(generate(ec2)["compute.tf"]).not.toContain("aws_ami");
+  });
+
+  it("looks up the newest Amazon Linux 2023 image for x86 by default and ignores later images", () => {
+    const out = look();
+    expect(out).toContain('data "aws_ami" "amazon_linux_2023_x86_64"');
+    expect(out).toContain("al2023-ami-2023.*-x86_64");
+    expect(out).toContain("ignore_changes = [ami]");
+  });
+
+  it("picks the Arm image for Graviton instance types and the owner of the family", () => {
+    const out = look({ op: "set", node: "app", path: "props.ami_family", value: "ubuntu-24-04" }, { op: "set", node: "app", path: "props.instance_type", value: "t4g.micro" });
+    expect(out).toContain("ubuntu-noble-24.04-arm64-server-*");
+    expect(out).toContain('"099720109477"');
+  });
+
+  it("recognises Arm families only", async () => {
+    const { isArm } = await import("../../generator/src/ami.ts");
+    for (const t of ["t4g.micro", "m7g.large", "c6gn.xlarge", "a1.medium"]) expect(isArm(t), t).toBe(true);
+    for (const t of ["t3.micro", "m5.large", "g5.xlarge", "c5d.large"]) expect(isArm(t), t).toBe(false);
+  });
+});
