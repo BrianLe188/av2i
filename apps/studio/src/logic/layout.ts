@@ -4,6 +4,7 @@ import { CONTAINERS } from "./placement.ts";
 export const LEAF = { w: 150, h: 56 };
 const MIN: Record<string, { w: number; h: number }> = { vpc: { w: 520, h: 300 }, subnet: { w: 230, h: 170 } };
 const PAD = 24;
+const FLOOR = { w: 160, h: 100 };
 const HEADER = 44;
 
 export const isContainer = (service: string) => CONTAINERS.includes(service);
@@ -15,12 +16,9 @@ function positions(design: Design): Pos {
   return new Map(design.nodes.filter((n) => n.position).map((n) => [n.key, n.position!]));
 }
 
-/** Size of a node: leaves are fixed, containers grow to hold their children. */
-export function sizeOf(design: Design, key: string, pos: Pos = positions(design)): { w: number; h: number } {
-  const node = design.nodes.find((n) => n.key === key);
-  if (!node || !isContainer(node.service)) return LEAF;
-  const min = MIN[node.service] ?? { w: 260, h: 180 };
-  let w = min.w, h = min.h;
+/** Smallest a container may be: it must still hold its children. */
+export function fitOf(design: Design, key: string, pos: Pos = positions(design)): { w: number; h: number } {
+  let w = FLOOR.w, h = FLOOR.h;
   for (const c of design.nodes.filter((n) => n.parent === key)) {
     const p = pos.get(c.key);
     if (!p) continue;
@@ -29,6 +27,16 @@ export function sizeOf(design: Design, key: string, pos: Pos = positions(design)
     h = Math.max(h, p.y + s.h + PAD);
   }
   return { w, h };
+}
+
+/** Size of a node: leaves are fixed, containers take the size the user gave them or grow to hold their children. */
+export function sizeOf(design: Design, key: string, pos: Pos = positions(design)): { w: number; h: number } {
+  const node = design.nodes.find((n) => n.key === key);
+  if (!node || !isContainer(node.service)) return LEAF;
+  const fit = fitOf(design, key, pos);
+  if (node.size) return { w: Math.max(node.size.w, fit.w), h: Math.max(node.size.h, fit.h) };
+  const min = MIN[node.service] ?? { w: 260, h: 180 };
+  return { w: Math.max(min.w, fit.w), h: Math.max(min.h, fit.h) };
 }
 
 /** Position of a node's top-left corner on the canvas. */

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Background, ConnectionMode, Controls, Handle, MiniMap, Position, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useReactFlow,
+  Background, ConnectionMode, Controls, Handle, MiniMap, NodeResizer, Position, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useReactFlow,
   type Connection, type Node as RFNode, type NodeProps,
 } from "@xyflow/react";
 import type { Design } from "@av2i/model";
@@ -9,13 +9,13 @@ import { paletteItem, reg } from "../registry.ts";
 import { colorOf } from "../logic/colors.ts";
 import type { Analysis } from "../logic/analyze.ts";
 import { addEdge, removeEdges, removeNodes, subtree, updateNode } from "../logic/design.ts";
-import { buildFlow, type EdgeData, type NodeData, type Selection } from "../logic/flow.ts";
-import { absolute, containerAt, LEAF } from "../logic/layout.ts";
+import { buildFlow, type EdgeData, type NodeData, type Rect, type ResizeHandlers, type Selection } from "../logic/flow.ts";
+import { absolute, containerAt, LEAF, sizeOf } from "../logic/layout.ts";
 import { canPlace, connect } from "../logic/placement.ts";
 import type { Lang, Strings } from "../i18n.ts";
 import { DRAG_TYPE } from "./Palette.tsx";
 
-function ResourceNode({ data }: NodeProps<RFNode<NodeData>>) {
+function ResourceNode({ id, data, selected }: NodeProps<RFNode<NodeData>>) {
   const color = colorOf(data.service);
   const sev = data.severity === "error" ? "bg-destructive" : data.severity === "warning" ? "bg-warning" : "bg-info";
   return (
@@ -30,6 +30,18 @@ function ResourceNode({ data }: NodeProps<RFNode<NodeData>>) {
       data-svc={data.service}
       data-testid={`node-${data.label}`}
     >
+      {data.container && data.fit && data.resize && (
+        <NodeResizer
+          isVisible={selected}
+          minWidth={data.fit.w}
+          minHeight={data.fit.h}
+          color={color}
+          handleStyle={{ width: 10, height: 10, borderRadius: 3, background: "var(--background)", border: `2px solid ${color}` }}
+          lineStyle={{ borderColor: color, opacity: 0.6 }}
+          shouldResize={(_, p) => data.resize!.allowed(id, p)}
+          onResizeEnd={(_, p) => data.resize!.commit(id, p)}
+        />
+      )}
       <Handle type="source" position={Position.Left} id="l" />
       <Handle type="source" position={Position.Top} id="t" />
       <Handle type="source" position={Position.Bottom} id="b" />
@@ -69,10 +81,45 @@ function Flow({ design, analysis, selection, focus, lang, s, loadId, dark, onSel
   const [resync, setResync] = useState(0);
   const rf = useReactFlow();
 
+  const resize = useMemo<ResizeHandlers>(() => {
+    /** Dragging a top or left edge moves the container's origin, so the children shift back to stay where they were. */
+    const shifted = (key: string, r: Rect) => {
+      const dn = design.nodes.find((n) => n.key === key);
+      const dx = r.x - (dn?.position?.x ?? 0), dy = r.y - (dn?.position?.y ?? 0);
+      return { dn, dx, dy };
+    };
+    return {
+      allowed: (key, r) => {
+        const { dx, dy } = shifted(key, r);
+        const pos = new Map(design.nodes.filter((n) => n.position).map((n) => [n.key, n.position!]));
+        return design.nodes.filter((n) => n.parent === key && n.position).every((c) => {
+          const sz = sizeOf(design, c.key, pos);
+          return c.position!.x - dx >= 8 && c.position!.y - dy >= 8 && c.position!.x - dx + sz.w <= r.width && c.position!.y - dy + sz.h <= r.height;
+        });
+      },
+      commit: (key, r) => {
+        const { dx, dy } = shifted(key, r);
+        const size = { w: Math.round(r.width), h: Math.round(r.height) };
+        onEdit((d) => ({
+          ...d,
+          nodes: d.nodes.map((n) => {
+            if (n.key === key) return { ...n, size, position: { x: Math.round(r.x), y: Math.round(r.y) } };
+            if (n.parent === key && n.position && (dx || dy)) return { ...n, position: { x: n.position.x - dx, y: n.position.y - dy } };
+            return n;
+          }),
+        }));
+      },
+    };
+  }, [design, onEdit]);
+
   useEffect(() => {
-    setNodes((prev) => flow.nodes.map((n) => ({ ...n, measured: prev.find((p) => p.id === n.id)?.measured })));
+    setNodes((prev) => flow.nodes.map((n) => ({
+      ...n,
+      ...(n.data.container ? { data: { ...n.data, resize } } : {}),
+      measured: prev.find((p) => p.id === n.id)?.measured,
+    })));
     setEdges(flow.edges);
-  }, [flow, resync, setNodes, setEdges]);
+  }, [flow, resize, resync, setNodes, setEdges]);
 
   const refuse = useCallback((what: string, reason: { vi: string; en: string }) => {
     onToast(`${what}: ${reason[lang]}`);

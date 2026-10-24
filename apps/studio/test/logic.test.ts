@@ -4,7 +4,7 @@ import { addNode, getIn, removeNodes, setIn, subtree } from "../src/logic/design
 import { analyze, worstByNode } from "../src/logic/analyze.ts";
 import { fieldsOf, parseInput } from "../src/logic/form.ts";
 import * as H from "../src/logic/history.ts";
-import { absolute, containerAt, withPositions } from "../src/logic/layout.ts";
+import { absolute, containerAt, sizeOf, withPositions } from "../src/logic/layout.ts";
 import { canPlace, connect, findParent } from "../src/logic/placement.ts";
 import { blankDesign, fromTemplate, templates } from "../src/logic/templates.ts";
 import { PALETTE } from "../src/registry.ts";
@@ -257,5 +257,17 @@ describe("the M4 services", () => {
   it("does not draw the derived validation edge", () => {
     const a = analyze(fromTemplate(reg, "static-site"), reg);
     expect(a.normalized?.edges.some((e) => e.mechanism === "cert-validation" && e.origin === "derived")).toBe(true);
+  });
+});
+
+describe("container size", () => {
+  const base = () => withPositions(fromTemplate(reg, templates(reg)[0]!.id));
+  it("keeps a size the user set, but never below what the children need", () => {
+    const d = base();
+    const sub = d.nodes.find((n) => n.service === "subnet")!;
+    const grown = { ...d, nodes: d.nodes.map((n) => (n.key === sub.key ? { ...n, size: { w: 900, h: 700 } } : n)) };
+    expect(sizeOf(grown, sub.key)).toEqual({ w: 900, h: 700 });
+    const tiny = { ...d, nodes: d.nodes.map((n) => (n.key === sub.key ? { ...n, size: { w: 10, h: 10 } } : n)) };
+    expect(sizeOf(tiny, sub.key).w).toBeGreaterThanOrEqual(160);
   });
 });

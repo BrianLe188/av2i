@@ -3,7 +3,7 @@ import type { Design, Finding, Node as DNode } from "@av2i/model";
 import type { Edge as RFEdge, Node as RFNode } from "@xyflow/react";
 import type { Analysis } from "./analyze.ts";
 import { worstByNode } from "./analyze.ts";
-import { absolute, isContainer, LEAF, sizeOf } from "./layout.ts";
+import { absolute, fitOf, isContainer, LEAF, sizeOf } from "./layout.ts";
 import { DRAWN, title } from "./placement.ts";
 import type { Lang } from "../i18n.ts";
 
@@ -16,6 +16,15 @@ export interface NodeData extends Record<string, unknown> {
   generated: boolean;
   focused: boolean;
   detail?: string;
+  /** containers only: smallest size that still holds the children */
+  fit?: { w: number; h: number };
+  resize?: ResizeHandlers;
+}
+
+export interface Rect { x: number; y: number; width: number; height: number }
+export interface ResizeHandlers {
+  allowed: (key: string, r: Rect) => boolean;
+  commit: (key: string, r: Rect) => void;
 }
 
 export interface EdgeData extends Record<string, unknown> {
@@ -87,6 +96,7 @@ export function buildFlow(
         generated: isGenerated,
         focused: focus.has(n.key),
         detail: detailOf(n),
+        ...(container ? { fit: fitOf(visual, n.key, pos) } : {}),
       },
     };
   });

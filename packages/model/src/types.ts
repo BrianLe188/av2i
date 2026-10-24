@@ -13,6 +13,8 @@ export interface Node {
   parent?: string | null;
   props: Props;
   position?: { x: number; y: number };
+  /** set when the user resizes a container; otherwise it grows to hold its children */
+  size?: { w: number; h: number };
 }
 
 export interface Edge {
