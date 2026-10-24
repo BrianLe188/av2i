@@ -3,6 +3,7 @@ import { plan, type FileName } from "./plan.ts";
 import { printBlocks } from "./hcl.ts";
 import { Graph, normalize } from "@av2i/engine";
 import { aliasOf, aliasRegions } from "./delivery.ts";
+import { deployerPolicy } from "./deployer.ts";
 
 export { plan, type PlannedResource, type FileName } from "./plan.ts";
 export { printBlocks, quote, ref, type Block, type Expr } from "./hcl.ts";
@@ -42,5 +43,7 @@ export function generate(design: Design): Record<string, string> {
     const blocks = planned.filter((p) => p.file === f).map((p) => p.block);
     if (blocks.length) files[f] = printBlocks(blocks);
   }
+  const deployer = deployerPolicy(new Graph(normalize(design)));
+  if (deployer) files["deployer-policy.json"] = deployer;
   return files;
 }

@@ -1,4 +1,4 @@
-import { MANAGED, requiredManaged, SLOTS, slotFor, type Graph, type SlotId } from "@av2i/engine";
+import { MANAGED, policiesOf, policyNameOf, requiredManaged, roleNameOf, SLOTS, slotFor, type Graph, type SlotId } from "@av2i/engine";
 import type { NormalizedNode, Value } from "@av2i/model";
 import { call, ref, type Block, type Expr } from "./hcl.ts";
 import { resource, slug, template, toExpr, type PlanCtx } from "./ctx.ts";
@@ -28,6 +28,7 @@ export function roleDependencies(g: Graph, consumer: string): Expr[] {
   const out: Expr[] = [];
   for (const { role } of g.rolesOf(consumer)) {
     for (const arn of managedOf(g, role)) out.push(ref(`aws_iam_role_policy_attachment.${attachmentName(role.key, arn)}`));
+    for (const p of policiesOf(g, role.key)) out.push(ref(`aws_iam_role_policy_attachment.${role.key}_${p.key}`));
     if (statementsOf(g, role).length) out.push(ref(`aws_iam_role_policy.${role.key}_grants`));
   }
   return out;
@@ -110,7 +111,7 @@ export function planIam(c: PlanCtx): void {
   for (const role of g.nodesOf("iam-role")) {
     if (!isEmitted(g, role)) continue;
     const principals = [...new Set(g.consumersOf(role.key).flatMap((x) => (x.slot ? [slotFor(x.consumer.service, x.slot)?.trust] : [])).filter((x): x is string => !!x))].sort();
-    const name = typeof role.props.name === "string" && role.props.name ? role.props.name : role.key.replace(/_/g, "-");
+    const name = roleNameOf(role);
     const consumers = g.consumersOf(role.key);
     const ecsTask = consumers.every((x) => x.consumer.service === "ecs" && x.slot === "task") ? c.nd.settings.region : false;
     if (ecsTask) c.once("identity", () => add("iam.tf", { type: "data", labels: ["aws_caller_identity", "current"], args: [] }, role.key));
@@ -123,11 +124,19 @@ export function planIam(c: PlanCtx): void {
       const policy = { Version: "2012-10-17", Statement: statements.map((s) => ({ ...s, Resource: s.Resource })) } as unknown as Expr;
       add("iam.tf", resource("aws_iam_role_policy", `${role.key}_grants`, [["name", "grants"], ["role", ref(`aws_iam_role.${role.key}.id`)], ["policy", call("jsonencode", policy)]]), role.key);
     }
+    for (const p of policiesOf(g, role.key)) {
+      add("iam.tf", resource("aws_iam_role_policy_attachment", `${role.key}_${p.key}`, [["role", ref(`aws_iam_role.${role.key}.name`)], ["policy_arn", ref(`aws_iam_policy.${p.key}.arn`)]]), role.key);
+    }
     const raw = role.props.raw_policy;
     if (raw !== undefined && raw !== null && raw !== "") {
       const doc = (typeof raw === "string" ? JSON.parse(raw) : raw) as Value;
       add("iam.tf", resource("aws_iam_role_policy", `${role.key}_raw`, [["name", "raw"], ["role", ref(`aws_iam_role.${role.key}.id`)], ["policy", call("jsonencode", toExpr(doc))]]), role.key);
     }
+  }
+  for (const p of g.nodesOf("iam-policy")) {
+    const doc = (typeof p.props.policy === "string" ? JSON.parse(p.props.policy) : p.props.policy) as Value;
+    const args: [string, Expr][] = [["name", policyNameOf(p)], ...c.optional(p, ["description"]), ["policy", call("jsonencode", toExpr(doc))], c.tags(p)];
+    add("iam.tf", resource("aws_iam_policy", p.key, args), p.key);
   }
   for (const e of g.edges("assume-role")) {
     const consumer = g.node(e.to);

@@ -349,7 +349,7 @@ AWS-DEFSG https://docs.aws.amazon.com/vpc/latest/userguide/default-security-grou
 - id: SEC-037
   severity: warning
   applies_to: [iam-policy, grant]
-  check: "a statement uses Resource * for actions that support resource-level permissions (other than ecr:GetAuthorizationToken, ssmmessages and the Lambda VPC interface actions, which require it)"
+  check: "a statement uses Resource * for actions that support resource-level permissions (other than ecr:GetAuthorizationToken, cloudwatch:PutMetricData, ssmmessages and the Lambda VPC interface actions, which require it)"
   message: { vi: "Statement dùng Resource * cho hành động có thể giới hạn theo ARN.", en: "The statement uses Resource * for actions that can be limited to ARNs." }
   fix: { vi: "Dùng ARN cụ thể.", en: "Use specific ARNs." }
   source: https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html

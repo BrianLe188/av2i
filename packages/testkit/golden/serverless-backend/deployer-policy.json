@@ -1,0 +1,81 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ManageRolesOfThisDesign",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:GetRole",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:ListInstanceProfilesForRole",
+        "iam:PutRolePolicy",
+        "iam:GetRolePolicy",
+        "iam:DeleteRolePolicy"
+      ],
+      "Resource": [
+        "arn:aws:iam::*:role/api-data",
+        "arn:aws:iam::*:role/role-edge-fn"
+      ]
+    },
+    {
+      "Sid": "AttachOnlyThePoliciesOfThisDesign",
+      "Effect": "Allow",
+      "Action": [
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy"
+      ],
+      "Resource": [
+        "arn:aws:iam::*:role/api-data",
+        "arn:aws:iam::*:role/role-edge-fn"
+      ],
+      "Condition": {
+        "ArnLike": {
+          "iam:PolicyARN": [
+            "arn:aws:iam::*:policy/api-audit",
+            "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+            "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "PassRolesToTheirServices",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": [
+        "arn:aws:iam::*:role/api-data",
+        "arn:aws:iam::*:role/role-edge-fn"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": [
+            "lambda.amazonaws.com"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "ManageCustomerPoliciesOfThisDesign",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreatePolicy",
+        "iam:DeletePolicy",
+        "iam:GetPolicy",
+        "iam:GetPolicyVersion",
+        "iam:ListPolicyVersions",
+        "iam:CreatePolicyVersion",
+        "iam:DeletePolicyVersion",
+        "iam:TagPolicy"
+      ],
+      "Resource": [
+        "arn:aws:iam::*:policy/api-audit"
+      ]
+    }
+  ]
+}

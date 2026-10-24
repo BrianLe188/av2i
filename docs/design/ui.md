@@ -4,13 +4,13 @@ The first interface runs entirely in the browser on the same engine as the CLI (
 
 ## Scope of the first version
 
-- Services: the nineteen that have rules today: the nine of the network and compute groups (VPC, subnet, internet gateway, NAT
+- Services: the twenty that have rules today: the nine of the network and compute groups (VPC, subnet, internet gateway, NAT
   gateway, Elastic IP, route table, S3 gateway endpoint, security group, EC2) and, since M3, ECS (cluster and service are two
-  palette entries), ECR, Lambda, RDS, S3, IAM role and, since M4, ALB, ACM, Route 53 and CloudFront. The palette, the property forms and the connection rules are read from the registry, so a
+  palette entries), ECR, Lambda, RDS, S3, IAM role, IAM policy and, since M4, ALB, ACM, Route 53 and CloudFront. The palette, the property forms and the connection rules are read from the registry, so a
   new service appears when its spec file is added.
 - Persistence: the design is a `design.json` file the user opens and saves; a draft is kept in `localStorage` (decision
   DD-006 defers a server). Language, theme and the open tab are kept there too.
-- Not in the first version: accounts, sharing, cost estimates, import from existing Terraform, services outside the nineteen,
+- Not in the first version: accounts, sharing, cost estimates, import from existing Terraform, services outside the twenty,
   automatic layout.
 
 ## Screen
@@ -37,7 +37,7 @@ inspector on the right, and a bottom panel with three tabs: problems, Terraform,
 7. The Terraform tab shows the files, grouped by resource, and each resource says which node caused it; selecting a resource
    selects the node, and the plan tab lists the same resources. With an error finding the generator is not run, the tab lists
    the errors instead (as the CLI does).
-8. Export downloads a zip of the `.tf` files (DD-010: files only, no credentials, no apply). Save downloads `design.json`.
+8. Export downloads a zip of the `.tf` files and, when the design has roles, `deployer-policy.json` (DD-010, DD-020: files only, no credentials, no apply). Save downloads `design.json`.
 
 ## Design choices
 

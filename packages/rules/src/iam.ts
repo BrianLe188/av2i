@@ -1,32 +1,12 @@
-import { MANAGED, requiredManaged, slotFor, type Graph } from "@av2i/engine";
-import type { NormalizedNode, Value } from "@av2i/model";
+import { MANAGED, documentsOf, parseDoc, policiesOf, requiredManaged, slotFor, statementsOfDoc, type Graph, type Stmt } from "@av2i/engine";
+import type { NormalizedNode } from "@av2i/model";
 import { hit, type Ctx, type RuleImpl } from "./context.ts";
 
 const roles = (ctx: Ctx) => ctx.g.nodesOf("iam-role");
 const text = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
 
-const policyDoc = (v: Value | undefined): { Statement?: unknown } | null => {
-  if (v === undefined || v === null || v === "") return null;
-  try {
-    return (typeof v === "string" ? JSON.parse(v) : v) as { Statement?: unknown };
-  } catch {
-    return null;
-  }
-};
-
-interface Stmt {
-  effect: string;
-  actions: string[];
-  resources: string[];
-}
-
-/** Allow and Deny statements of a role's raw policy, with Action and Resource always as lists. */
-function rawStatements(role: NormalizedNode): Stmt[] {
-  const doc = policyDoc(role.props.raw_policy);
-  const list = Array.isArray(doc?.Statement) ? doc.Statement : doc?.Statement ? [doc.Statement] : [];
-  const many = (v: unknown): string[] => (Array.isArray(v) ? v.map(String) : v === undefined ? [] : [String(v)]);
-  return list.map((s: any) => ({ effect: String(s.Effect ?? "Allow"), actions: many(s.Action), resources: many(s.Resource) }));
-}
+/** Statements of every hand-written document that applies to a role (raw policy and customer managed policies). */
+const rawStatements = (g: Graph, role: NormalizedNode): Stmt[] => documentsOf(g, role).flatMap((d) => statementsOfDoc(d.doc));
 
 const compact = (v: unknown) => JSON.stringify(v).replace(/\s+/g, "").length;
 
@@ -38,7 +18,7 @@ function managed(g: Graph, role: NormalizedNode): string[] {
   return [...own, ...derived];
 }
 
-const allows = (role: NormalizedNode, action: string) => rawStatements(role).some((s) => s.effect === "Allow" && s.actions.some((a) => a === action || a === "*" || (a.endsWith("*") && action.startsWith(a.slice(0, -1)))));
+const allows = (g: Graph, role: NormalizedNode, action: string) => rawStatements(g, role).some((s) => s.effect === "Allow" && s.actions.some((a) => a === action || a === "*" || (a.endsWith("*") && action.startsWith(a.slice(0, -1)))));
 
 export const VAL_103: RuleImpl = (ctx) => {
   const out = [];
@@ -55,13 +35,13 @@ export const VAL_103: RuleImpl = (ctx) => {
 
 export const VAL_106: RuleImpl = (ctx) => roles(ctx).filter((r) => ctx.g.consumersOf(r.key).length === 0).map((r) => hit(r.key));
 
-export const VAL_107: RuleImpl = (ctx) => roles(ctx).filter((r) => new Set(managed(ctx.g, r)).size > 20).map((r) => hit(r.key));
+export const VAL_107: RuleImpl = (ctx) => roles(ctx).filter((r) => new Set(managed(ctx.g, r)).size + policiesOf(ctx.g, r.key).length > 20).map((r) => hit(r.key));
 
 export const VAL_108: RuleImpl = (ctx) =>
   roles(ctx).filter((r) => {
     const principals = new Set(ctx.g.consumersOf(r.key).map((c) => (c.slot ? slotFor(c.consumer.service, c.slot)?.trust : undefined)));
     const trust = compact({ Version: "2012-10-17", Statement: [{ Effect: "Allow", Principal: { Service: [...principals] }, Action: "sts:AssumeRole" }] });
-    return trust > 2048 || compact(policyDoc(r.props.raw_policy) ?? {}) > 10240;
+    return trust > 2048 || compact(parseDoc(r.props.raw_policy) ?? {}) > 10240 || policiesOf(ctx.g, r.key).some((p) => compact(parseDoc(p.props.policy) ?? {}) > 6144);
   }).map((r) => hit(r.key));
 
 export const VAL_109: RuleImpl = (ctx) =>
@@ -75,7 +55,7 @@ export const VAL_111: RuleImpl = (ctx) =>
     if (ctx.g.subnetsOf(f.key).length === 0) return false;
     return ctx.g.rolesOf(f.key).filter((r) => r.slot === "execution").some(({ role }) => {
       if (managed(ctx.g, role).includes(MANAGED.lambdaVpc)) return false;
-      return !["ec2:CreateNetworkInterface", "ec2:DescribeNetworkInterfaces", "ec2:DescribeSubnets", "ec2:DeleteNetworkInterface", "ec2:AssignPrivateIpAddresses", "ec2:UnassignPrivateIpAddresses"].every((a) => allows(role, a));
+      return !["ec2:CreateNetworkInterface", "ec2:DescribeNetworkInterfaces", "ec2:DescribeSubnets", "ec2:DeleteNetworkInterface", "ec2:AssignPrivateIpAddresses", "ec2:UnassignPrivateIpAddresses"].every((a) => allows(ctx.g, role, a));
     });
   }).map((f) => hit(f.key));
 
@@ -88,7 +68,7 @@ export const VAL_113: RuleImpl = (ctx) =>
   services(ctx).filter((s) => {
     if (s.props.enable_execute_command !== true) return false;
     const task = ctx.g.rolesOf(s.key).find((r) => r.slot === "task");
-    return !!task && !["ssmmessages:CreateControlChannel", "ssmmessages:CreateDataChannel", "ssmmessages:OpenControlChannel", "ssmmessages:OpenDataChannel"].every((a) => allows(task.role, a));
+    return !!task && !["ssmmessages:CreateControlChannel", "ssmmessages:CreateDataChannel", "ssmmessages:OpenControlChannel", "ssmmessages:OpenDataChannel"].every((a) => allows(ctx.g, task.role, a));
   }).map((s) => hit(s.key));
 
 export const VAL_114: RuleImpl = (ctx) =>
@@ -102,22 +82,22 @@ export const VAL_116: RuleImpl = (ctx) =>
   services(ctx).filter((s) => {
     const exec = ctx.g.rolesOf(s.key).find((r) => r.slot === "execution")?.role;
     if (!exec) return false;
-    return !managed(ctx.g, exec).includes(MANAGED.ecsExecution) && !(allows(exec, "ecr:BatchGetImage") && allows(exec, "logs:PutLogEvents"));
+    return !managed(ctx.g, exec).includes(MANAGED.ecsExecution) && !(allows(ctx.g, exec, "ecr:BatchGetImage") && allows(ctx.g, exec, "logs:PutLogEvents"));
   }).map((s) => hit(s.key));
 
 export const SEC_035: RuleImpl = (ctx) => roles(ctx).filter((r) => managed(ctx.g, r).includes(MANAGED.administrator)).map((r) => hit(r.key));
 
 /** Actions that need `Resource: "*"` and so are exempt from SEC-037 (relations/grant.md). */
-const NEEDS_STAR = /^(ecr:GetAuthorizationToken|ssmmessages:.*|ec2:(Create|Delete|Describe|Assign|Unassign)Network.*|ec2:DescribeSubnets|ec2:(Un)?AssignPrivateIpAddresses)$/;
+const NEEDS_STAR = /^(ecr:GetAuthorizationToken|cloudwatch:PutMetricData|ssmmessages:.*|ec2:(Create|Delete|Describe|Assign|Unassign)Network.*|ec2:DescribeSubnets|ec2:(Un)?AssignPrivateIpAddresses)$/;
 
 export const SEC_036: RuleImpl = (ctx) =>
-  roles(ctx).filter((r) => rawStatements(r).some((s) => s.effect === "Allow" && s.resources.includes("*") && s.actions.some((a) => a === "*" || /^[a-z0-9-]+:\*$/.test(a)))).map((r) => hit(r.key));
+  roles(ctx).filter((r) => rawStatements(ctx.g, r).some((s) => s.effect === "Allow" && s.resources.includes("*") && s.actions.some((a) => a === "*" || /^[a-z0-9-]+:\*$/.test(a)))).map((r) => hit(r.key));
 
 export const SEC_037: RuleImpl = (ctx) =>
-  roles(ctx).filter((r) => rawStatements(r).some((s) => s.effect === "Allow" && s.resources.includes("*") && s.actions.some((a) => a !== "*" && !/^[a-z0-9-]+:\*$/.test(a) && !NEEDS_STAR.test(a)))).map((r) => hit(r.key));
+  roles(ctx).filter((r) => rawStatements(ctx.g, r).some((s) => s.effect === "Allow" && s.resources.includes("*") && s.actions.some((a) => a !== "*" && !/^[a-z0-9-]+:\*$/.test(a) && !NEEDS_STAR.test(a)))).map((r) => hit(r.key));
 
 export const SEC_038: RuleImpl = (ctx) =>
-  roles(ctx).filter((r) => rawStatements(r).some((s) => s.effect === "Allow" && s.actions.some((a) => /^[a-z0-9-]+:\*$/.test(a)))).map((r) => hit(r.key));
+  roles(ctx).filter((r) => rawStatements(ctx.g, r).some((s) => s.effect === "Allow" && s.actions.some((a) => /^[a-z0-9-]+:\*$/.test(a)))).map((r) => hit(r.key));
 
 export const SEC_041: RuleImpl = (ctx) =>
   roles(ctx).filter((r) => {
@@ -127,7 +107,7 @@ export const SEC_041: RuleImpl = (ctx) =>
   }).map((r) => hit(r.key));
 
 export const SEC_042: RuleImpl = (ctx) =>
-  roles(ctx).filter((r) => rawStatements(r).some((s) => s.effect === "Allow" && s.actions.some((a) => ["iam:PassRole", "iam:CreateRole", "iam:AttachRolePolicy", "iam:PutRolePolicy", "iam:*", "*"].includes(a)))).map((r) => hit(r.key));
+  roles(ctx).filter((r) => rawStatements(ctx.g, r).some((s) => s.effect === "Allow" && s.actions.some((a) => ["iam:PassRole", "iam:CreateRole", "iam:AttachRolePolicy", "iam:PutRolePolicy", "iam:*", "*"].includes(a)))).map((r) => hit(r.key));
 
 export const SEC_008: RuleImpl = (ctx) =>
   ctx.g.nodesOf("lambda").filter((f) => ctx.g.subnetsOf(f.key).length > 0 && ctx.g.rolesOf(f.key).some((r) => r.slot === "execution" && managed(ctx.g, r.role).includes(MANAGED.lambdaVpc))).map((f) => hit(f.key));
@@ -155,3 +135,12 @@ export const VAL_121: RuleImpl = (ctx) => {
   const profiles = ctx.g.edges("assume-role").filter((e) => ctx.g.node(e.to)?.service === "ec2");
   return emitted.length > 1000 || profiles.length > 1000 ? [hit(...emitted.map((r) => r.key))] : [];
 };
+
+const BAD_NAME = /[\\/*?\s]/;
+
+/** Policy names: at most 128 characters, and an inline policy name without a backslash, slash, asterisk, question mark or space. */
+export const VAL_120: RuleImpl = (ctx) =>
+  ctx.g.nodesOf("iam-policy").filter((p) => {
+    const name = typeof p.props.name === "string" ? p.props.name : p.key.replace(/_/g, "-");
+    return name.length > 128 || name.length === 0 || BAD_NAME.test(name);
+  }).map((p) => hit(p.key));

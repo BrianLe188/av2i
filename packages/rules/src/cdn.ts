@@ -105,6 +105,7 @@ export const VAL_117: RuleImpl = (ctx) => {
   };
   for (const b of buckets(ctx)) check(b.key, doc(b.props.bucket_policy), true);
   for (const r of ctx.g.nodesOf("iam-role")) check(r.key, doc(r.props.raw_policy), false);
+  for (const p of ctx.g.nodesOf("iam-policy")) check(p.key, doc(p.props.policy), false);
   return out;
 };
 

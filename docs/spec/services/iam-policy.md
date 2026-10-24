@@ -14,6 +14,11 @@ sources:
   S5: https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html
   S6: https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_passrole.html
 scope_note: "Identity-based policies on roles (AWS managed policies, customer managed policies, inline policies) and the policy document structure shared with resource-based policies. Policies for users and groups, session policies, permissions boundaries, SCPs and RCPs are out of scope (decision D-024)"
+properties:
+  # what a customer managed policy node carries in props (kinds.customer_managed below); a role holds it through a grant connection
+  - { key: name, type: string, constraints: ["at most 128 characters"], src: [S1, S3], status: verified, note: "defaults to the node key with hyphens" }
+  - { key: description, type: string, src: [S1], status: verified }
+  - { key: policy, type: json, required: true, constraints: ["the policy document; at most 6,144 characters, white space not counted"], src: [S1, S3], status: verified }
 kinds:
   aws_managed:
     description: "Created and maintained by AWS, attached by ARN. A good start, but they are written for every customer and may grant more than a workload needs (S5)."

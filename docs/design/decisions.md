@@ -24,6 +24,7 @@ Numbered `DD-nnn` to keep them apart from the specification's `D-nnn` ([../spec/
 | DD-017 | decided | Listeners and target groups are not nodes |
 | DD-018 | decided | Certificates, validation records and provider aliases |
 | DD-019 | decided | One bucket policy per bucket, from every relation |
+| DD-020 | decided | The deployer policy |
 
 ## DD-001 Language and runtime
 
@@ -226,4 +227,17 @@ generated ones ordered by `Sid`: one for every CloudFront distribution that read
 `aws_s3_bucket_policy`, after the public access block, so two policy resources for one bucket cannot happen (VAL-051 holds by
 construction). Rules read the same statements, so SEC-015, VAL-052, VAL-053 and VAL-117 judge what will be written. Statements
 carry references as `{ $ref }` and `{ $template }` markers that the generator turns into expressions.
+
+## DD-020 The deployer policy
+
+Status: decided (applies D-028; the implementer's choice of shape).
+
+Every export of a design that has roles or customer policies carries `deployer-policy.json`, a policy document to review and attach to
+whoever runs `tofu apply`. It lists only IAM permissions, as D-028 asks, built from the design: role management on the exact ARNs of the
+roles the design emits (a role nothing assumes is not emitted and not listed); `iam:PassRole` on those roles with `iam:PassedToService`
+set to the principals that use them; `iam:AttachRolePolicy` and `DetachRolePolicy` on those roles with `iam:PolicyARN` limited to the
+managed and customer policies the design names, so the deployer cannot attach `AdministratorAccess` to a role to raise its own
+permissions; instance profile and customer policy management on their exact ARNs, only when the design has them. The platform
+neither creates the deployer nor holds its credentials (DD-010). The policy does not list what other services need; those actions follow
+from the resources in the files and are not enumerated yet.
 

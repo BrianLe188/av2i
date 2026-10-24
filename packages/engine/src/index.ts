@@ -5,3 +5,4 @@ export { accesses, effectiveEgress, effectiveIngress, ingressRules, servicePort,
 export { SLOTS, MANAGED, slotFor, slotOfEdge, requiredManaged, type Slot, type SlotId } from "./roles.ts";
 export * from "./delivery.ts";
 export * from "./policy.ts";
+export * from "./iampolicy.ts";

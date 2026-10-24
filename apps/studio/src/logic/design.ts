@@ -4,7 +4,7 @@ import type { Design, Edge, Node, Props, Value } from "@av2i/model";
 const KEY_BASE: Record<string, string> = {
   vpc: "vpc", subnet: "subnet", "internet-gateway": "igw", "nat-gateway": "nat", "elastic-ip": "eip",
   "route-table": "rt", "vpc-endpoint-s3": "s3ep", "security-group": "sg", ec2: "ec2",
-  ecr: "repo", s3: "bucket", rds: "db", lambda: "fn", "iam-role": "role", alb: "alb", acm: "cert", route53: "zone", cloudfront: "cdn",
+  ecr: "repo", s3: "bucket", rds: "db", lambda: "fn", "iam-role": "role", alb: "alb", "iam-policy": "policy", acm: "cert", route53: "zone", cloudfront: "cdn",
 };
 
 /** Keys are immutable and become Terraform local names (DD-011): lowercase, digits and underscores. */
@@ -37,6 +37,8 @@ export function defaultProps(service: string, design: Design, parent: string | n
       return { function_name: hyphen(key), filename: "lambda.zip", handler: "index.handler", runtime: "nodejs22.x" };
     case "iam-role":
       return { name: hyphen(key) };
+    case "iam-policy":
+      return { name: hyphen(key), policy: { Version: "2012-10-17", Statement: [{ Effect: "Allow", Action: [], Resource: [] }] } };
     case "alb":
       return {
         name: hyphen(key),
