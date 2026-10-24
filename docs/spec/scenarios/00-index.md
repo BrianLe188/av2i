@@ -16,6 +16,7 @@ must fire (see [conventions section 11](../00-conventions.md#11-scenario-files))
 | Scenario | Shows |
 |---|---|
 | [ec2-in-vpc](ec2-in-vpc.md) | the first **executable** scenario: a full design with machine-applied patches, run by the engine in `packages/testkit` |
+| [container-backend](container-backend.md) | the second **executable** scenario (M3): ECS Fargate, ECR, RDS, S3 and Lambda in a VPC, with 70 variants |
 | [three-tier-web](three-tier-web.md) | public, private and database tiers, NAT per AZ, ALB, Multi-AZ RDS, certificate and DNS |
 | [serverless-api](serverless-api.md) | Lambda behind an ALB, one function in the VPC and one outside, image from ECR |
 | [container-service](container-service.md) | ECS Fargate with task and execution roles, ECR, ALB, RDS |

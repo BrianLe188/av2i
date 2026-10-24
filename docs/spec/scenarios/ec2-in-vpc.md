@@ -81,6 +81,7 @@ variants:
   - { id: sg-description-empty, change: "the security group description is empty", patch: [{ op: set, node: sg_app, path: props.description, value: "" }], fires: [VAL-020], severity: error }
   - { id: sg-name-duplicate, change: "a second group with the same name in another case", patch: [{ op: add-node, node: { key: sg_dup, label: "Dup", service: security-group, parent: vpc, props: { name: APP-SG, description: "Duplicate" } } }], fires: [VAL-019], severity: error }
   - { id: two-s3-endpoints-one-table, change: "a second S3 endpoint on the same route table", patch: [{ op: add-node, node: { key: s3ep2, label: "Second endpoint", service: vpc-endpoint-s3, parent: vpc, props: { policy: { Version: "2012-10-17", Statement: [{ Effect: Allow, Principal: "*", Action: ["s3:GetObject"], Resource: ["arn:aws:s3:::example-bucket/*"] }] } } } }, { op: add-edge, edge: { id: e_s3_2, mechanism: route, from: rt_app, to: s3ep2 } }], fires: [VAL-122], severity: error }
+  - { id: s3-endpoint-bad-principal, change: "the endpoint policy names a principal", patch: [{ op: set, node: s3ep, path: props.policy, value: { Version: "2012-10-17", Statement: [{ Effect: Allow, Principal: { AWS: "arn:aws:iam::123456789012:root" }, Action: ["s3:GetObject"], Resource: ["arn:aws:s3:::example-bucket/*"] }] } }], fires: [VAL-125], severity: error }
 ---
 
 # EC2 in a VPC

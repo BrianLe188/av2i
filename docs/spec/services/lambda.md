@@ -37,6 +37,10 @@ properties:
     constraints: ["exactly one source", "filename, s3_bucket and image_uri conflict with each other"]
     src: [S1]
     status: verified
+  - { key: filename, type: string, constraints: ["a zip package in the Terraform working directory; conflicts with s3_bucket and an ECR image"], src: [S1], status: verified }
+  - { key: s3_bucket, type: string, constraints: ["the bucket that holds the package; needs s3_key"], src: [S1], status: verified }
+  - { key: s3_key, type: string, src: [S1], status: verified }
+  - { key: image_tag, type: string, default: latest, constraints: ["with a connected ECR repository: the tag appended to its URL"], src: [S1, S5], status: verified }
   - key: handler
     type: string
     required: "Zip only"

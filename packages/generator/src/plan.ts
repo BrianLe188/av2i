@@ -1,23 +1,13 @@
-import { effectiveEgress, Graph, ingressRules, normalize, type SgRule } from "@av2i/engine";
+import { effectiveEgress, effectiveIngress, Graph, normalize, type SgRule } from "@av2i/engine";
 import type { Design, NormalizedNode, Value } from "@av2i/model";
 import { call, ref, type Block, type Expr } from "./hcl.ts";
+import { resource, slug, toExpr, type FileName, type PlanCtx, type PlannedResource } from "./ctx.ts";
+import { planContainers } from "./containers.ts";
+import { planDatabase } from "./database.ts";
+import { planIam } from "./iam.ts";
+import { planStorage } from "./storage.ts";
 
-export type FileName = "network.tf" | "security.tf" | "compute.tf";
-
-export interface PlannedResource {
-  file: FileName;
-  block: Block;
-  /** the node or edge that caused the resource */
-  from: string;
-}
-
-const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "x";
-
-function resource(type: string, name: string, args: [string, Expr][], blocks: Block[] = []): Block {
-  return { type: "resource", labels: [type, name], args, blocks };
-}
-
-const toExpr = (v: Value): Expr => (Array.isArray(v) ? v.map(toExpr) : v !== null && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, toExpr(x)])) : (v as Expr));
+export { type FileName, type PlannedResource } from "./ctx.ts";
 
 /**
  * Map a design to Terraform resources (design README, stage 5). Local names come from node keys (DD-011); resources the
@@ -36,6 +26,7 @@ export function plan(design: Design): PlannedResource[] {
     names.set(k, n);
     return n === 1 ? base : `${base}_${n}`;
   };
+  const ctx: PlanCtx = { nd, g, add, unique, tags, optional: (n, keys) => keys.filter((k) => n.props[k] !== undefined).map((k) => [k, toExpr(n.props[k]!)]) };
   const igwOf = (key: string): NormalizedNode | undefined => {
     const vpc = g.vpcOf(key);
     return vpc ? g.nodesOf("internet-gateway").find((i) => g.vpcOf(i.key)?.key === vpc.key) : undefined;
@@ -44,8 +35,7 @@ export function plan(design: Design): PlannedResource[] {
     const igw = igwOf(key);
     return igw ? [["depends_on", [ref(`aws_internet_gateway.${igw.key}`)]]] : [];
   };
-  const optional = (n: NormalizedNode, keys: string[]): [string, Expr][] =>
-    keys.filter((k) => n.props[k] !== undefined).map((k) => [k, toExpr(n.props[k]!)]);
+  const optional = ctx.optional;
 
   for (const n of nd.nodes.filter((x) => x.service === "vpc")) {
     add("network.tf", resource("aws_vpc", n.key, [["cidr_block", n.props.cidr_block as string], ...optional(n, ["enable_dns_support", "enable_dns_hostnames", "instance_tenancy"]), tags(n)]), n.key);
@@ -122,7 +112,7 @@ export function plan(design: Design): PlannedResource[] {
         add("security.tf", resource(`aws_vpc_security_group_${dir}_rule`, ruleName(n.key, dir, r), args), n.key);
       }
     };
-    emit("ingress", ingressRules(n.props));
+    emit("ingress", effectiveIngress(g, n.key));
     emit("egress", effectiveEgress(g, n.key));
   }
 
@@ -132,6 +122,7 @@ export function plan(design: Design): PlannedResource[] {
     const sgs = g.securityGroupsOf(n.key);
     if (sgs.length) args.push(["vpc_security_group_ids", sgs.map((s) => ref(`aws_security_group.${s.key}.id`))]);
     args.push(...optional(n, ["associate_public_ip_address"]));
+    if (g.rolesOf(n.key).length) args.push(["iam_instance_profile", ref(`aws_iam_instance_profile.${n.key}.name`)]);
     args.push(tags(n));
     const blocks: Block[] = [];
     for (const k of ["metadata_options", "root_block_device"]) {
@@ -144,5 +135,9 @@ export function plan(design: Design): PlannedResource[] {
   for (const e of nd.edges.filter((x) => x.mechanism === "eip-attach" && g.node(x.to)?.service === "ec2")) {
     add("compute.tf", resource("aws_eip_association", e.from, [["allocation_id", ref(`aws_eip.${e.from}.id`)], ["instance_id", ref(`aws_instance.${e.to}.id`)]]), e.id);
   }
+  planStorage(ctx);
+  planContainers(ctx);
+  planDatabase(ctx);
+  planIam(ctx);
   return out;
 }

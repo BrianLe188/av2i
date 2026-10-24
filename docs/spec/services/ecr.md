@@ -26,10 +26,10 @@ properties:
     constraints: ["an exclusion filter applies only to the two *_WITH_EXCLUSION values; up to 128 characters and 2 wildcards"]
     src: [S1]
     status: verified
-  - key: image_scanning_configuration.scan_on_push
-    type: boolean
-    default: false
-    constraints: ["when off, scans must be started manually"]
+  - key: image_scanning_configuration
+    type: object
+    fields: { scan_on_push: { default: false } }
+    constraints: ["scan_on_push off means scans must be started manually"]
     src: [S1]
     status: verified
   - key: encryption_configuration

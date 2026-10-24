@@ -1,3 +1,4 @@
+import { slotOfEdge, type SlotId } from "./roles.ts";
 import type { Design, NormalizedDesign, NormalizedEdge, NormalizedNode } from "@av2i/model";
 
 function freshKey(taken: Set<string>, base: string): string {
@@ -41,6 +42,16 @@ export function normalize(design: Design): NormalizedDesign {
     const key = freshKey(taken, `eip_${n.key}`);
     nodes.push({ key, label: `Elastic IP of ${n.label}`, service: "elastic-ip", props: {}, origin: "generated", because: n.key });
     edges.push({ id: `generated:eip-attach:${key}:${n.key}`, mechanism: "eip-attach", from: key, to: n.key, origin: "generated", because: n.key });
+  }
+
+  // a role for every consumer whose required slot the design leaves empty (decision D-025)
+  for (const n of design.nodes) {
+    const slot: SlotId | null = n.service === "lambda" || (n.service === "ecs" && n.props.part === "service") ? "execution" : null;
+    if (!slot) continue;
+    if (edges.some((e) => e.mechanism === "assume-role" && e.to === n.key && slotOfEdge(n.service, e.props) === slot)) continue;
+    const key = freshKey(taken, n.service === "ecs" ? `role_${n.key}_exec` : `role_${n.key}`);
+    nodes.push({ key, label: `Role of ${n.label}`, service: "iam-role", props: { name: key.replace(/_/g, "-") }, origin: "generated", because: n.key });
+    edges.push({ id: `generated:assume-role:${key}:${n.key}`, mechanism: "assume-role", from: key, to: n.key, props: { slot }, origin: "generated", because: n.key });
   }
 
   return { name: design.name, settings: structuredClone(design.settings), nodes, edges };

@@ -4,7 +4,7 @@ import {
   type Connection, type Node as RFNode, type NodeProps,
 } from "@xyflow/react";
 import type { Design } from "@av2i/model";
-import { reg } from "../registry.ts";
+import { paletteItem, reg } from "../registry.ts";
 import type { Analysis } from "../logic/analyze.ts";
 import { addEdge, removeEdges, removeNodes, subtree, updateNode } from "../logic/design.ts";
 import { buildFlow, type EdgeData, type NodeData, type Selection } from "../logic/flow.ts";
@@ -64,16 +64,16 @@ function Flow({ design, analysis, selection, focus, lang, s, loadId, onSelect, o
   }, [lang, onToast]);
 
   const onDrop = useCallback((e: React.DragEvent) => {
-    const service = e.dataTransfer.getData(DRAG_TYPE);
-    if (!service) return;
+    const item = paletteItem(e.dataTransfer.getData(DRAG_TYPE));
+    if (!item) return;
     e.preventDefault();
     const at = rf.screenToFlowPosition({ x: e.clientX, y: e.clientY });
     const parent = containerAt(design, at);
-    const verdict = canPlace(reg, parent ? design.nodes.find((n) => n.key === parent)!.service : null, service);
+    const verdict = canPlace(reg, parent ? design.nodes.find((n) => n.key === parent)!.service : null, item.service, item.props);
     if (!verdict.ok) return refuse(s.dropRefused, verdict.reason);
     const origin = parent ? absolute(design, parent) : { x: 0, y: 0 };
     const position = { x: Math.max(8, Math.round(at.x - origin.x - LEAF.w / 2)), y: Math.max(40, Math.round(at.y - origin.y - LEAF.h / 2)) };
-    onAdd(service, parent, position);
+    onAdd(item.id, parent, position);
   }, [rf, design, refuse, s, onAdd]);
 
   const onDragStop = useCallback((_: unknown, node: RFNode<NodeData>) => {
@@ -88,7 +88,7 @@ function Flow({ design, analysis, selection, focus, lang, s, loadId, onSelect, o
       if (position.x !== dn.position?.x || position.y !== dn.position?.y) onEdit((d) => updateNode(d, node.id, (n) => ({ ...n, position })));
       return;
     }
-    const verdict = canPlace(reg, target ? design.nodes.find((n) => n.key === target)!.service : null, dn.service);
+    const verdict = canPlace(reg, target ? design.nodes.find((n) => n.key === target)!.service : null, dn.service, dn.props);
     if (!verdict.ok) return refuse(s.dropRefused, verdict.reason);
     const base = target ? absolute(design, target) : { x: 0, y: 0 };
     const position = { x: Math.max(8, Math.round(abs.x - base.x)), y: Math.max(40, Math.round(abs.y - base.y)) };

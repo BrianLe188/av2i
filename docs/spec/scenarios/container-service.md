@@ -40,7 +40,7 @@ variants:
   - { id: no-pull-path, change: "private subnets with no NAT route and no ECR endpoint", fires: [VAL-042], severity: warning, note: "tasks stay PENDING" }
   - { id: too-many-groups, change: "6 security groups on the service", fires: [VAL-041, VAL-021], severity: error }
   - { id: instance-target-group, change: "the target group has target type instance", fires: [VAL-043], severity: error }
-  - { id: no-execution-role, change: "web has no execution role", fires: [VAL-044], severity: error }
+  - { id: no-execution-role, change: "web has no execution role", fires: [], severity: error, note: "derived: the platform creates the role (D-025, DD-015), so VAL-044 holds by construction; drawing an execution role without the managed policy is VAL-116" }
   - { id: execution-role-missing-policy, change: "exec-role lacks AmazonECSTaskExecutionRolePolicy", fires: [VAL-116], severity: error }
   - { id: no-task-role, change: "files is the target of a grant but web has no task role", fires: [VAL-112], severity: error }
   - { id: exec-without-ssm, change: "enable_execute_command true and the task role lacks the ssmmessages actions", fires: [VAL-113], severity: error }

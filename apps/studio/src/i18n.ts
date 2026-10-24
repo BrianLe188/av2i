@@ -25,7 +25,9 @@ const dict = {
     protocol: "Giao thức", fromPort: "Từ cổng", toPort: "Đến cổng", peer: "Nguồn/đích", description: "Mô tả",
     cidr4: "CIDR IPv4", cidr6: "CIDR IPv6", prefix: "Prefix list", sgref: "Security Group",
     invalidJson: "JSON không hợp lệ", invalidNumber: "Không phải số",
-    mech: { route: "route", "route-association": "gắn bảng định tuyến", "sg-attach": "gắn SG", "eip-attach": "gắn EIP" },
+    mech: { route: "route", "route-association": "gắn bảng định tuyến", "sg-attach": "gắn SG", "eip-attach": "gắn EIP", "image-source": "image từ ECR", "network-access": "truy cập mạng", "assume-role": "chạy bằng role", grant: "cấp quyền", "db-subnet-group": "subnet của DB", containment: "thêm subnet" },
+    slot: "Vai trò của role", slotTask: "task role (ứng dụng)", slotExecution: "execution role (kéo image, ghi log)", level: "Mức quyền", port: "Cổng", portDefault: "mặc định của dịch vụ đích",
+    callerGroup: "SG phía gọi", calleeGroup: "SG phía được gọi", networkAccessHint: "Hệ thống tự sinh rule ingress trên SG của phía được gọi.",
     origin: { user: "do bạn vẽ", derived: "suy ra", generated: "hệ thống tự tạo" },
   },
   en: {
@@ -52,7 +54,9 @@ const dict = {
     protocol: "Protocol", fromPort: "From port", toPort: "To port", peer: "Source/destination", description: "Description",
     cidr4: "IPv4 CIDR", cidr6: "IPv6 CIDR", prefix: "Prefix list", sgref: "Security group",
     invalidJson: "Invalid JSON", invalidNumber: "Not a number",
-    mech: { route: "route", "route-association": "route table association", "sg-attach": "security group", "eip-attach": "Elastic IP" },
+    mech: { route: "route", "route-association": "route table association", "sg-attach": "security group", "eip-attach": "Elastic IP", "image-source": "image from ECR", "network-access": "network access", "assume-role": "runs as role", grant: "grant", "db-subnet-group": "DB subnet", containment: "extra subnet" },
+    slot: "Role slot", slotTask: "task role (application)", slotExecution: "execution role (image pull, logs)", level: "Access level", port: "Port", portDefault: "the target's own port",
+    callerGroup: "Caller security group", calleeGroup: "Callee security group", networkAccessHint: "The system generates the ingress rule on the callee's security group.",
     origin: { user: "drawn by you", derived: "derived", generated: "created by the system" },
   },
 } as const;

@@ -5,10 +5,12 @@ type Text = { vi: string; en: string };
 export type Verdict<T = object> = ({ ok: true } & T) | { ok: false; reason: Text };
 
 /** Mechanisms a user draws as an edge; the others come from nesting or from the engine. */
-export const DRAWN = ["route", "route-association", "sg-attach", "eip-attach"] as const;
+export const DRAWN = ["route", "route-association", "sg-attach", "eip-attach", "image-source", "network-access", "assume-role", "grant", "db-subnet-group", "containment"] as const;
 const PLACEMENT = ["containment", "igw-attach", "nat-placement"];
 /** Where an undirected mechanism starts: the owner of the relation. */
-const SOURCE_FIRST = ["route-table", "security-group", "elastic-ip"];
+const SOURCE_FIRST = ["route-table", "security-group", "elastic-ip", "iam-role", "ecr"];
+/** Services that may sit in several subnets: a subnet connected to one by a containment line adds a subnet. */
+const SPANS = ["ecs", "lambda"];
 
 export const CONTAINERS = ["vpc", "subnet"];
 
@@ -23,12 +25,14 @@ export function paletteServices(reg: Registry, ids: readonly string[]): string[]
   return ids.filter((id) => reg.services[id]);
 }
 
-const isRoot = (reg: Registry, service: string) => ((reg.services[service]?.placement?.requires as string[] | undefined) ?? []).length === 0;
+/** An ECS cluster is regional, so it sits outside any subnet; an ECS service needs one. */
+const isRoot = (reg: Registry, service: string, props?: Props) =>
+  (service === "ecs" ? props?.part === "cluster" : ((reg.services[service]?.placement?.requires as string[] | undefined) ?? []).length === 0);
 
 /** May a node of `child` be placed inside a node of `parent` (null: at the top level)? */
-export function canPlace(reg: Registry, parent: string | null, child: string): Verdict {
+export function canPlace(reg: Registry, parent: string | null, child: string, props?: Props): Verdict {
   if (parent === null) {
-    return isRoot(reg, child)
+    return isRoot(reg, child, props)
       ? { ok: true }
       : { ok: false, reason: { vi: `${title(reg, child, "vi")} phải nằm trong một container (${requires(reg, child)}).`, en: `${title(reg, child, "en")} must sit inside a container (${requires(reg, child)}).` } };
   }
@@ -47,10 +51,10 @@ export function title(reg: Registry, service: string, lang: "vi" | "en"): string
 }
 
 /** The first container of the design where `child` may go, preferring the selected one. */
-export function findParent(reg: Registry, design: Design, child: string, prefer?: string | null): string | null | undefined {
-  if (isRoot(reg, child)) return null;
+export function findParent(reg: Registry, design: Design, child: string, prefer?: string | null, props?: Props): string | null | undefined {
+  if (isRoot(reg, child, props)) return null;
   const candidates = [...(prefer ? design.nodes.filter((n) => n.key === prefer) : []), ...design.nodes.filter((n) => CONTAINERS.includes(n.service))];
-  return candidates.find((n) => canPlace(reg, n.service, child).ok)?.key;
+  return candidates.find((n) => canPlace(reg, n.service, child, props).ok)?.key;
 }
 
 /** Default destination of a route to a gateway; endpoints add their own route. */
@@ -73,7 +77,7 @@ export function connect(reg: Registry, design: Design, a: string, b: string): Ve
   const options = [
     { from: na, to: nb, c: cell(reg, na.service, nb.service) },
     { from: nb, to: na, c: cell(reg, nb.service, na.service) },
-  ].filter((o) => o.c && usable(o.c.value) && (DRAWN as readonly string[]).includes(o.c.mechanism));
+  ].filter((o) => o.c && usable(o.c.value) && (DRAWN as readonly string[]).includes(o.c.mechanism) && (o.c.mechanism !== "containment" || SPANS.includes(o.to.service)));
   if (!options.length) {
     return {
       ok: false,

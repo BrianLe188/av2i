@@ -7,6 +7,7 @@ import * as H from "../src/logic/history.ts";
 import { absolute, containerAt, withPositions } from "../src/logic/layout.ts";
 import { canPlace, connect, findParent } from "../src/logic/placement.ts";
 import { blankDesign, fromTemplate, templates } from "../src/logic/templates.ts";
+import { PALETTE } from "../src/registry.ts";
 
 const reg = getRegistry();
 
@@ -156,5 +157,65 @@ describe("form", () => {
     expect(parseInput("json", "{\"a\":1}")).toEqual({ a: 1 });
     expect(parseInput("json", "{")).toBeInstanceOf(Error);
     expect(parseInput("string", "")).toBeUndefined();
+  });
+});
+
+describe("the M3 services", () => {
+  const d = fromTemplate(reg, "container-backend");
+
+  it("every palette item adds a node the checker accepts, and has a form", () => {
+    for (const item of PALETTE) {
+      let design = blankDesign();
+      if (item.service !== "vpc") {
+        design = addNode(reg, design, "vpc", null, undefined).design;
+        design = addNode(reg, design, "subnet", "vpc", undefined).design;
+      }
+      const parent = findParent(reg, design, item.service, "subnet", item.props);
+      expect(parent, item.id).not.toBeUndefined();
+      const r = addNode(reg, design, item.service, parent ?? null, undefined, item.props);
+      const issues = analyze(r.design, reg).structural.filter((p) => p.where === r.key);
+      expect(issues, item.id).toEqual([]);
+      if (!["vpc", "subnet", "internet-gateway", "nat-gateway", "elastic-ip", "route-table", "vpc-endpoint-s3", "security-group", "ec2"].includes(item.id)) expect(fieldsOf(reg, item.service, item.props?.part).length, item.id).toBeGreaterThan(0);
+    }
+  });
+
+  it("an ECS cluster sits outside every subnet and a service inside one", () => {
+    expect(canPlace(reg, null, "ecs", { part: "cluster" }).ok).toBe(true);
+    expect(canPlace(reg, null, "ecs", { part: "service" }).ok).toBe(false);
+    expect(canPlace(reg, "subnet", "ecs", { part: "service" }).ok).toBe(true);
+    expect(canPlace(reg, "subnet", "rds").ok).toBe(true);
+    expect(canPlace(reg, null, "rds").ok).toBe(false);
+  });
+
+  it("shows only the properties of the part", () => {
+    const keys = (part: string) => fieldsOf(reg, "ecs", part).map((f) => f.key);
+    expect(keys("cluster")).toContain("container_insights");
+    expect(keys("cluster")).not.toContain("cpu");
+    expect(keys("service")).toContain("cpu");
+    expect(fieldsOf(reg, "ecs", "service").find((f) => f.key === "cluster")?.type).toBe("node");
+  });
+
+  it("draws the new connections in the direction the matrix gives", () => {
+    const is = (a: string, b: string, mechanism: string, from: string) => {
+      const v = connect(reg, { ...d, edges: [] }, a, b);
+      expect(v.ok, `${a} ${b}`).toBe(true);
+      if (v.ok) expect([v.edge.mechanism, v.edge.from]).toEqual([mechanism, from]);
+    };
+    is("web", "repo", "image-source", "repo");
+    is("web", "task_role", "assume-role", "task_role");
+    is("files", "task_role", "grant", "task_role");
+    is("db", "db_a", "db-subnet-group", "db");
+    is("web", "db", "network-access", "web");
+    is("web", "pub_a", "containment", "pub_a");
+  });
+
+  it("does not draw a containment line between a VPC and a subnet", () => {
+    expect(connect(reg, d, "vpc", "pub_a").ok).toBe(false);
+  });
+
+  it("keeps the derived roles and nothing else drawn", () => {
+    const a = analyze(d, reg);
+    expect(a.normalized?.nodes.filter((n) => n.origin === "generated" && n.service === "iam-role").length).toBe(2);
+    expect(a.files?.["iam.tf"]).toContain("aws_iam_role");
   });
 });

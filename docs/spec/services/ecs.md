@@ -16,6 +16,24 @@ sources:
   S5: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/fargate-task-networking.html
   S6: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_execution_IAM_role.html
 scope_note: "Fargate only. EC2 launch type, Managed Instances, EXTERNAL, DAEMON, Service Connect, EFS/EBS volumes and blue/green are out of scope (decision D-011)"
+properties:
+  # what a node of this service carries in props. A node is a cluster or a service (`part`); the task definition is generated from the service (DD-014)
+  - { key: part, type: enum, values: [cluster, service], required: true, constraints: ["a cluster is regional and sits outside any subnet; a service sits in a subnet"], status: verified }
+  - { key: name, type: string, part: [cluster, service], constraints: ["up to 255 letters, numbers, hyphens, underscores"], src: [S1, S3], status: verified, note: "defaults to the node key" }
+  - { key: container_insights, type: enum, values: [enhanced, enabled, disabled], part: [cluster], src: [S1], status: verified }
+  - { key: cluster, type: node, of: ecs, part: [service], required: true, constraints: ["the key of a cluster node"], src: [S3], status: verified }
+  - { key: cpu, type: enum, values: ["256", "512", "1024", "2048", "4096", "8192", "16384", "32768"], default: "256", part: [service], required: true, src: [S2, S4], status: verified }
+  - { key: memory, type: string, default: "512", part: [service], required: true, constraints: ["MiB; must pair with cpu (see fargate_task_size)"], src: [S2, S4], status: verified }
+  - { key: desired_count, type: number, default: 1, part: [service], required: true, constraints: ["the provider default is 0, which runs no tasks (D-005)"], src: [S3], status: verified }
+  - { key: launch_type, type: enum, values: [FARGATE], default: FARGATE, part: [service], constraints: ["conflicts with capacity_provider_strategy"], src: [S3], status: verified }
+  - { key: capacity_provider_strategy, type: json, part: [service], constraints: ["conflicts with launch_type"], src: [S3], status: verified }
+  - { key: assign_public_ip, type: boolean, default: false, part: [service], src: [S3], status: verified }
+  - { key: enable_execute_command, type: boolean, default: false, part: [service], constraints: ["the task role then needs the ssmmessages actions (VAL-113)"], src: [S3], status: verified }
+  - { key: container_name, type: string, part: [service], src: [S2], status: verified, note: "defaults to the node key" }
+  - { key: container_port, type: number, part: [service], src: [S2, S5], status: verified }
+  - { key: image, type: string, part: [service], constraints: ["used when no ECR repository is connected"], src: [S2], status: verified }
+  - { key: image_tag, type: string, default: latest, part: [service], constraints: ["with a connected ECR repository: the tag appended to its URL"], src: [S2], status: verified }
+  - { key: environment, type: json, part: [service], constraints: ["a map of names to values"], src: [S2], status: verified }
 parts:
   cluster:
     - { key: name, type: string, required: true, constraints: ["up to 255 letters, numbers, hyphens, underscores"], src: [S1], status: verified }

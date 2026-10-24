@@ -1,0 +1,362 @@
+{
+  "schema": 1,
+  "name": "container-backend",
+  "settings": {
+    "region": "ap-southeast-1"
+  },
+  "nodes": [
+    {
+      "key": "vpc",
+      "label": "Backend",
+      "service": "vpc",
+      "props": {
+        "cidr_block": "10.2.0.0/16",
+        "enable_dns_support": true,
+        "enable_dns_hostnames": true
+      }
+    },
+    {
+      "key": "igw",
+      "label": "Internet gateway",
+      "service": "internet-gateway",
+      "parent": "vpc",
+      "props": {}
+    },
+    {
+      "key": "pub_a",
+      "label": "Public A",
+      "service": "subnet",
+      "parent": "vpc",
+      "props": {
+        "cidr_block": "10.2.0.0/24",
+        "availability_zone": "ap-southeast-1a"
+      }
+    },
+    {
+      "key": "pub_b",
+      "label": "Public B",
+      "service": "subnet",
+      "parent": "vpc",
+      "props": {
+        "cidr_block": "10.2.1.0/24",
+        "availability_zone": "ap-southeast-1b"
+      }
+    },
+    {
+      "key": "app_a",
+      "label": "App A",
+      "service": "subnet",
+      "parent": "vpc",
+      "props": {
+        "cidr_block": "10.2.10.0/24",
+        "availability_zone": "ap-southeast-1a"
+      }
+    },
+    {
+      "key": "app_b",
+      "label": "App B",
+      "service": "subnet",
+      "parent": "vpc",
+      "props": {
+        "cidr_block": "10.2.11.0/24",
+        "availability_zone": "ap-southeast-1b"
+      }
+    },
+    {
+      "key": "db_a",
+      "label": "Data A",
+      "service": "subnet",
+      "parent": "vpc",
+      "props": {
+        "cidr_block": "10.2.20.0/24",
+        "availability_zone": "ap-southeast-1a"
+      }
+    },
+    {
+      "key": "db_b",
+      "label": "Data B",
+      "service": "subnet",
+      "parent": "vpc",
+      "props": {
+        "cidr_block": "10.2.21.0/24",
+        "availability_zone": "ap-southeast-1b"
+      }
+    },
+    {
+      "key": "nat_a",
+      "label": "NAT A",
+      "service": "nat-gateway",
+      "parent": "pub_a",
+      "props": {
+        "availability_mode": "zonal",
+        "connectivity_type": "public"
+      }
+    },
+    {
+      "key": "nat_b",
+      "label": "NAT B",
+      "service": "nat-gateway",
+      "parent": "pub_b",
+      "props": {
+        "availability_mode": "zonal",
+        "connectivity_type": "public"
+      }
+    },
+    {
+      "key": "rt_public",
+      "label": "Public routes",
+      "service": "route-table",
+      "parent": "vpc",
+      "props": {}
+    },
+    {
+      "key": "rt_app_a",
+      "label": "App A routes",
+      "service": "route-table",
+      "parent": "vpc",
+      "props": {}
+    },
+    {
+      "key": "rt_app_b",
+      "label": "App B routes",
+      "service": "route-table",
+      "parent": "vpc",
+      "props": {}
+    },
+    {
+      "key": "sg_task",
+      "label": "task-sg",
+      "service": "security-group",
+      "parent": "vpc",
+      "props": {
+        "name": "task-sg",
+        "description": "ECS tasks"
+      }
+    },
+    {
+      "key": "sg_db",
+      "label": "db-sg",
+      "service": "security-group",
+      "parent": "vpc",
+      "props": {
+        "name": "db-sg",
+        "description": "Database"
+      }
+    },
+    {
+      "key": "sg_fn",
+      "label": "fn-sg",
+      "service": "security-group",
+      "parent": "vpc",
+      "props": {
+        "name": "fn-sg",
+        "description": "Worker function"
+      }
+    },
+    {
+      "key": "repo",
+      "label": "Backend images",
+      "service": "ecr",
+      "props": {
+        "name": "backend",
+        "image_tag_mutability": "IMMUTABLE",
+        "image_scanning_configuration": {
+          "scan_on_push": true
+        }
+      }
+    },
+    {
+      "key": "cluster",
+      "label": "Backend cluster",
+      "service": "ecs",
+      "props": {
+        "part": "cluster",
+        "name": "backend"
+      }
+    },
+    {
+      "key": "web",
+      "label": "Web",
+      "service": "ecs",
+      "parent": "app_a",
+      "props": {
+        "part": "service",
+        "name": "web",
+        "cluster": "cluster",
+        "cpu": "512",
+        "memory": "1024",
+        "desired_count": 2,
+        "container_port": 8080,
+        "image_tag": "v1"
+      }
+    },
+    {
+      "key": "db",
+      "label": "Database",
+      "service": "rds",
+      "parent": "db_a",
+      "props": {
+        "engine": "postgres",
+        "instance_class": "db.t3.micro",
+        "allocated_storage": 20,
+        "username": "app",
+        "deletion_protection": true
+      }
+    },
+    {
+      "key": "files",
+      "label": "Files",
+      "service": "s3",
+      "props": {
+        "bucket": "av2i-example-files"
+      }
+    },
+    {
+      "key": "task_role",
+      "label": "Task role",
+      "service": "iam-role",
+      "props": {
+        "name": "backend-task"
+      }
+    },
+    {
+      "key": "fn",
+      "label": "Worker",
+      "service": "lambda",
+      "parent": "app_a",
+      "props": {
+        "function_name": "worker",
+        "filename": "lambda.zip",
+        "handler": "index.handler",
+        "runtime": "nodejs22.x",
+        "memory_size": 256,
+        "timeout": 10
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_rt_public_igw",
+      "mechanism": "route",
+      "from": "rt_public",
+      "to": "igw",
+      "props": {
+        "destination_cidr_block": "0.0.0.0/0"
+      }
+    },
+    {
+      "id": "e_rt_public_pub_a",
+      "mechanism": "route-association",
+      "from": "rt_public",
+      "to": "pub_a"
+    },
+    {
+      "id": "e_rt_public_pub_b",
+      "mechanism": "route-association",
+      "from": "rt_public",
+      "to": "pub_b"
+    },
+    {
+      "id": "e_rt_app_a_nat",
+      "mechanism": "route",
+      "from": "rt_app_a",
+      "to": "nat_a",
+      "props": {
+        "destination_cidr_block": "0.0.0.0/0"
+      }
+    },
+    {
+      "id": "e_rt_app_b_nat",
+      "mechanism": "route",
+      "from": "rt_app_b",
+      "to": "nat_b",
+      "props": {
+        "destination_cidr_block": "0.0.0.0/0"
+      }
+    },
+    {
+      "id": "e_rt_app_a_app",
+      "mechanism": "route-association",
+      "from": "rt_app_a",
+      "to": "app_a"
+    },
+    {
+      "id": "e_rt_app_b_app",
+      "mechanism": "route-association",
+      "from": "rt_app_b",
+      "to": "app_b"
+    },
+    {
+      "id": "e_web_b",
+      "mechanism": "containment",
+      "from": "app_b",
+      "to": "web"
+    },
+    {
+      "id": "e_fn_b",
+      "mechanism": "containment",
+      "from": "app_b",
+      "to": "fn"
+    },
+    {
+      "id": "e_db_b",
+      "mechanism": "db-subnet-group",
+      "from": "db",
+      "to": "db_b"
+    },
+    {
+      "id": "e_sg_task",
+      "mechanism": "sg-attach",
+      "from": "sg_task",
+      "to": "web"
+    },
+    {
+      "id": "e_sg_db",
+      "mechanism": "sg-attach",
+      "from": "sg_db",
+      "to": "db"
+    },
+    {
+      "id": "e_sg_fn",
+      "mechanism": "sg-attach",
+      "from": "sg_fn",
+      "to": "fn"
+    },
+    {
+      "id": "e_repo_web",
+      "mechanism": "image-source",
+      "from": "repo",
+      "to": "web"
+    },
+    {
+      "id": "e_web_db",
+      "mechanism": "network-access",
+      "from": "web",
+      "to": "db"
+    },
+    {
+      "id": "e_fn_db",
+      "mechanism": "network-access",
+      "from": "fn",
+      "to": "db"
+    },
+    {
+      "id": "e_task_role",
+      "mechanism": "assume-role",
+      "from": "task_role",
+      "to": "web",
+      "props": {
+        "slot": "task"
+      }
+    },
+    {
+      "id": "e_task_files",
+      "mechanism": "grant",
+      "from": "task_role",
+      "to": "files",
+      "props": {
+        "level": "readwrite"
+      }
+    }
+  ]
+}

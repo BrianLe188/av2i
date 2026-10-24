@@ -14,13 +14,63 @@ export interface SgRule {
   referenced_security_group_id?: string;
   description?: string;
   /** set on rules the engine added */
-  generated?: "default-egress" | "s3-endpoint";
+  generated?: "default-egress" | "s3-endpoint" | "network-access";
 }
 
 const asRules = (v: Value | undefined): SgRule[] => (Array.isArray(v) ? (v as unknown as SgRule[]) : []);
 
 export function ingressRules(props: Props): SgRule[] {
   return asRules(props.ingress_rules);
+}
+
+/** The port a callee listens on: a database's configured or engine port, a service's container port. */
+export function servicePort(g: Graph, key: string): number | undefined {
+  const n = g.node(key);
+  if (!n) return undefined;
+  if (n.service === "rds") return typeof n.props.port === "number" ? n.props.port : n.props.engine === "mysql" ? 3306 : 5432;
+  if (n.service === "ecs") return typeof n.props.container_port === "number" ? n.props.container_port : undefined;
+  return undefined;
+}
+
+export interface Access {
+  edge: string;
+  callerSg: string;
+  calleeSg: string;
+  port: number;
+  /** the port of the callee itself; differs from `port` when the connection overrides it (VAL-068) */
+  calleePort: number | undefined;
+}
+
+/**
+ * What each network-access connection turns into (decision D-012): the group on a side is the only one it has, else the
+ * one the connection names in `caller_sg` or `callee_sg`. A connection with no resolvable group or port yields nothing.
+ */
+export function accesses(g: Graph): Access[] {
+  const out: Access[] = [];
+  const pick = (node: string, named: unknown): string | undefined => {
+    const groups = g.securityGroupsOf(node).map((s) => s.key);
+    if (typeof named === "string" && groups.includes(named)) return named;
+    return groups.length === 1 ? groups[0] : undefined;
+  };
+  for (const e of g.edges("network-access")) {
+    const callerSg = pick(e.from, e.props?.caller_sg);
+    const calleeSg = pick(e.to, e.props?.callee_sg);
+    const calleePort = servicePort(g, e.to);
+    const port = typeof e.props?.port === "number" ? e.props.port : calleePort;
+    if (callerSg && calleeSg && port !== undefined) out.push({ edge: e.id, callerSg, calleeSg, port, calleePort });
+  }
+  return out;
+}
+
+/** Ingress rules of a group as they will be emitted: the ones written on it, then one per connection that reaches it. */
+export function effectiveIngress(g: Graph, sgKey: string): SgRule[] {
+  const rules = ingressRules(g.props(sgKey)).map((r) => ({ ...r }));
+  for (const a of accesses(g)) {
+    if (a.calleeSg !== sgKey) continue;
+    if (rules.some((r) => r.referenced_security_group_id === a.callerSg && r.from_port === a.port && r.to_port === a.port && r.ip_protocol === "tcp")) continue;
+    rules.push({ ip_protocol: "tcp", from_port: a.port, to_port: a.port, referenced_security_group_id: a.callerSg, description: `from ${a.callerSg}`, generated: "network-access" });
+  }
+  return rules;
 }
 
 const allowsAll = (r: SgRule) => r.ip_protocol === "-1" && (r.cidr_ipv4 === "0.0.0.0/0" || r.cidr_ipv6 === "::/0");
@@ -37,6 +87,12 @@ export function effectiveEgress(g: Graph, sgKey: string): SgRule[] {
     ? [{ ip_protocol: "-1", cidr_ipv4: "0.0.0.0/0", generated: "default-egress" }]
     : asRules(explicit).map((r) => ({ ...r }));
   if (rules.some(allowsAll)) return rules;
+  // a group that restricts egress needs a rule toward the group of every callee it reaches
+  for (const a of accesses(g)) {
+    if (a.callerSg !== sgKey) continue;
+    if (rules.some((r) => r.referenced_security_group_id === a.calleeSg && r.from_port === a.port && r.to_port === a.port)) continue;
+    rules.push({ ip_protocol: "tcp", from_port: a.port, to_port: a.port, referenced_security_group_id: a.calleeSg, description: `to ${a.calleeSg}`, generated: "network-access" });
+  }
   const facts = computeFacts(g);
   const endpoints = new Set<string>();
   for (const e of g.edges("sg-attach")) {

@@ -62,7 +62,7 @@ properties:
     status: verified
   - key: storage_encrypted
     type: boolean
-    default: false
+    default: true             # the platform default (D-017); the provider default is false
     constraints: ["only at creation: an existing unencrypted instance cannot be encrypted in place and encryption cannot be removed", "the KMS key cannot be changed once set"]
     src: [S1, S6]
     status: verified
@@ -83,7 +83,7 @@ properties:
     status: verified
   - key: manage_master_user_password
     type: boolean
-    default: false
+    default: true             # the platform default (D-017) unless a password is written on the node; the provider default is false
     constraints:
       - "RDS generates the password and keeps it in Secrets Manager; rotated every 7 days by default"
       - "conflicts with password and password_wo"
@@ -135,7 +135,7 @@ properties:
     status: verified          # the provider gives no default; the engine ports are general knowledge (unverified)
   - key: backup_retention_period
     type: number
-    default: 0
+    default: 7                # the platform default (D-017); the provider default is 0
     range: [0, 35]
     constraints: ["must be > 0 for read replica sources and blue/green"]
     src: [S1]
@@ -153,6 +153,11 @@ properties:
   - key: deletion_protection
     type: boolean
     default: false
+    src: [S1]
+    status: verified
+  - key: final_snapshot_identifier
+    type: string
+    constraints: ["required when skip_final_snapshot is false: starts with a letter, alphanumerics and hyphens, no trailing hyphen, no consecutive hyphens"]
     src: [S1]
     status: verified
   - key: skip_final_snapshot

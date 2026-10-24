@@ -4,17 +4,39 @@ import type { Design, Edge, Node, Props, Value } from "@av2i/model";
 const KEY_BASE: Record<string, string> = {
   vpc: "vpc", subnet: "subnet", "internet-gateway": "igw", "nat-gateway": "nat", "elastic-ip": "eip",
   "route-table": "rt", "vpc-endpoint-s3": "s3ep", "security-group": "sg", ec2: "ec2",
+  ecr: "repo", s3: "bucket", rds: "db", lambda: "fn", "iam-role": "role",
 };
 
 /** Keys are immutable and become Terraform local names (DD-011): lowercase, digits and underscores. */
-export function newKey(design: Design, service: string): string {
-  const base = KEY_BASE[service] ?? service.replace(/[^a-z0-9]+/g, "_");
+export function newKey(design: Design, service: string, part?: string): string {
+  const base = service === "ecs" ? (part === "cluster" ? "cluster" : "svc") : (KEY_BASE[service] ?? service.replace(/[^a-z0-9]+/g, "_"));
   if (!design.nodes.some((n) => n.key === base)) return base;
   for (let i = 2; ; i++) if (!design.nodes.some((n) => n.key === `${base}_${i}`)) return `${base}_${i}`;
 }
 
-export function defaultProps(service: string, design: Design, parent: string | null, key: string): Props {
+const hyphen = (key: string) => key.replace(/_/g, "-");
+
+export function defaultProps(service: string, design: Design, parent: string | null, key: string, preset: Props = {}): Props {
   switch (service) {
+    case "ecs":
+      if (preset.part === "cluster") return { part: "cluster", name: hyphen(key) };
+      return {
+        part: "service",
+        name: hyphen(key),
+        cluster: design.nodes.find((n) => n.service === "ecs" && n.props.part === "cluster")?.key ?? "",
+        cpu: "256", memory: "512", desired_count: 1, container_port: 80,
+      };
+    case "ecr":
+      return { name: hyphen(key), image_tag_mutability: "IMMUTABLE", image_scanning_configuration: { scan_on_push: true } };
+    case "s3":
+      // names are global; the owner picks a real one
+      return { bucket: `av2i-${hyphen(key)}-${design.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "design"}` };
+    case "rds":
+      return { engine: "postgres", instance_class: "db.t3.micro", allocated_storage: 20, username: "app", deletion_protection: true };
+    case "lambda":
+      return { function_name: hyphen(key), filename: "lambda.zip", handler: "index.handler", runtime: "nodejs22.x" };
+    case "iam-role":
+      return { name: hyphen(key) };
     case "vpc":
       return { cidr_block: `10.${design.nodes.filter((n) => n.service === "vpc").length}.0.0/16`, enable_dns_support: true, enable_dns_hostnames: true };
     case "subnet": {
@@ -34,10 +56,10 @@ export function defaultProps(service: string, design: Design, parent: string | n
   }
 }
 
-export function addNode(reg: Registry, design: Design, service: string, parent: string | null, position: { x: number; y: number } | undefined): { design: Design; key: string } {
-  const key = newKey(design, service);
-  const title = (reg.services[service]?.title?.en as string | undefined) ?? service;
-  const node: Node = { key, label: title.replace(/ \(.*$/, ""), service: service as Node["service"], ...(parent ? { parent } : {}), props: defaultProps(service, design, parent, key), ...(position ? { position } : {}) };
+export function addNode(reg: Registry, design: Design, service: string, parent: string | null, position: { x: number; y: number } | undefined, preset: Props = {}): { design: Design; key: string } {
+  const key = newKey(design, service, typeof preset.part === "string" ? preset.part : undefined);
+  const title = preset.part === "cluster" ? "ECS cluster" : preset.part === "service" ? "ECS service" : ((reg.services[service]?.title?.en as string | undefined) ?? service);
+  const node: Node = { key, label: title.replace(/ \(.*$/, ""), service: service as Node["service"], ...(parent ? { parent } : {}), props: defaultProps(service, design, parent, key, preset), ...(position ? { position } : {}) };
   return { design: { ...design, nodes: [...design.nodes, node] }, key };
 }
 

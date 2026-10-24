@@ -10,6 +10,8 @@ export interface SubnetFacts {
 
 export interface WorkloadFacts {
   subnet: string | null;
+  /** every subnet the workload spans (ECS services, Lambda functions and databases may span several) */
+  subnets: string[];
   publicAddress: boolean;
   direct: boolean;
   viaNat: boolean;
@@ -22,7 +24,8 @@ export interface Facts {
   workloads: Map<string, WorkloadFacts>;
 }
 
-export const WORKLOAD_SERVICES = ["ec2"] as const;
+/** Services whose workloads run in subnets and reach out to the network: instances, Fargate services and VPC-attached functions. */
+export const WORKLOAD_SERVICES = ["ec2", "ecs", "lambda"] as const;
 
 /** Public, private, egress and S3 path, derived once from routes and associations (egress-path mechanism). */
 export function computeFacts(g: Graph): Facts {
@@ -56,14 +59,26 @@ export function computeFacts(g: Graph): Facts {
   const workloads = new Map<string, WorkloadFacts>();
   for (const svc of WORKLOAD_SERVICES) {
     for (const w of g.nodesOf(svc)) {
-      const subnet = g.subnetOf(w.key);
-      const sf = subnet ? subnets.get(subnet.key) : undefined;
-      const explicit = w.props.associate_public_ip_address;
-      const onLaunch = subnet?.props.map_public_ip_on_launch === true;
+      if (svc === "ecs" && w.props.part !== "service") continue;
+      const spans = g.subnetsOf(w.key);
+      // a function outside every subnet is not in a VPC and needs no network path of its own
+      if (svc === "lambda" && spans.length === 0) continue;
+      const sfs = spans.map((s) => subnets.get(s.key)!);
+      const explicit = svc === "ec2" ? w.props.associate_public_ip_address : svc === "ecs" ? (w.props.assign_public_ip === true) : false;
+      const onLaunch = svc === "ec2" && spans[0]?.props.map_public_ip_on_launch === true;
       const publicAddress = g.elasticIpsOf(w.key).length > 0 || explicit === true || (explicit === undefined && onLaunch);
-      const direct = !!sf?.public && publicAddress;
-      const viaNat = !!sf?.natEgress;
-      workloads.set(w.key, { subnet: subnet?.key ?? null, publicAddress, direct, viaNat, internetEgress: direct || viaNat, s3Endpoint: sf?.s3Endpoint ?? null });
+      const direct = sfs.length > 0 && sfs.every((f) => f.public) && publicAddress;
+      const viaNat = sfs.length > 0 && sfs.every((f) => !!f.natEgress);
+      const endpoints = sfs.map((f) => f.s3Endpoint);
+      workloads.set(w.key, {
+        subnet: spans[0]?.key ?? null,
+        subnets: spans.map((s) => s.key),
+        publicAddress,
+        direct,
+        viaNat,
+        internetEgress: direct || viaNat,
+        s3Endpoint: endpoints.length > 0 && endpoints.every((e) => e === endpoints[0]) ? endpoints[0] ?? null : null,
+      });
     }
   }
   return { subnets, workloads };

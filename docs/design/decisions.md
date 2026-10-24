@@ -18,6 +18,9 @@ Numbered `DD-nnn` to keep them apart from the specification's `D-nnn` ([../spec/
 | DD-011 | decided | Terraform local names |
 | DD-012 | decided | Scenario patch operations address nodes by key |
 | DD-013 | decided | Security group egress when the design says nothing |
+| DD-014 | decided | Workloads in several subnets, ECS parts and the DB subnet group |
+| DD-015 | decided | Required roles are derived; a drawn role carries its own policies |
+| DD-016 | decided | Network access becomes security group rules |
 
 ## DD-001 Language and runtime
 
@@ -141,3 +144,44 @@ property at all, the engine emits AWS's default allow-all egress rule explicitly
 ([security-group](../spec/services/security-group.md)) and a design that never mentioned egress should behave like AWS. An
 explicit empty list means no egress. The user sees and can edit the generated rule. The alternative, emitting nothing, would
 silently cut every new security group off from the network.
+
+## DD-014 Workloads in several subnets, ECS parts and the DB subnet group
+
+Status: decided (the implementer's choice while building M3; the owner can change it).
+
+A node has one `parent`, but an ECS service, a Lambda function and a database span several subnets. Options: (1) `parent` becomes a
+list; (2) `parent` is the first subnet and the others are extra `containment` edges from the subnet to the workload; (3) a separate
+"subnet group" node. Chosen: (2). It keeps the canvas nesting (a workload sits in one subnet box), reuses a mechanism the matrix
+already has (subnet to ecs and lambda are `containment`) and needs no new node type. A database is the same with
+`db-subnet-group` edges from the instance to its other subnets; the DB subnet group resource is created from them, as the
+specification says the platform does. `Graph.subnetsOf` is the one place that knows this.
+
+The spec gives ECS three resources. A node is a cluster or a service (`props.part`); the task definition is generated from the
+service, because a service and its task definition never exist apart in a Fargate design and one node keeps the canvas short.
+A cluster is regional and sits outside every subnet. The palette offers the two parts as two entries.
+
+## DD-015 Required roles are derived; a drawn role carries its own policies
+
+Status: decided (applies D-025).
+
+A Lambda function and an ECS service need a required role. When the design draws none into that slot the engine derives one
+(`origin: generated`, shown faded) with the managed policies the slot needs, and a role the user draws into the slot replaces it.
+A drawn role is the user's: it holds exactly the managed policies written on it, so a drawn execution role without
+`AmazonECSTaskExecutionRolePolicy` is an error (VAL-116), as is a drawn Lambda role without the VPC permissions (VAL-111).
+Consequences: VAL-044 and the "no role" half of VAL-110 hold by construction; a role no workload assumes is not emitted and is
+reported (VAL-106). The trust policy is generated from the consumers (one principal each, once); a role that only ECS tasks assume
+also gets the confused-deputy conditions (`aws:SourceAccount`, `aws:SourceArn`), so SEC-040 cannot fire on generated output.
+Grants become one inline policy per role, `grants`, with specific ARNs; a hand-written policy is `raw_policy`, a separate inline
+policy (D-026). The slot of an `assume-role` edge is its `slot` property, defaulting to the consumer's usual slot (ECS: `task`).
+
+## DD-016 Network access becomes security group rules
+
+Status: decided (applies D-012).
+
+A `network-access` edge from a caller to a callee yields an ingress rule on the callee's group that references the caller's group,
+on the callee's port (the database port, the container port) or the edge's `port`. The group on a side is the only one it has,
+else the one the edge names in `caller_sg` or `callee_sg`; an edge with no resolvable group or port yields nothing. A caller group
+that restricts egress also gets a rule toward the callee's group. Both sets live in the engine (`effectiveIngress`,
+`effectiveEgress`) so rules and the planner read the same rules. A port the edge overrides is checked against the callee's
+(VAL-068).
+

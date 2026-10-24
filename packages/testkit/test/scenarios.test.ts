@@ -24,7 +24,9 @@ describe("executable scenarios", () => {
           expect(v.patch, "executable variants need a patch").toBeDefined();
           const design = applyPatch(s.design, v.patch!);
           const base = firedRules(s.design);
-          expect(firedRules(design)).toEqual([...new Set([...base, ...v.fires])].sort());
+          expect(structuralProblems(design), "a variant stays structurally sound").toEqual([]);
+          const cleared = new Set(v.clears ?? []);
+          expect(firedRules(design)).toEqual([...new Set([...base.filter((r) => !cleared.has(r)), ...v.fires])].sort());
         });
       }
     });

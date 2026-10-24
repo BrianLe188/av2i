@@ -13,6 +13,7 @@ import type { Selection } from "./logic/flow.ts";
 import * as H from "./logic/history.ts";
 import { withPositions } from "./logic/layout.ts";
 import { canPlace, findParent } from "./logic/placement.ts";
+import { paletteItem } from "./registry.ts";
 import { blankDesign, fromTemplate, templates } from "./logic/templates.ts";
 import { reg } from "./registry.ts";
 
@@ -58,15 +59,17 @@ export function App() {
   const replace = useCallback((d: Design) => { setHist(H.start(d)); setSelection(null); setFocus(new Set()); setLoadId((n) => n + 1); }, []);
   const select = useCallback((sel: Selection, f?: string[]) => { setSelection(sel); setFocus(new Set(f ?? [])); }, []);
 
-  const add = useCallback((service: string, parent: string | null | undefined, position?: { x: number; y: number }) => {
+  const add = useCallback((itemId: string, parent: string | null | undefined, position?: { x: number; y: number }) => {
+    const item = paletteItem(itemId);
+    if (!item) return;
     const current = hist.present;
-    const target = parent === undefined ? findParent(reg, current, service, selection?.kind === "node" ? selection.id : null) : parent;
+    const target = parent === undefined ? findParent(reg, current, item.service, selection?.kind === "node" ? selection.id : null, item.props) : parent;
     if (target === undefined) {
-      const v = canPlace(reg, null, service);
+      const v = canPlace(reg, null, item.service, item.props);
       setToast(`${s.dropRefused}: ${v.ok ? "" : v.reason[lang]}`);
       return;
     }
-    const r = addNode(reg, current, service, target, position);
+    const r = addNode(reg, current, item.service, target, position, item.props);
     setHist((h) => H.push(h, withPositions(r.design)));
     setSelection({ kind: "node", id: r.key });
     setFocus(new Set());

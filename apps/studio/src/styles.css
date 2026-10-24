@@ -1,7 +1,7 @@
 :root {
   --bg: #f6f7f9; --panel: #ffffff; --line: #d9dde3; --text: #1b2430; --muted: #66707e; --accent: #2457d6; --accent-text: #fff;
   --error: #c62828; --warning: #b26a00; --info: #1565c0; --ok: #2e7d32; --code-bg: #f1f3f6;
-  --c-vpc: #5b6ee1; --c-subnet: #2e9d8f; --c-igw: #e07b39; --c-nat: #c9507d; --c-eip: #8a63d2; --c-rt: #6b8e23; --c-ep: #d4a017; --c-sg: #c0392b; --c-ec2: #e67e22;
+  --c-vpc: #5b6ee1; --c-subnet: #2e9d8f; --c-igw: #e07b39; --c-nat: #c9507d; --c-eip: #8a63d2; --c-rt: #6b8e23; --c-ep: #d4a017; --c-sg: #c0392b; --c-ec2: #e67e22; --c-ecs: #d9622b; --c-ecr: #7a5cc9; --c-s3: #3a9d3f; --c-rds: #2f6fb5; --c-lambda: #f08a24; --c-iam: #b0377a;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 14px; color: var(--text); background: var(--bg);
 }
 @media (prefers-color-scheme: dark) {
@@ -53,6 +53,12 @@ h3 { font-size: 14px; margin: 14px 0 6px; }
 [data-svc="vpc-endpoint-s3"] .swatch, .rnode[data-svc="vpc-endpoint-s3"] { --c: var(--c-ep); }
 [data-svc="security-group"] .swatch, .rnode[data-svc="security-group"] { --c: var(--c-sg); }
 [data-svc="ec2"] .swatch, .rnode[data-svc="ec2"] { --c: var(--c-ec2); }
+[data-svc="ecs"] .swatch, .rnode[data-svc="ecs"] { --c: var(--c-ecs); }
+[data-svc="ecr"] .swatch, .rnode[data-svc="ecr"] { --c: var(--c-ecr); }
+[data-svc="s3"] .swatch, .rnode[data-svc="s3"] { --c: var(--c-s3); }
+[data-svc="rds"] .swatch, .rnode[data-svc="rds"] { --c: var(--c-rds); }
+[data-svc="lambda"] .swatch, .rnode[data-svc="lambda"] { --c: var(--c-lambda); }
+[data-svc="iam-role"] .swatch, .rnode[data-svc="iam-role"] { --c: var(--c-iam); }
 .swatch { background: var(--c, var(--muted)); }
 .palette-item[data-svc="vpc"] .swatch { background: var(--c-vpc); }
 .palette-item[data-svc="subnet"] .swatch { background: var(--c-subnet); }
@@ -63,6 +69,12 @@ h3 { font-size: 14px; margin: 14px 0 6px; }
 .palette-item[data-svc="vpc-endpoint-s3"] .swatch { background: var(--c-ep); }
 .palette-item[data-svc="security-group"] .swatch { background: var(--c-sg); }
 .palette-item[data-svc="ec2"] .swatch { background: var(--c-ec2); }
+.palette-item[data-svc="ecs"] .swatch { background: var(--c-ecs); }
+.palette-item[data-svc="ecr"] .swatch { background: var(--c-ecr); }
+.palette-item[data-svc="s3"] .swatch { background: var(--c-s3); }
+.palette-item[data-svc="rds"] .swatch { background: var(--c-rds); }
+.palette-item[data-svc="lambda"] .swatch { background: var(--c-lambda); }
+.palette-item[data-svc="iam-role"] .swatch { background: var(--c-iam); }
 
 .main { grid-area: main; position: relative; min-width: 0; min-height: 0; }
 .canvas, .canvas .react-flow { width: 100%; height: 100%; }

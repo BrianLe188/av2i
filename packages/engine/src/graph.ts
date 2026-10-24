@@ -1,4 +1,5 @@
 import type { NormalizedDesign, NormalizedEdge, NormalizedNode, Props, Value } from "@av2i/model";
+import { slotOfEdge, type SlotId } from "./roles.ts";
 
 export function getPath(root: unknown, path: string): Value | undefined {
   let cur: any = root;
@@ -99,6 +100,49 @@ export class Graph {
       .filter((e) => e.to === key || e.from === key)
       .map((e) => this.nodes.get(e.from === key ? e.to : e.from))
       .filter((n): n is NormalizedNode => !!n && n.service === "security-group");
+  }
+
+  /**
+   * Subnets a workload spans: its parent plus any subnet connected by a containment edge, and for a database the
+   * subnets of its DB subnet group. In design order, without repeats.
+   */
+  subnetsOf(key: string): NormalizedNode[] {
+    const out: NormalizedNode[] = [];
+    const add = (n: NormalizedNode | undefined) => { if (n && n.service === "subnet" && !out.includes(n)) out.push(n); };
+    add(this.subnetOf(key));
+    for (const e of this.design.edges) {
+      if (e.mechanism === "containment" && e.to === key) add(this.nodes.get(e.from));
+      if (e.mechanism === "db-subnet-group" && e.from === key) add(this.nodes.get(e.to));
+    }
+    return out;
+  }
+
+  /** Roles a consumer runs as, with the slot each fills (assume-role edges run from the role to the consumer). */
+  rolesOf(consumer: string): { role: NormalizedNode; slot: SlotId | undefined; edge: NormalizedEdge }[] {
+    const c = this.nodes.get(consumer);
+    if (!c) return [];
+    return this.edges("assume-role")
+      .filter((e) => e.to === consumer)
+      .flatMap((e) => {
+        const role = this.nodes.get(e.from);
+        return role ? [{ role, slot: slotOfEdge(c.service, e.props), edge: e }] : [];
+      });
+  }
+
+  /** Consumers that run as a role, with the slot each uses. */
+  consumersOf(role: string): { consumer: NormalizedNode; slot: SlotId | undefined; edge: NormalizedEdge }[] {
+    return this.edges("assume-role")
+      .filter((e) => e.from === role)
+      .flatMap((e) => {
+        const consumer = this.nodes.get(e.to);
+        return consumer ? [{ consumer, slot: slotOfEdge(consumer.service, e.props), edge: e }] : [];
+      });
+  }
+
+  /** The ECR repository connected to a consumer through image-source. */
+  imageOf(consumer: string): NormalizedNode | undefined {
+    const e = this.edges("image-source").find((x) => x.to === consumer);
+    return e ? this.nodes.get(e.from) : undefined;
   }
 
   /** Elastic IPs connected to a node. */

@@ -50,6 +50,16 @@ properties:
       - "for a service role the principal is the service, for example ec2.amazonaws.com, and the action sts:AssumeRole"
     src: [S1, S5, S6]
     status: verified
+  - key: managed_policies
+    type: list
+    constraints: ["ARNs of AWS managed or customer managed policies the user attaches; the managed policies a service requires are added by the platform (assume-role)", "at most 20 per role"]
+    src: [S3, S5]
+    status: verified
+  - key: raw_policy
+    type: json
+    constraints: ["an inline policy document written by hand (D-026); attached as a separate aws_iam_role_policy so it never collides with the generated grants"]
+    src: [S2]
+    status: verified
   - key: max_session_duration
     type: number
     default: 3600

@@ -74,3 +74,17 @@ function isFullAccess(policy: unknown): boolean {
 }
 
 export const SEC_043: RuleImpl = (ctx) => ctx.g.nodesOf("vpc-endpoint-s3").filter((ep) => isFullAccess(ep.props.policy)).map((ep) => hit(ep.key));
+
+/** An endpoint policy names `Principal: "*"` in every statement (limits go in the aws:PrincipalArn condition) and fits in 20,480 characters. */
+export const VAL_125: RuleImpl = (ctx) =>
+  ctx.g.nodesOf("vpc-endpoint-s3").filter((ep) => {
+    const policy = ep.props.policy;
+    if (policy === undefined || policy === null || policy === "") return false;
+    let doc: any = policy;
+    if (typeof policy === "string") {
+      try { doc = JSON.parse(policy); } catch { return true; }
+    }
+    const statements = Array.isArray(doc?.Statement) ? doc.Statement : doc?.Statement ? [doc.Statement] : [];
+    const star = (p: any) => p === "*" || p?.AWS === "*";
+    return JSON.stringify(doc).length > 20480 || statements.length === 0 || !statements.every((st: any) => star(st.Principal));
+  }).map((ep) => hit(ep.key));

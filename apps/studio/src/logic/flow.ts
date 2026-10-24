@@ -32,10 +32,16 @@ function visualDesign(design: Design, analysis: Analysis): { visual: Design; gen
   const edges = analysis.normalized?.edges ?? [];
   for (const n of analysis.normalized?.nodes ?? []) {
     if (n.origin === "user" || design.nodes.some((d) => d.key === n.key)) continue;
-    const link = edges.find((e) => e.mechanism === "eip-attach" && e.from === n.key);
-    const anchor = link ? design.nodes.find((d) => d.key === link.to) : undefined;
-    const base = anchor?.position ?? { x: 24, y: 44 };
+    const anchor = design.nodes.find((d) => d.key === n.because);
     generated.add(n.key);
+    if (n.service === "iam-role") {
+      // roles are not in a subnet: stack the derived ones in a column to the right of everything
+      const right = Math.max(0, ...design.nodes.filter((d) => !d.parent).map((d) => (absolute(design, d.key).x + sizeOf(design, d.key).w)));
+      const index = [...generated].filter((k) => nodes.find((x) => x.key === k)?.service === "iam-role").length;
+      nodes.push({ ...n, parent: null, position: { x: right + 60, y: 40 + index * (LEAF.h + 24) } });
+      continue;
+    }
+    const base = anchor?.position ?? { x: 24, y: 44 };
     nodes.push({ ...n, parent: anchor?.parent ?? n.parent ?? null, position: { x: base.x, y: base.y + LEAF.h + 24 } });
   }
   return { visual: { ...design, nodes }, generated };
@@ -43,7 +49,9 @@ function visualDesign(design: Design, analysis: Analysis): { visual: Design; gen
 
 const edgeLabel = (mech: string, props: Record<string, unknown> | undefined, s: { mech: Record<string, string> }) => {
   const dest = props?.destination_cidr_block;
-  return mech === "route" && typeof dest === "string" ? dest : (s.mech[mech] ?? mech);
+  if (mech === "route" && typeof dest === "string") return dest;
+  const detail = mech === "grant" ? props?.level : mech === "assume-role" ? props?.slot : mech === "network-access" ? props?.port : undefined;
+  return detail === undefined ? (s.mech[mech] ?? mech) : `${s.mech[mech] ?? mech} · ${String(detail)}`;
 };
 
 export function buildFlow(
@@ -108,7 +116,7 @@ export function buildFlow(
     });
   }
   for (const e of analysis.normalized?.edges ?? []) {
-    if (e.origin === "user" || seen.has(e.id) || !(DRAWN as readonly string[]).includes(e.mechanism) || !ids.has(e.from) || !ids.has(e.to)) continue;
+    if (e.origin !== "generated" || seen.has(e.id) || !(DRAWN as readonly string[]).includes(e.mechanism) || !ids.has(e.from) || !ids.has(e.to)) continue;
     edges.push({
       id: e.id, source: e.from, target: e.to, ...handles(e.from, e.to), label: s.mech[e.mechanism] ?? e.mechanism, type: "smoothstep", deletable: false,
       selected: selection?.kind === "edge" && selection.id === e.id,
@@ -122,5 +130,5 @@ export function buildFlow(
 function detailOf(n: DNode): string | undefined {
   const p = n.props;
   const pick = (k: string) => (typeof p[k] === "string" && p[k] !== "" ? String(p[k]) : undefined);
-  return pick("cidr_block") ?? pick("instance_type") ?? pick("name");
+  return pick("cidr_block") ?? pick("instance_type") ?? pick("name") ?? pick("bucket") ?? pick("function_name") ?? pick("engine");
 }

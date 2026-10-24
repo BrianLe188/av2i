@@ -168,6 +168,7 @@ const scenario: Schema = {
           id: kebab,
           change: { type: "string", minLength: 5 },
           fires: { type: "array", items: ruleId },
+          clears: { type: "array", items: ruleId },
           severity: { enum: ["error", "warning", "info"] },
           patch: { type: "array", items: { type: "object", required: ["op"], properties: { op: { enum: ["set", "unset", "add-node", "remove-node", "add-edge", "remove-edge"] } } } },
         },

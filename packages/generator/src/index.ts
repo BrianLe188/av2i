@@ -29,7 +29,7 @@ provider "aws" {
 export function generate(design: Design): Record<string, string> {
   const planned = plan(design);
   const files: Record<string, string> = { "versions.tf": versionsFile(design.settings.region) };
-  const order: FileName[] = ["network.tf", "security.tf", "compute.tf"];
+  const order: FileName[] = ["network.tf", "security.tf", "storage.tf", "iam.tf", "compute.tf", "database.tf", "variables.tf"];
   for (const f of order) {
     const blocks = planned.filter((p) => p.file === f).map((p) => p.block);
     if (blocks.length) files[f] = printBlocks(blocks);

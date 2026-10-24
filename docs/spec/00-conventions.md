@@ -172,5 +172,5 @@ variants:                                # each variant mutates the base design 
 An **executable** scenario (`executable: true`) carries a full `design` (the saved shape in [design/data-model.md](../design/data-model.md))
 instead of `nodes` and `connections`, and each variant has a `patch` list of operations on that design (`set`, `unset`, `add-node`,
 `remove-node`, `add-edge`, `remove-edge`; nodes and edges are addressed by key, see DD-012). `kind: drawn` is created by the user, `derived` is computed and reported, `generated` is produced by the platform from
-other connections. A variant lists every rule that must fire; a test also checks that no other `error` appears.
+other connections. A variant lists every rule that must fire; a test also checks that no other `error` appears. A variant that removes a finding of the base design (a Lambda function that leaves the VPC no longer holds the interface permissions) lists it under `clears`; the test then expects the base findings minus `clears`, plus `fires`.
 Every rule ID must exist in [rules/validation.md](rules/validation.md) or [rules/security.md](rules/security.md).

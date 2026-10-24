@@ -13,22 +13,24 @@ interface FieldsProps {
   s: Strings;
   /** one entry per security group of the design, for rules that name a group as peer */
   groups: { key: string; label: string }[];
+  /** the nodes a `node` field can point at */
+  refs?: { key: string; label: string; service: string; part?: string }[];
   onSet: (path: string, value: Value | undefined) => void;
 }
 
 const BOOL_ENUM = ["", "true", "false"];
 
-export function Fields({ fields, props, prefix = "", s, groups, onSet }: FieldsProps) {
+export function Fields({ fields, props, prefix = "", s, groups, refs = [], onSet }: FieldsProps) {
   return (
     <>
       {fields.map((f) => (
-        <FieldRow key={f.key} field={f} path={prefix + f.key} props={props} s={s} groups={groups} onSet={onSet} />
+        <FieldRow key={f.key} field={f} path={prefix + f.key} props={props} s={s} groups={groups} refs={refs} onSet={onSet} />
       ))}
     </>
   );
 }
 
-function FieldRow({ field, path, props, s, groups, onSet }: { field: Field; path: string; props: Props; s: Strings; groups: FieldsProps["groups"]; onSet: FieldsProps["onSet"] }) {
+function FieldRow({ field, path, props, s, groups, refs, onSet }: { field: Field; path: string; props: Props; s: Strings; groups: FieldsProps["groups"]; refs: NonNullable<FieldsProps["refs"]>; onSet: FieldsProps["onSet"] }) {
   const value = getIn(props, path);
   const [error, setError] = useState<string | null>(null);
   const label = (
@@ -51,9 +53,21 @@ function FieldRow({ field, path, props, s, groups, onSet }: { field: Field; path
       return (
         <fieldset className="fobject">
           <legend>{field.key}</legend>
-          <Fields fields={field.children ?? []} props={props} prefix={`${path}.`} s={s} groups={groups} onSet={onSet} />
+          <Fields fields={field.children ?? []} props={props} prefix={`${path}.`} s={s} groups={groups} refs={refs} onSet={onSet} />
         </fieldset>
       );
+    case "node": {
+      const options = refs.filter((r) => r.service === field.of?.service && (field.of?.part === undefined || r.part === field.of.part));
+      return (
+        <label className="frow">
+          {label}
+          <select value={typeof value === "string" ? value : ""} data-testid={`field-${path}`} onChange={(e) => onSet(path, e.target.value === "" ? undefined : e.target.value)} title={hint}>
+            <option value="">—</option>
+            {options.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+          </select>
+        </label>
+      );
+    }
     case "rules":
       return (
         <div className="frow">

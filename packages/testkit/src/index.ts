@@ -7,6 +7,8 @@ export interface ScenarioVariant {
   change: string;
   patch?: PatchOp[];
   fires: string[];
+  /** findings of the base design the change removes */
+  clears?: string[];
   severity: string;
 }
 
