@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { strings, type Lang, type Strings } from "../../i18n.ts";
 import type { Prefs } from "../../prefs.ts";
 import { useAuth } from "../../auth.tsx";
@@ -18,7 +18,7 @@ function Shell({ prefs, s, title, description, children }: { prefs: Prefs; s: St
     <div className="flex h-full flex-col items-center justify-center gap-4 bg-background p-4">
       <div className="absolute right-3 top-3 flex items-center gap-2">
         <Select value={prefs.lang} onValueChange={(v) => prefs.setLang(v as Lang)}>
-          <SelectTrigger size="sm" aria-label={s.language} className="w-32">{prefs.lang === "vi" ? "Tiếng Việt" : "English"}</SelectTrigger>
+          <SelectTrigger size="sm" aria-label={s.language} className="w-32"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="vi">Tiếng Việt</SelectItem>
             <SelectItem value="en">English</SelectItem>

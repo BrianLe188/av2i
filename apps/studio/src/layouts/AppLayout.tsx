@@ -2,7 +2,7 @@ import { Link, NavLink, Outlet, useNavigate } from "react-router";
 import { ChevronsUpDown, KeyRound, LayoutDashboard, LogOut, Moon, PencilRuler, ScrollText, ShieldCheck, Sun, Users, UsersRound, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useAuth, useUser } from "../auth.tsx";
 import type { Lang } from "../i18n.ts";
@@ -65,7 +65,7 @@ export function AppLayout() {
         <div className="flex flex-col gap-2 border-t p-2">
           <div className="hidden items-center gap-2 md:flex">
             <Select value={prefs.lang} onValueChange={(v) => prefs.setLang(v as Lang)}>
-              <SelectTrigger size="sm" aria-label={s.language} className="flex-1">{prefs.lang === "vi" ? "Tiếng Việt" : "English"}</SelectTrigger>
+              <SelectTrigger size="sm" aria-label={s.language} className="flex-1"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="vi">Tiếng Việt</SelectItem>
                 <SelectItem value="en">English</SelectItem>

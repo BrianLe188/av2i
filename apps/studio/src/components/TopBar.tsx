@@ -5,7 +5,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent,
   DropdownMenuSubTrigger, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Template } from "../logic/templates.ts";
 import type { Lang, Strings } from "../i18n.ts";
@@ -86,7 +86,7 @@ export function TopBar(p: Props) {
       <input ref={input} type="file" accept="application/json,.json" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) p.onOpenFile(f); e.target.value = ""; }} />
       <Button variant="outline" size="sm" onClick={p.onSave}><Save />{s.save}</Button>
       <Select value={p.lang} onValueChange={(v) => p.onLang(v as Lang)}>
-        <SelectTrigger size="sm" aria-label={s.language} className="w-32">{p.lang === "vi" ? "Tiếng Việt" : "English"}</SelectTrigger>
+        <SelectTrigger size="sm" aria-label={s.language} className="w-32"><SelectValue /></SelectTrigger>
         <SelectContent>
           <SelectItem value="vi">Tiếng Việt</SelectItem>
           <SelectItem value="en">English</SelectItem>
