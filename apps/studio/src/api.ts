@@ -11,6 +11,8 @@ export class ApiError extends Error {
   }
 }
 
+export const SESSION_ENDED = "av2i:session-ended";
+
 /** The server could not be reached at all (not an answer with an error status). */
 export class Unreachable extends Error {}
 
@@ -28,6 +30,8 @@ export async function api<T = unknown>(method: "GET" | "POST" | "PUT" | "PATCH" 
   }
   const type = res.headers.get("content-type") ?? "";
   const data = type.includes("json") ? await res.json().catch(() => null) : null;
+  // a session that ended under a page that is open: tell the app so it can show the sign in again
+  if (res.status === 401 && !path.startsWith("/api/auth/")) window.dispatchEvent(new Event(SESSION_ENDED));
   if (!res.ok) {
     const e = (data as { error?: { code?: string; message?: string } & Record<string, unknown> } | null)?.error;
     // a page from a proxy or a dev server in front of a missing API is not an answer of ours

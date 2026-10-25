@@ -19,11 +19,14 @@ For development you need a PostgreSQL and Node 24 or later (it runs the `.ts` fi
 
 ```bash
 docker run -d --name av2i-pg -e POSTGRES_USER=av2i -e POSTGRES_PASSWORD=av2i -e POSTGRES_DB=av2i -p 127.0.0.1:55432:5432 postgres:18
-DATABASE_URL=postgres://av2i:av2i@127.0.0.1:55432/av2i pnpm api     # the API on :3000
-pnpm studio                                                          # the studio on :5173, proxying /api to :3000
+cp .env.example .env     # DATABASE_URL already points at the container above
+pnpm run api             # the API on :3000; it reads .env at the repository root
+pnpm studio              # the studio on :5173, proxying /api to :3000
 ```
 
 ## Settings (environment)
+
+The API reads `.env` at the repository root if it exists (`.env` is not committed). A variable set in the shell wins over the file.
 
 | Variable | Default | Meaning |
 |---|---|---|

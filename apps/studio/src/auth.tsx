@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Action } from "@av2i/authz";
-import { api, ApiError, Unreachable } from "./api.ts";
+import { api, ApiError, SESSION_ENDED, Unreachable } from "./api.ts";
 
 export interface User {
   id: string;
@@ -47,6 +47,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [apply]);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const ended = () => setState((cur) => (cur.status === "ready" ? { status: "anonymous" } : cur));
+    window.addEventListener(SESSION_ENDED, ended);
+    return () => window.removeEventListener(SESSION_ENDED, ended);
+  }, []);
 
   const value = useMemo<Auth>(() => ({
     state,

@@ -81,6 +81,38 @@ export interface AuditLogTable {
   details: ColumnType<Record<string, unknown>, string | undefined, string>;
 }
 
+export interface ProjectsTable {
+  id: Generated<string>;
+  name: string;
+  owner_id: string;
+  design: ColumnType<unknown, string, string>;
+  rev: Generated<number>;
+  created_at: Ts;
+  updated_at: Ts;
+  updated_by: string | null;
+  deleted_at: TsNull;
+}
+
+export interface ProjectVersionsTable {
+  project_id: string;
+  version: number;
+  design: ColumnType<unknown, string, string>;
+  note: Generated<string>;
+  auto: Generated<boolean>;
+  created_by: string | null;
+  created_at: Ts;
+}
+
+export interface ProjectSharesTable {
+  id: Generated<string>;
+  project_id: string;
+  user_id: string | null;
+  group_id: string | null;
+  role: "viewer" | "editor";
+  granted_by: string | null;
+  created_at: Ts;
+}
+
 export interface Database {
   users: UsersTable;
   sessions: SessionsTable;
@@ -90,4 +122,7 @@ export interface Database {
   policies: PoliciesTable;
   policy_attachments: PolicyAttachmentsTable;
   audit_log: AuditLogTable;
+  projects: ProjectsTable;
+  project_versions: ProjectVersionsTable;
+  project_shares: ProjectSharesTable;
 }

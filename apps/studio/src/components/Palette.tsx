@@ -7,9 +7,9 @@ import type { Lang, Strings } from "../i18n.ts";
 
 export const DRAG_TYPE = "application/x-av2i-service";
 
-export function Palette({ lang, s, onAdd }: { lang: Lang; s: Strings; onAdd: (service: string) => void }) {
+export function Palette({ lang, s, onAdd, disabled }: { lang: Lang; s: Strings; onAdd: (service: string) => void; disabled?: boolean }) {
   return (
-    <aside className="flex min-h-0 flex-col border-r bg-card" style={{ gridArea: "pal" }} aria-label={s.palette}>
+    <aside className={`flex min-h-0 flex-col border-r bg-card ${disabled ? "pointer-events-none opacity-60" : ""}`} aria-disabled={disabled} style={{ gridArea: "pal" }} aria-label={s.palette}>
       <div className="p-3 pb-2">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{s.palette}</h2>
         <p className="mt-1 text-xs text-muted-foreground">{s.paletteHint}</p>
@@ -26,7 +26,7 @@ export function Palette({ lang, s, onAdd }: { lang: Lang; s: Strings; onAdd: (se
                 className="flex w-full cursor-grab items-center gap-2 rounded-md border bg-background px-2.5 py-1.5 text-left text-[13px] transition-colors hover:border-ring hover:bg-accent active:cursor-grabbing"
                 data-svc={service}
                 data-testid={`palette-${id}`}
-                draggable
+                draggable={!disabled}
                 onDragStart={(e) => { e.dataTransfer.setData(DRAG_TYPE, id); e.dataTransfer.effectAllowed = "copy"; }}
                 onClick={() => onAdd(id)}
               >

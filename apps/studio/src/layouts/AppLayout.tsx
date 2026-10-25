@@ -34,7 +34,7 @@ export function AppLayout() {
 
   const items: Item[] = [
     { to: "/dashboard", label: s.nav.dashboard, icon: LayoutDashboard, show: true },
-    { to: "/designer", label: s.nav.designer, icon: PencilRuler, show: true },
+    { to: "/projects", label: s.nav.designer, icon: PencilRuler, show: true },
     { to: "/users", label: s.nav.users, icon: Users, show: can("user:List") },
     { to: "/audit", label: s.nav.audit, icon: ScrollText, show: can("audit:Read") },
   ];

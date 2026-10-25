@@ -90,3 +90,24 @@ export async function testApp(over: Partial<Config> = {}): Promise<TestApp> {
   };
   return { db, config, call, login, admin, close };
 }
+
+/** A signed-in user with the policies given (admin does the creating); returns what the tests need to act as them. */
+export async function addMember(t: TestApp, admin: string, username: string, policies: string[] = []): Promise<{ id: string; cookie: string; password: string }> {
+  const made = await t.call("POST", "/api/users", { cookie: admin, body: { username } });
+  if (made.status !== 201) throw new Error(`could not create ${username}: ${JSON.stringify(made.body)}`);
+  const id = made.body.user.id as string;
+  if (policies.length) {
+    const r = await t.call("PUT", `/api/users/${id}/policies`, { cookie: admin, body: { policies } });
+    if (r.status !== 200) throw new Error(`could not set policies: ${JSON.stringify(r.body)}`);
+  }
+  const first = await t.login(username, made.body.temporaryPassword);
+  const password = `${username}-Fresh-Password-1`;
+  const changed = await t.call("POST", "/api/auth/change-password", { cookie: first.cookie, body: { currentPassword: made.body.temporaryPassword, newPassword: password } });
+  if (changed.status !== 200 || !changed.cookie) throw new Error(`could not prepare ${username}`);
+  return { id, cookie: changed.cookie, password };
+}
+
+export const blankDesign = (name = "untitled", nodes: { key: string }[] = []) => ({
+  schema: 1, name, settings: { region: "ap-southeast-1" },
+  nodes: nodes.map((n) => ({ key: n.key, label: n.key, service: "vpc", props: {} })), edges: [],
+});

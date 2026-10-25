@@ -22,8 +22,8 @@ import { Eye, EyeOff } from "lucide-react";
 const nodeTypes = { resource: ResourceNode };
 const edgeTypes = { link: LinkEdge };
 
-function Legend({ s, hidden, toggle, relatedOnly, setRelatedOnly, untangle }: {
-  s: Strings; hidden: ReadonlySet<EdgeGroup>; toggle: (g: EdgeGroup) => void; relatedOnly: boolean; setRelatedOnly: (v: boolean) => void; untangle: () => void;
+function Legend({ s, hidden, toggle, relatedOnly, setRelatedOnly, untangle, readOnly }: {
+  readOnly: boolean; s: Strings; hidden: ReadonlySet<EdgeGroup>; toggle: (g: EdgeGroup) => void; relatedOnly: boolean; setRelatedOnly: (v: boolean) => void; untangle: () => void;
 }) {
   const dash = (g: EdgeGroup) => (g === "access" ? "5 3" : g === "wiring" ? "2 2" : undefined);
   return (
@@ -49,7 +49,7 @@ function Legend({ s, hidden, toggle, relatedOnly, setRelatedOnly, untangle }: {
         <button type="button" aria-pressed={relatedOnly} onClick={() => setRelatedOnly(!relatedOnly)} className={cn("w-full rounded border px-1.5 py-1 text-left hover:bg-accent", relatedOnly && "border-ring bg-accent")} data-testid="related-only">
           {s.relatedOnly}
         </button>
-        <button type="button" onClick={untangle} className="w-full rounded border px-1.5 py-1 text-left hover:bg-accent" data-testid="tidy">
+        <button type="button" onClick={untangle} disabled={readOnly} className="w-full rounded border px-1.5 py-1 text-left hover:bg-accent disabled:pointer-events-none disabled:opacity-50" data-testid="tidy">
           {s.tidy}
         </button>
       </div>
@@ -70,9 +70,10 @@ interface Props {
   onEdit: (f: (d: Design) => Design) => void;
   onAdd: (service: string, parent: string | null, position?: { x: number; y: number }) => void;
   onToast: (message: string) => void;
+  readOnly?: boolean;
 }
 
-function Flow({ design, analysis, selection, focus, lang, s, loadId, dark, onSelect, onEdit, onAdd, onToast }: Props) {
+function Flow({ design, analysis, selection, focus, lang, s, loadId, dark, onSelect, onEdit, onAdd, onToast, readOnly = false }: Props) {
   const [hidden, setHidden] = useState<ReadonlySet<EdgeGroup>>(new Set(DEFAULT_HIDDEN));
   const [relatedOnly, setRelatedOnly] = useState(false);
   const toggle = useCallback((g: EdgeGroup) => setHidden((h) => { const n = new Set(h); if (!n.delete(g)) n.add(g); return n; }), []);
@@ -141,14 +142,14 @@ function Flow({ design, analysis, selection, focus, lang, s, loadId, dark, onSel
       ...n,
       data: {
         ...n.data,
-        ...(n.data.container ? { resize } : {}),
-        ...(n.data.generated ? {} : { actions }),
+        ...(n.data.container && !readOnly ? { resize } : {}),
+        ...(n.data.generated || readOnly ? {} : { actions }),
         ...(connectFrom && connectFrom !== n.id ? { connect: connect(reg, design, connectFrom, n.id).ok ? "valid" as const : "invalid" as const } : {}),
       },
       measured: prev.find((p) => p.id === n.id)?.measured,
     })));
     setEdges(flow.edges);
-  }, [flow, resize, actions, connectFrom, design, resync, setNodes, setEdges]);
+  }, [flow, resize, actions, connectFrom, design, resync, readOnly, setNodes, setEdges]);
 
   const refuse = useCallback((what: string, reason: { vi: string; en: string }) => {
     onToast(`${what}: ${reason[lang]}`);
@@ -159,6 +160,7 @@ function Flow({ design, analysis, selection, focus, lang, s, loadId, dark, onSel
   const nearest = useCallback((parent: string | null, position: { x: number; y: number }) => nearestFree(design, parent, position, LEAF), [design]);
 
   const onDrop = useCallback((e: React.DragEvent) => {
+    if (readOnly) return;
     const item = paletteItem(e.dataTransfer.getData(DRAG_TYPE));
     if (!item) return;
     e.preventDefault();
@@ -169,7 +171,7 @@ function Flow({ design, analysis, selection, focus, lang, s, loadId, dark, onSel
     const origin = parent ? absolute(design, parent) : { x: 0, y: 0 };
     const position = { x: Math.max(8, Math.round(at.x - origin.x - LEAF.w / 2)), y: Math.max(40, Math.round(at.y - origin.y - LEAF.h / 2)) };
     onAdd(item.id, parent, nearest(parent, position));
-  }, [rf, design, refuse, s, onAdd, nearest]);
+  }, [rf, design, refuse, s, onAdd, nearest, readOnly]);
 
   const onDragStop = useCallback((_: unknown, node: RFNode<NodeData>) => {
     const dn = design.nodes.find((n) => n.key === node.id);
@@ -224,12 +226,14 @@ function Flow({ design, analysis, selection, focus, lang, s, loadId, dark, onSel
         fitView
         minZoom={0.2}
         maxZoom={1.6}
-        deleteKeyCode={["Backspace", "Delete"]}
+        deleteKeyCode={readOnly ? null : ["Backspace", "Delete"]}
+        nodesDraggable={!readOnly}
+        nodesConnectable={!readOnly}
         proOptions={{ hideAttribution: true }}
       >
         <Background variant={BackgroundVariant.Dots} gap={22} size={1.4} />
         <Panel position="top-right" className="!m-2">
-          <Legend s={s} hidden={hidden} toggle={toggle} relatedOnly={relatedOnly} setRelatedOnly={setRelatedOnly} untangle={untangle} />
+          <Legend readOnly={readOnly} s={s} hidden={hidden} toggle={toggle} relatedOnly={relatedOnly} setRelatedOnly={setRelatedOnly} untangle={untangle} />
         </Panel>
         <Controls showInteractive={false} />
         <MiniMap pannable zoomable style={{ width: 150, height: 96 }} nodeColor={(n) => { const d = n.data as NodeData; return d.container ? `${colorOf(d.service)}33` : colorOf(d.service); }} nodeStrokeWidth={0} maskColor="rgba(120,130,150,0.15)" />

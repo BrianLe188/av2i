@@ -16,3 +16,5 @@ export function loadDraft(userId: string): Design | null {
     return d.schema === 1 && Array.isArray(d.nodes) && Array.isArray(d.edges) ? d : null;
   } catch { return null; }
 }
+
+export const clearDraft = (userId: string): void => store.remove(draftKey(userId));

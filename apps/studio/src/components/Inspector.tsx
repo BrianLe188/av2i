@@ -28,17 +28,20 @@ interface Props {
   s: Strings;
   onEdit: (f: (d: Design) => Design) => void;
   onSelect: (sel: Selection) => void;
+  /** the person may look but not change: every control inside is disabled */
+  readOnly?: boolean;
 }
 
 type PanelProps = { id: string } & Omit<Props, "selection">;
 
-export function Inspector({ selection, ...rest }: Props) {
+export function Inspector({ selection, readOnly, ...rest }: Props) {
   const { s } = rest;
   return (
     <aside className="flex min-h-0 flex-col border-l bg-card" style={{ gridArea: "insp" }} aria-label={s.inspector}>
       <ScrollArea className="min-h-0 flex-1">
       <div className="p-3">
       <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{s.inspector}</h2>
+      <fieldset disabled={readOnly} className="m-0 min-w-0 border-0 p-0">
       {selection?.kind === "node" ? (
         <NodePanel key={selection.id} id={selection.id} {...rest} />
       ) : selection?.kind === "edge" ? (
@@ -46,6 +49,7 @@ export function Inspector({ selection, ...rest }: Props) {
       ) : (
         <DesignPanel design={rest.design} s={s} onEdit={rest.onEdit} />
       )}
+      </fieldset>
       </div>
       </ScrollArea>
     </aside>

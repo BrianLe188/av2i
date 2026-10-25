@@ -303,3 +303,14 @@ erDiagram
 reference keeps its foreign key. Names are `citext`. Staging: A1 (server, login, forced change, throttle, audit, user management,
 login screen), A2 (projects and versions), A3 (groups and policies in the interface), A4 (sharing, audit view, API tokens, SSO later).
 
+**Projects in practice (A2).** A project list shows what the person may read: their own, those shared with them, and every one a policy
+opens, though a project that only a policy opens also needs `project:List` (owning or being shared one is enough by itself). A project the
+person may not read answers `404`, not `403`, so it does not reveal that it exists; one they may read but not change answers `403`. The
+name of a project is the name inside its design (one source, undoable), kept in a column for the list. The server checks only the shape of
+a design (schema 1, at most 2000 nodes and 5000 connections, unique node keys, 8 MB), never its meaning: the engine judges that in the
+browser. The canvas saves a moment after the last change, one request at a time, each based on the revision the last one returned; a
+save based on an older revision answers `409` with who saved last, and the person chooses between loading theirs, overwriting, or keeping
+their design as a new project. A snapshot is taken when a project is created, when a person asks for one, before a restore, and on a
+save when the last snapshot is over ten minutes old. Saves are not audited (they would drown the log); creating, deleting, saving a version
+and restoring are. A browser draft from before projects existed is offered as a project once and then dropped.
+

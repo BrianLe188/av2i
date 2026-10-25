@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { ArrowLeft, Download, FolderOpen, KeyRound, Layers, LogOut, Moon, Redo2, Save, Sun, Undo2, UserRound } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, Download, History, Loader2, FolderOpen, KeyRound, Layers, LogOut, Moon, Redo2, Save, Sun, Undo2, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent,
@@ -10,6 +10,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { Template } from "../logic/templates.ts";
 import type { Lang, Strings } from "../i18n.ts";
 import type { User } from "../auth.tsx";
+import type { SyncStatus } from "../logic/sync.ts";
+import { Badge } from "@/components/ui/badge";
 
 interface Props {
   s: Strings;
@@ -31,6 +33,10 @@ interface Props {
   onTheme: () => void;
   user: User;
   onHome: () => void;
+  status: SyncStatus;
+  readOnly: boolean;
+  onStatusClick: () => void;
+  onHistory: () => void;
   onAccount: (what: "account" | "logout") => void;
 }
 
@@ -42,12 +48,14 @@ export function TopBar(p: Props) {
       <Button variant="ghost" size="sm" onClick={p.onHome} data-testid="back-home" title={s.nav.home}><ArrowLeft />{s.nav.dashboard}</Button>
       <span className="h-5 w-px bg-border" />
       <span className="max-w-56 truncate text-muted-foreground" title={p.name}>{p.name}</span>
+      {p.readOnly ? <Badge variant="secondary" data-testid="view-only">{s.proj.viewOnly}</Badge> : <SaveStatus status={p.status} s={s} onClick={p.onStatusClick} />}
       <div className="flex-1" />
-      <Button variant="outline" size="sm" onClick={p.onUndo} disabled={!p.canUndo} data-testid="undo"><Undo2 />{s.undo}</Button>
-      <Button variant="outline" size="sm" onClick={p.onRedo} disabled={!p.canRedo} data-testid="redo"><Redo2 />{s.redo}</Button>
+      <Button variant="outline" size="sm" onClick={p.onHistory} data-testid="history"><History />{s.proj.history}</Button>
+      <Button variant="outline" size="sm" onClick={p.onUndo} disabled={!p.canUndo || p.readOnly} data-testid="undo"><Undo2 />{s.undo}</Button>
+      <Button variant="outline" size="sm" onClick={p.onRedo} disabled={!p.canRedo || p.readOnly} data-testid="redo"><Redo2 />{s.redo}</Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" data-testid="templates"><Layers />{s.templates}</Button>
+          <Button variant="outline" size="sm" data-testid="templates" disabled={p.readOnly}><Layers />{s.templates}</Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-96 max-h-[70vh] overflow-y-auto">
           <DropdownMenuItem onSelect={p.onBlank}>{s.blank}</DropdownMenuItem>
@@ -71,7 +79,7 @@ export function TopBar(p: Props) {
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
-      <Button variant="outline" size="sm" onClick={() => input.current?.click()}><FolderOpen />{s.open}</Button>
+      <Button variant="outline" size="sm" onClick={() => input.current?.click()} disabled={p.readOnly}><FolderOpen />{s.open}</Button>
       <input ref={input} type="file" accept="application/json,.json" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) p.onOpenFile(f); e.target.value = ""; }} />
       <Button variant="outline" size="sm" onClick={p.onSave}><Save />{s.save}</Button>
       <Select value={p.lang} onValueChange={(v) => p.onLang(v as Lang)}>
@@ -104,5 +112,21 @@ export function TopBar(p: Props) {
       </DropdownMenu>
       <Button size="sm" onClick={p.onExport} disabled={!p.canExport} title={p.canExport ? undefined : s.cannotExport} data-testid="export"><Download />{s.exportTf}</Button>
     </header>
+  );
+}
+
+/** Where the saving stands, in a word: saved, saving, not saved, retrying, or in conflict (a click opens the choices). */
+function SaveStatus({ status, s, onClick }: { status: SyncStatus; s: Strings; onClick: () => void }) {
+  const look = {
+    saved: { icon: <Check className="size-3.5 text-success" />, text: s.proj.saved },
+    saving: { icon: <Loader2 className="size-3.5 animate-spin" />, text: s.proj.saving },
+    dirty: { icon: <span className="size-2 rounded-full bg-warning" />, text: s.proj.dirty },
+    error: { icon: <AlertTriangle className="size-3.5 text-warning" />, text: s.proj.error },
+    conflict: { icon: <AlertTriangle className="size-3.5 text-destructive" />, text: s.proj.conflictBadge },
+  }[status];
+  return (
+    <button type="button" onClick={onClick} disabled={status !== "conflict"} className="flex items-center gap-1.5 rounded px-1.5 py-1 text-xs text-muted-foreground enabled:hover:bg-accent" data-testid="save-status" data-status={status}>
+      {look.icon}{look.text}
+    </button>
   );
 }
