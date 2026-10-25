@@ -1,5 +1,5 @@
 import { Link, NavLink, Outlet, useNavigate } from "react-router";
-import { ChevronsUpDown, KeyRound, LayoutDashboard, LogOut, Moon, PencilRuler, ScrollText, Sun, Users, type LucideIcon } from "lucide-react";
+import { ChevronsUpDown, KeyRound, LayoutDashboard, LogOut, Moon, PencilRuler, ScrollText, ShieldCheck, Sun, Users, UsersRound, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
@@ -36,6 +36,8 @@ export function AppLayout() {
     { to: "/dashboard", label: s.nav.dashboard, icon: LayoutDashboard, show: true },
     { to: "/projects", label: s.nav.designer, icon: PencilRuler, show: true },
     { to: "/users", label: s.nav.users, icon: Users, show: can("user:List") },
+    { to: "/groups", label: s.adm.groups, icon: UsersRound, show: can("group:Manage") },
+    { to: "/policies", label: s.adm.policiesPage, icon: ShieldCheck, show: can("policy:Manage") },
     { to: "/audit", label: s.nav.audit, icon: ScrollText, show: can("audit:Read") },
   ];
 

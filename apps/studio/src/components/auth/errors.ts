@@ -5,7 +5,7 @@ import type { Strings } from "../../i18n.ts";
 export function describe(e: unknown, s: Strings): string {
   if (e instanceof Unreachable) return s.acct.unreachableTitle;
   if (e instanceof ApiError) {
-    const text = (s.acct.errors as Record<string, string>)[e.code];
+    const text = (s.acct.errors as Record<string, string>)[e.code] ?? (s.adm.errors as Record<string, string>)[e.code];
     if (!text) return s.acct.errors.other;
     const wait = typeof e.extra.retryAfter === "number" ? e.extra.retryAfter : 0;
     return text.replace("{s}", String(wait));

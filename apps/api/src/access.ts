@@ -1,6 +1,7 @@
 import { ADMINISTRATOR, parseDocument, type Statement } from "@av2i/authz";
-import { sql } from "kysely";
+import { sql, type Transaction } from "kysely";
 import type { Db } from "./db.ts";
+import type { Database } from "./schema.ts";
 import { conflict } from "./errors.ts";
 
 /** Every statement that applies to a user: the policies attached to them and to the groups they belong to. */
@@ -23,7 +24,7 @@ export async function statementsFor(db: Db, userId: string): Promise<Statement[]
 }
 
 /** Enabled users that hold `Administrator`, directly or through a group. */
-export async function administratorIds(db: Db): Promise<string[]> {
+export async function administratorIds(db: Db | Transaction<Database>): Promise<string[]> {
   const res = await sql<{ id: string }>`
     select u.id from users u
     where not u.disabled and exists (
@@ -37,4 +38,17 @@ export async function administratorIds(db: Db): Promise<string[]> {
 export async function requireAnotherAdministrator(db: Db, userId: string): Promise<void> {
   const ids = await administratorIds(db);
   if (!ids.some((id) => id !== userId)) throw conflict("last_administrator", "This is the last administrator; make someone else an administrator first.");
+}
+
+/**
+ * Runs a change in a transaction and undoes it if it would leave nobody who can administer: removing a member from the administrators'
+ * group, detaching `Administrator` from it, or deleting it. The check reads the result of the change, so every way of losing the last
+ * administrator is caught in one place, whatever it went through.
+ */
+export async function keepingAnAdministrator<T>(db: Db, change: (trx: Transaction<Database>) => Promise<T>): Promise<T> {
+  return db.transaction().execute(async (trx) => {
+    const out = await change(trx);
+    if ((await administratorIds(trx)).length === 0) throw conflict("last_administrator", "This would leave nobody who can administer; make someone else an administrator first.");
+    return out;
+  });
 }

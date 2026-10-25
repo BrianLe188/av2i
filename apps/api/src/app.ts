@@ -9,6 +9,8 @@ import { makeAuth, type Ctx } from "./context.ts";
 import type { Db } from "./db.ts";
 import { forbidden, HttpError, unauthorized } from "./errors.ts";
 import { authRoutes } from "./routes/auth.ts";
+import { groupRoutes } from "./routes/groups.ts";
+import { policyRoutes } from "./routes/policies.ts";
 import { projectRoutes } from "./routes/projects.ts";
 import { userRoutes } from "./routes/users.ts";
 
@@ -45,6 +47,8 @@ export function buildApp(deps: { db: Db; config: Config; logger?: FastifyServerO
   app.get("/api/health", { config: { public: true } }, async () => ({ ok: true }));
   authRoutes(app, ctx);
   userRoutes(app, ctx);
+  groupRoutes(app, ctx);
+  policyRoutes(app, ctx);
   projectRoutes(app, ctx);
 
   app.all("/api/*", { config: { public: true } }, async (_req, reply) => reply.code(404).send({ error: { code: "not_found", message: "Not found." } }));

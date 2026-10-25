@@ -14,10 +14,18 @@ const idParams = { type: "object", required: ["id"], properties: { id: { type: "
 export function userRoutes(app: FastifyInstance, ctx: Ctx): void {
   const { db } = ctx;
 
-  const view = (u: { id: string; username: string; display_name: string; disabled: boolean; must_change_password: boolean; last_login_at: Date | null; created_at: Date }, policies: string[]) => ({
+  const view = (u: { id: string; username: string; display_name: string; disabled: boolean; must_change_password: boolean; last_login_at: Date | null; created_at: Date }, policies: string[], groups: string[] = []) => ({
     id: u.id, username: u.username, displayName: u.display_name, disabled: u.disabled, mustChangePassword: u.must_change_password,
-    lastLoginAt: u.last_login_at, createdAt: u.created_at, policies,
+    lastLoginAt: u.last_login_at, createdAt: u.created_at, policies, groups,
   });
+  const groupsOf = async (userIds: string[]) => {
+    const rows = userIds.length
+      ? await db.selectFrom("group_members as m").innerJoin("groups as g", "g.id", "m.group_id").select(["m.user_id", "g.name"]).where("m.user_id", "in", userIds).orderBy("g.name").execute()
+      : [];
+    const out = new Map<string, string[]>();
+    for (const r of rows) out.set(r.user_id, [...(out.get(r.user_id) ?? []), r.name]);
+    return out;
+  };
   const policiesOf = async (userIds: string[]) => {
     const rows = userIds.length
       ? await db.selectFrom("policy_attachments as pa").innerJoin("policies as p", "p.id", "pa.policy_id").select(["pa.user_id", "p.name"]).where("pa.user_id", "in", userIds).orderBy("p.name").execute()
@@ -40,7 +48,8 @@ export function userRoutes(app: FastifyInstance, ctx: Ctx): void {
     await need(ctx, req, "user:List", resource.user("*"));
     const users = await db.selectFrom("users").selectAll().orderBy("username").execute();
     const pol = await policiesOf(users.map((u) => u.id));
-    return { users: users.map((u) => view(u, pol.get(u.id) ?? [])) };
+    const grp = await groupsOf(users.map((u) => u.id));
+    return { users: users.map((u) => view(u, pol.get(u.id) ?? [], grp.get(u.id) ?? [])) };
   });
 
   app.get("/api/users/:id", { schema: { params: idParams } }, async (req) => {
@@ -112,12 +121,6 @@ export function userRoutes(app: FastifyInstance, ctx: Ctx): void {
     await revokeUserSessions(db, id);
     await audit(db, { actor: actor(req), action: "user.password_reset", resource: resource.user(id), outcome: "success", ip: req.ip, details: { username: user.username } });
     return given === undefined ? { temporaryPassword: password } : { ok: true };
-  });
-
-  app.get("/api/policies", async (req) => {
-    await need(ctx, req, "policy:Manage", resource.policy("*"));
-    const rows = await db.selectFrom("policies").select(["name", "description", "builtin"]).orderBy("name").execute();
-    return { policies: rows };
   });
 
   app.put("/api/users/:id/policies", {

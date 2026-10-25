@@ -24,6 +24,7 @@ interface UserRow {
   mustChangePassword: boolean;
   lastLoginAt: string | null;
   policies: string[];
+  groups: string[];
 }
 interface PolicyRow { name: string; description: string; builtin: boolean }
 
@@ -186,10 +187,10 @@ export function UsersPage() {
         <Card className="py-0">
           <Table>
             <TableHeader>
-              <TableRow><TableHead>{s.acct.username}</TableHead><TableHead>{s.acct.status}</TableHead><TableHead>{s.acct.policies}</TableHead><TableHead>{s.acct.lastLogin}</TableHead><TableHead /></TableRow>
+              <TableRow><TableHead>{s.acct.username}</TableHead><TableHead>{s.acct.status}</TableHead><TableHead>{s.adm.groupsOf}</TableHead><TableHead>{s.acct.policies}</TableHead><TableHead>{s.acct.lastLogin}</TableHead><TableHead /></TableRow>
             </TableHeader>
             <TableBody>
-              {shown.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">{s.nav.noMatch}</TableCell></TableRow>}
+              {shown.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">{s.nav.noMatch}</TableCell></TableRow>}
               {shown.map((u) => (
                 <TableRow key={u.id} data-testid={`user-${u.username}`}>
                   <TableCell><div className="font-medium">{u.username}</div>{u.displayName && <div className="text-xs text-muted-foreground">{u.displayName}</div>}</TableCell>
@@ -197,6 +198,7 @@ export function UsersPage() {
                     <Badge variant={u.disabled ? "destructive" : "secondary"}>{u.disabled ? s.acct.disabled : s.acct.active}</Badge>
                     {u.mustChangePassword && <Badge variant="outline">{s.acct.mustChange}</Badge>}
                   </TableCell>
+                  <TableCell className="space-x-1">{u.groups.length ? u.groups.map((g) => <Badge key={g} variant="secondary">{g}</Badge>) : <span className="text-xs text-muted-foreground">—</span>}</TableCell>
                   <TableCell className="space-x-1">{u.policies.length ? u.policies.map((p) => <Badge key={p} variant="outline">{p}</Badge>) : <span className="text-xs text-muted-foreground">—</span>}</TableCell>
                   <TableCell className="whitespace-nowrap text-xs">{when(u.lastLoginAt, s.acct.never)}</TableCell>
                   <TableCell className="whitespace-nowrap text-right">

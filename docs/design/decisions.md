@@ -314,3 +314,12 @@ their design as a new project. A snapshot is taken when a project is created, wh
 save when the last snapshot is over ten minutes old. Saves are not audited (they would drown the log); creating, deleting, saving a version
 and restoring are. A browser draft from before projects existed is offered as a project once and then dropped.
 
+**Groups and policies in practice (A3).** A group is a name and a set of users; policies attach to a group exactly as to a user, and a
+member gets them at once. Group, policy and simulate calls need `group:Manage` or `policy:Manage` (attaching a policy to a user or a
+group also needs `policy:Manage` on that policy, so `UserManager` cannot hand out `Administrator`). A policy document is checked by the
+same `parseDocument` in the browser and on the server, which names every problem; documents are at most 64 KB; names cannot change;
+built-in policies cannot be changed or deleted; deleting one that is attached needs `force` and detaches it everywhere. The rule that the
+last administrator survives is applied by running every change that could affect it (members, a group's policies, deleting a group) in a
+transaction, counting the administrators afterwards and rolling back at zero. `POST /api/policies/simulate` answers what the policies of
+one user decide for one action and resource, and which statement decided; ownership and project shares are not part of it.
+
