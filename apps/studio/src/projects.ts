@@ -29,3 +29,10 @@ export const deleteProject = (id: string) => api("DELETE", `/api/projects/${id}`
 export const listVersions = (id: string) => api<{ versions: VersionRow[] }>("GET", `/api/projects/${id}/versions`).then((r) => r.versions);
 export const saveVersion = (id: string, note: string) => api<{ version: number }>("POST", `/api/projects/${id}/versions`, { note });
 export const restoreVersion = (id: string, n: number) => api<{ rev: number; design: Design }>("POST", `/api/projects/${id}/versions/${n}/restore`);
+
+export interface ShareRow { id: string; kind: "user" | "group"; name: string; role: "viewer" | "editor"; grantedBy: string | null; createdAt: string }
+
+export const listShares = (id: string) => api<{ owner: string | null; shares: ShareRow[] }>("GET", `/api/projects/${id}/shares`);
+export const shareTargets = (id: string) => api<{ users: string[]; groups: string[] }>("GET", `/api/projects/${id}/share-targets`);
+export const putShare = (id: string, who: { user: string } | { group: string }, role: "viewer" | "editor") => api("PUT", `/api/projects/${id}/shares`, { ...who, role });
+export const removeShare = (id: string, shareId: string) => api("DELETE", `/api/projects/${id}/shares/${shareId}`);

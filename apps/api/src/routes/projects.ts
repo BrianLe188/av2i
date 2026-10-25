@@ -225,6 +225,73 @@ export function projectRoutes(app: FastifyInstance, ctx: Ctx): void {
     await audit(db, { actor: me, action: "project.restored", resource: resource.project(id), outcome: "success", ip: req.ip, details: { version: n } });
     return result;
   });
+
+  const shareParams = { type: "object", required: ["id", "shareId"], properties: { id: { type: "string", format: "uuid" }, shareId: { type: "string", format: "uuid" } } } as const;
+
+  app.get("/api/projects/:id/shares", { schema: { params: idParams } }, async (req) => {
+    const { id } = req.params as { id: string };
+    const row = await load(id);
+    await authorize(req, row, "project:Share");
+    const rows = await db.selectFrom("project_shares as s")
+      .leftJoin("users as u", "u.id", "s.user_id").leftJoin("groups as g", "g.id", "s.group_id").leftJoin("users as by", "by.id", "s.granted_by")
+      .select(["s.id", "s.role", "s.created_at", "u.username as user", "g.name as group", "by.username as by"])
+      .where("s.project_id", "=", id).orderBy("s.created_at").execute();
+    return {
+      owner: await nameOf(row.owner_id),
+      shares: rows.map((s) => ({ id: s.id, kind: s.user ? "user" : "group", name: s.user ?? s.group, role: s.role, grantedBy: s.by, createdAt: s.created_at })),
+    };
+  });
+
+  /** Who can be picked in the share dialog; small installs, so the whole list. */
+  app.get("/api/projects/:id/share-targets", { schema: { params: idParams } }, async (req) => {
+    const { id } = req.params as { id: string };
+    await authorize(req, await load(id), "project:Share");
+    const users = await db.selectFrom("users").select("username").where("disabled", "=", false).orderBy("username").execute();
+    const groups = await db.selectFrom("groups").select("name").orderBy("name").execute();
+    return { users: users.map((u) => u.username), groups: groups.map((g) => g.name) };
+  });
+
+  app.put("/api/projects/:id/shares", {
+    schema: {
+      params: idParams,
+      body: { type: "object", required: ["role"], additionalProperties: false, properties: {
+        user: { type: "string", maxLength: 64 }, group: { type: "string", maxLength: 64 }, role: { type: "string", enum: ["viewer", "editor"] },
+      } },
+    },
+  }, async (req) => {
+    const { id } = req.params as { id: string };
+    const body = req.body as { user?: string; group?: string; role: ShareRole };
+    const row = await load(id);
+    await authorize(req, row, "project:Share");
+    if (Boolean(body.user) === Boolean(body.group)) throw badRequest("invalid_share", "Name either a user or a group.");
+    const me = actor(req);
+    let target: { column: "user_id" | "group_id"; id: string; name: string };
+    if (body.user) {
+      const u = await db.selectFrom("users").select(["id", "username"]).where("username", "=", body.user).where("disabled", "=", false).executeTakeFirst();
+      if (!u) throw badRequest("no_such_user", "No such user.");
+      if (u.id === row.owner_id) throw badRequest("owner_share", "The owner already has full access.");
+      target = { column: "user_id", id: u.id, name: u.username };
+    } else {
+      const g = await db.selectFrom("groups").select(["id", "name"]).where("name", "=", body.group!).executeTakeFirst();
+      if (!g) throw badRequest("no_such_group", "No such group.");
+      target = { column: "group_id", id: g.id, name: g.name };
+    }
+    const existing = await db.selectFrom("project_shares").select("id").where("project_id", "=", id).where(target.column, "=", target.id).executeTakeFirst();
+    const share = existing
+      ? await db.updateTable("project_shares").set({ role: body.role, granted_by: me.userId }).where("id", "=", existing.id).returning("id").executeTakeFirstOrThrow()
+      : await db.insertInto("project_shares").values({ project_id: id, [target.column]: target.id, role: body.role, granted_by: me.userId }).returning("id").executeTakeFirstOrThrow();
+    await audit(db, { actor: me, action: "project.shared", resource: resource.project(id), outcome: "success", ip: req.ip, details: { with: target.name, kind: body.user ? "user" : "group", role: body.role } });
+    return { id: share.id };
+  });
+
+  app.delete("/api/projects/:id/shares/:shareId", { schema: { params: shareParams } }, async (req) => {
+    const { id, shareId } = req.params as { id: string; shareId: string };
+    await authorize(req, await load(id), "project:Share");
+    const gone = await db.deleteFrom("project_shares").where("id", "=", shareId).where("project_id", "=", id).returning(["user_id", "group_id", "role"]).executeTakeFirst();
+    if (!gone) throw notFound("No such share.");
+    await audit(db, { actor: actor(req), action: "project.unshared", resource: resource.project(id), outcome: "success", ip: req.ip, details: { role: gone.role, kind: gone.user_id ? "user" : "group" } });
+    return { ok: true };
+  });
 }
 
 /** Adds a snapshot as the next version number; the caller holds the project row locked so two cannot pick the same number. */

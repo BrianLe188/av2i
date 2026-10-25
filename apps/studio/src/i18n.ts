@@ -62,6 +62,7 @@ const dict = {
       conflictBadge: "Xung đột", leaveUnsaved: "Còn thay đổi chưa lưu được. Rời đi và bỏ chúng?", restored: "Đã khôi phục.", versionSaved: "Đã lưu phiên bản.", auto: "tự động", noVersions: "Chưa có phiên bản nào.",
       conflictTitle: "Dự án đã được lưu bởi người khác", conflictText: "{who} đã lưu dự án này lúc {when}, sau khi bạn mở. Chọn cách xử lý thay đổi của bạn.", conflictReload: "Tải bản mới (bỏ thay đổi của tôi)",
       conflictOverwrite: "Ghi đè bằng bản của tôi", conflictCopy: "Lưu bản của tôi thành dự án mới", someone: "Người khác",
+      share: "Chia sẻ", shareTitle: "Chia sẻ dự án", shareText: "Người hoặc nhóm được chọn sẽ thấy dự án này. Người xem chỉ đọc; người sửa lưu được thay đổi.", shareOwner: "Chủ sở hữu", shareUser: "Người dùng", shareGroup: "Nhóm", sharePick: "Chọn người hoặc nhóm", shareRole: "Quyền", shareViewer: "Chỉ xem", shareEditor: "Được sửa", shareAdd: "Thêm", shareRemove: "Gỡ", shareNone: "Chưa chia sẻ với ai.", shareAdded: "Đã chia sẻ.", shareRemoved: "Đã gỡ chia sẻ.", shareBy: "bởi",
       notFound: "Không tìm thấy dự án", notFoundText: "Dự án không tồn tại, đã bị xoá hoặc bạn không có quyền xem.", loading: "Đang tải dự án…", back: "Về danh sách dự án",
     },
     adm: {
@@ -78,7 +79,7 @@ const dict = {
       simulator: "Kiểm tra quyền", simulatorText: "Xem các chính sách của một người quyết định thế nào cho một hành động. Chỉ tính chính sách; quyền chủ sở hữu và chia sẻ dự án không tính ở đây.",
       user: "Người dùng", check: "Kiểm tra", allowed: "Được phép", denied: "Bị từ chối", reasonAllow: "Một câu lệnh Allow khớp.", reasonExplicit: "Một câu lệnh Deny khớp, và Deny luôn thắng.",
       reasonImplicit: "Không câu lệnh nào khớp, nên mặc định từ chối.", byStatement: "Theo câu lệnh", pickUser: "Chọn người dùng",
-      errors: { invalid_group_name: "Tên nhóm gồm 2 đến 64 chữ cái, số, dấu chấm, gạch ngang hoặc gạch dưới, bắt đầu bằng chữ hoặc số.", group_taken: "Tên nhóm đã có.", invalid_policy_name: "Tên chính sách gồm 2 đến 64 chữ cái, số, dấu chấm, gạch ngang hoặc gạch dưới, bắt đầu bằng chữ hoặc số.", policy_taken: "Tên chính sách đã có.", builtin_policy: "Chính sách dựng sẵn không sửa hoặc xoá được.", invalid_policy: "Tài liệu chính sách có lỗi.", policy_too_large: "Tài liệu chính sách tối đa 64 KB.", unknown_user: "Có người dùng không tồn tại.", unknown_action: "Hành động không tồn tại." },
+      errors: { no_such_user: "Không có người dùng này.", no_such_group: "Không có nhóm này.", owner_share: "Chủ sở hữu đã có toàn quyền.", invalid_share: "Hãy chọn một người hoặc một nhóm.", invalid_group_name: "Tên nhóm gồm 2 đến 64 chữ cái, số, dấu chấm, gạch ngang hoặc gạch dưới, bắt đầu bằng chữ hoặc số.", group_taken: "Tên nhóm đã có.", invalid_policy_name: "Tên chính sách gồm 2 đến 64 chữ cái, số, dấu chấm, gạch ngang hoặc gạch dưới, bắt đầu bằng chữ hoặc số.", policy_taken: "Tên chính sách đã có.", builtin_policy: "Chính sách dựng sẵn không sửa hoặc xoá được.", invalid_policy: "Tài liệu chính sách có lỗi.", policy_too_large: "Tài liệu chính sách tối đa 64 KB.", unknown_user: "Có người dùng không tồn tại.", unknown_action: "Hành động không tồn tại." },
     },
     acct: {
       signIn: "Đăng nhập", signInHint: "Dùng tài khoản do quản trị viên cấp.", username: "Tên đăng nhập", password: "Mật khẩu", signingIn: "Đang đăng nhập…",
@@ -163,6 +164,7 @@ const dict = {
       conflictBadge: "Conflict", leaveUnsaved: "Some changes could not be saved. Leave and drop them?", restored: "Restored.", versionSaved: "Version saved.", auto: "auto", noVersions: "No versions yet.",
       conflictTitle: "Someone else saved this project", conflictText: "{who} saved this project at {when}, after you opened it. Choose what happens to your changes.", conflictReload: "Load their version (drop my changes)",
       conflictOverwrite: "Overwrite with mine", conflictCopy: "Save mine as a new project", someone: "Someone",
+      share: "Share", shareTitle: "Share project", shareText: "The people or groups you pick can see this project. Viewers can only read; editors can save changes.", shareOwner: "Owner", shareUser: "User", shareGroup: "Group", sharePick: "Pick a person or group", shareRole: "Access", shareViewer: "Can view", shareEditor: "Can edit", shareAdd: "Add", shareRemove: "Remove", shareNone: "Not shared with anyone.", shareAdded: "Shared.", shareRemoved: "Share removed.", shareBy: "by",
       notFound: "Project not found", notFoundText: "It does not exist, was deleted, or you may not see it.", loading: "Loading the project…", back: "Back to projects",
     },
     adm: {
@@ -179,7 +181,7 @@ const dict = {
       simulator: "Check permissions", simulatorText: "See what a person's policies decide for one action. Only policies count; project ownership and shares are not part of this.",
       user: "User", check: "Check", allowed: "Allowed", denied: "Denied", reasonAllow: "An Allow statement matches.", reasonExplicit: "A Deny statement matches, and Deny always wins.",
       reasonImplicit: "No statement matches, so the default is to refuse.", byStatement: "By statement", pickUser: "Pick a user",
-      errors: { invalid_group_name: "A group name is 2 to 64 letters, digits, dots, dashes or underscores, and starts with a letter or digit.", group_taken: "That group name is taken.", invalid_policy_name: "A policy name is 2 to 64 letters, digits, dots, dashes or underscores, and starts with a letter or digit.", policy_taken: "That policy name is taken.", builtin_policy: "A built-in policy cannot be changed or deleted.", invalid_policy: "The policy document has problems.", policy_too_large: "A policy document may be at most 64 KB.", unknown_user: "One of the users does not exist.", unknown_action: "No such action." },
+      errors: { no_such_user: "No such user.", no_such_group: "No such group.", owner_share: "The owner already has full access.", invalid_share: "Pick one person or one group.", invalid_group_name: "A group name is 2 to 64 letters, digits, dots, dashes or underscores, and starts with a letter or digit.", group_taken: "That group name is taken.", invalid_policy_name: "A policy name is 2 to 64 letters, digits, dots, dashes or underscores, and starts with a letter or digit.", policy_taken: "That policy name is taken.", builtin_policy: "A built-in policy cannot be changed or deleted.", invalid_policy: "The policy document has problems.", policy_too_large: "A policy document may be at most 64 KB.", unknown_user: "One of the users does not exist.", unknown_action: "No such action." },
     },
     acct: {
       signIn: "Sign in", signInHint: "Use the account an administrator gave you.", username: "Username", password: "Password", signingIn: "Signing in…",

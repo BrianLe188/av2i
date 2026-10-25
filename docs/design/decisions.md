@@ -323,3 +323,11 @@ last administrator survives is applied by running every change that could affect
 transaction, counting the administrators afterwards and rolling back at zero. `POST /api/policies/simulate` answers what the policies of
 one user decide for one action and resource, and which statement decided; ownership and project shares are not part of it.
 
+**Sharing in practice (A4, first part).** A project is shared with a user or a group as `viewer` (read) or `editor` (read and write); one
+share per person or group, and sharing again changes its role. Only someone who holds `project:Share` on the project (the owner, or a
+policy) can list, add, change or remove shares, and the same permission opens the list of names to pick from (`share-targets`: enabled
+users and groups, the whole list because installs are small). The owner cannot be shared with (they already have everything) and a disabled
+user cannot be picked; a person who cannot read the project gets 404, one who can read but not share gets 403. Neither role includes
+`project:Share`, so an editor cannot pass the project on. Adding and removing a share are audited (`project.shared`, `project.unshared`).
+The studio shows a Share button on the canvas only when the server said `can.share`. Not part of this step: API tokens and SSO.
+
