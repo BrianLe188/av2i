@@ -57,3 +57,6 @@ inspector on the right, and a bottom panel with three tabs: problems, Terraform,
   the box of the node they hang under, which keeps the room they are drawn in free. Edges to a container and containment lines are not
   given to ELK. It is one edit, so undo restores the old arrangement, and it overwrites positions drawn by hand and the sizes given to
   containers. Edge routing (orthogonal paths that avoid nodes) is not done; edges are still drawn by `LinkEdge`.
+- While rules report errors the Terraform tab still shows what can be written, under a banner that says how many errors remain and lists
+  them; the Resources tab shows the same banner. Such a preview is never exported (`canExport` needs no errors). When the design is too
+  unfinished for the generator (3 of the 105 template variants with errors) the banner gives the reason instead of code.

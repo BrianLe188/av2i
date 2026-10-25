@@ -150,7 +150,7 @@ export function App({ prefs, user, project }: { prefs: Prefs; user: User; projec
   };
 
   const exportZip = () => {
-    if (!analysis.files) return setToast(s.cannotExport);
+    if (!analysis.files || analysis.errors > 0) return setToast(s.cannotExport);
     download(`${design.name || "design"}-terraform.zip`, zipFiles(analysis.files), "application/zip");
     setToast(s.exported);
   };
@@ -162,7 +162,7 @@ export function App({ prefs, user, project }: { prefs: Prefs; user: User; projec
     <div className="grid h-full grid-cols-[200px_minmax(0,1fr)_320px] grid-rows-[48px_minmax(0,1fr)_300px]" style={{ gridTemplateAreas: '"top top top" "pal main insp" "bot bot bot"' }} data-testid="app">
       <TopBar
         s={s} lang={lang} dark={dark} name={design.name === "untitled" ? s.untitled : design.name}
-        canUndo={hist.past.length > 0} canRedo={hist.future.length > 0} canExport={analysis.files !== null} templates={tpls}
+        canUndo={hist.past.length > 0} canRedo={hist.future.length > 0} canExport={analysis.files !== null && analysis.errors === 0} templates={tpls}
         onUndo={undo} onRedo={redo} onOpenFile={openFile}
         onSave={() => download(`${design.name || "design"}.json`, JSON.stringify(design, null, 2), "application/json")}
         onExport={exportZip}

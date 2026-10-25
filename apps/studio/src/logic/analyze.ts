@@ -16,12 +16,19 @@ export interface Analysis {
   structural: { where: string; message: string }[];
   findings: Finding[];
   normalized: NormalizedDesign | null;
-  /** null while the design has an error */
+  /**
+   * The Terraform for the design. It exists whenever it can be written, also while rules report errors: then it is a preview
+   * (`errors` > 0) that may be missing or wrong where the errors are. null when the design is too broken to write any.
+   */
   files: Record<string, string> | null;
   resources: PlannedText[];
+  /** how many findings are errors; a design with errors can be previewed but not exported */
+  errors: number;
+  /** why no Terraform could be written, when `files` is null and the structure was fine */
+  generateError: string | null;
 }
 
-const none: Analysis = { structural: [], findings: [], normalized: null, files: null, resources: [] };
+const none: Analysis = { structural: [], findings: [], normalized: null, files: null, resources: [], errors: 0, generateError: null };
 
 export function analyze(design: Design, reg: Registry): Analysis {
   const structural = checkDesign(design, reg);
@@ -29,15 +36,22 @@ export function analyze(design: Design, reg: Registry): Analysis {
   try {
     const findings = runRules(design, reg);
     const normalized = normalize(design);
-    if (findings.some((f) => f.severity === "error")) return { ...none, findings, normalized };
-    const planned: PlannedResource[] = plan(design);
-    return {
-      ...none,
-      findings,
-      normalized,
-      files: generate(design),
-      resources: planned.map((p) => ({ file: p.file, from: p.from, address: p.block.labels.join("."), text: printBlocks([p.block]) })),
-    };
+    const errors = findings.filter((f) => f.severity === "error").length;
+    try {
+      const planned: PlannedResource[] = plan(design);
+      return {
+        ...none,
+        findings,
+        normalized,
+        errors,
+        files: generate(design),
+        resources: planned.map((p) => ({ file: p.file, from: p.from, address: p.block.labels.join("."), text: printBlocks([p.block]) })),
+      };
+    } catch (e) {
+      // a design with errors may be incomplete in a way the generator cannot write; say why instead of showing nothing
+      if (errors === 0) throw e;
+      return { ...none, findings, normalized, errors, generateError: e instanceof Error ? e.message : String(e) };
+    }
   } catch (e) {
     return { ...none, structural: [{ where: "engine", message: e instanceof Error ? e.message : String(e) }] };
   }

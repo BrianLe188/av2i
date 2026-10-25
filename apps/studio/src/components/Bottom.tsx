@@ -36,6 +36,26 @@ export function Bottom({ analysis, lang, s, tab, onTab, onSelect, nameOf }: Prop
     onSelect({ kind: isEdge ? "edge" : "node", id: key }, focus);
   };
 
+  const errorFindings = analysis.findings.filter((f) => f.severity === "error");
+  /** Shown above the Terraform and the resources while errors remain: what is written is a preview, and which errors stand in the way. */
+  const previewBanner = analysis.errors > 0 && (
+    <Alert variant="destructive" className="mb-2" data-testid="preview-banner">
+      <AlertDescription>
+        <b>{s.previewTitle.replace("{n}", String(analysis.errors))}</b> {analysis.files ? s.previewText : s.cannotWrite.replace("{why}", analysis.generateError ?? "")}
+        <ul className="mt-1 grid gap-0.5">
+          {errorFindings.slice(0, 5).map((f, i) => (
+            <li key={i}>
+              <button type="button" className="text-left underline-offset-2 hover:underline" onClick={() => f.targets[0] && selectKey(f.targets[0], f.targets)}>
+                <b>{f.rule}</b> {f.message[lang]}
+              </button>
+            </li>
+          ))}
+          {errorFindings.length > 5 && <li className="text-xs">{s.moreErrors.replace("{n}", String(errorFindings.length - 5))}</li>}
+        </ul>
+      </AlertDescription>
+    </Alert>
+  );
+
   const sev = (v: Finding["severity"]) => (v === "error" ? "bg-destructive text-white" : v === "warning" ? "bg-warning text-white" : "bg-info text-white");
   const dot = (v: Finding["severity"]) => (v === "error" ? "bg-destructive" : v === "warning" ? "bg-warning" : "bg-info");
   return (
@@ -84,6 +104,7 @@ export function Bottom({ analysis, lang, s, tab, onTab, onSelect, nameOf }: Prop
               </div>
               <ScrollArea className="min-h-0 flex-1">
                 <div className="px-3 py-2" data-testid="tf-code">
+                  {previewBanner}
                   {current.endsWith(".json") || current === "versions.tf" ? (
                     <pre className="font-mono text-xs">{files[current]}</pre>
                   ) : (
@@ -95,13 +116,14 @@ export function Bottom({ analysis, lang, s, tab, onTab, onSelect, nameOf }: Prop
               </ScrollArea>
             </div>
           ) : (
-            <div className="p-3"><Alert><AlertDescription>{s.errorsBlock}</AlertDescription></Alert></div>
+            <div className="p-3">{analysis.errors > 0 ? previewBanner : <Alert><AlertDescription>{s.errorsBlock}</AlertDescription></Alert>}</div>
           )}
         </TabsContent>
 
         <TabsContent value="resources" className="min-h-0 flex-1">
           {files ? (
             <ScrollArea className="h-full">
+              {analysis.errors > 0 && <div className="px-3 pt-2">{previewBanner}</div>}
               <Table data-testid="resources">
                 <TableHeader><TableRow><TableHead>{s.address}</TableHead><TableHead>{s.file}</TableHead><TableHead>{s.causedBy}</TableHead></TableRow></TableHeader>
                 <TableBody>
@@ -114,7 +136,7 @@ export function Bottom({ analysis, lang, s, tab, onTab, onSelect, nameOf }: Prop
               </Table>
             </ScrollArea>
           ) : (
-            <div className="p-3"><Alert><AlertDescription>{s.errorsBlock}</AlertDescription></Alert></div>
+            <div className="p-3">{analysis.errors > 0 ? previewBanner : <Alert><AlertDescription>{s.errorsBlock}</AlertDescription></Alert>}</div>
           )}
         </TabsContent>
       </Tabs>
