@@ -2,10 +2,10 @@ import type { Design } from "@av2i/model";
 import { CONTAINERS } from "./placement.ts";
 
 export const LEAF = { w: 176, h: 64 };
-const MIN: Record<string, { w: number; h: number }> = { vpc: { w: 520, h: 300 }, subnet: { w: 290, h: 180 } };
-const PAD = 24;
+export const MIN: Record<string, { w: number; h: number }> = { vpc: { w: 520, h: 300 }, subnet: { w: 290, h: 180 } };
+export const PAD = 24;
 const FLOOR = { w: 160, h: 100 };
-const HEADER = 44;
+export const HEADER = 44;
 
 export const isContainer = (service: string) => CONTAINERS.includes(service);
 

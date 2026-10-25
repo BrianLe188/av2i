@@ -47,3 +47,13 @@ inspector on the right, and a bottom panel with three tabs: problems, Terraform,
   output.
 - The pure logic (what may be dropped where, which pairs may connect, default edge properties, the property form model) lives
   in `src/logic` without React, and is unit-tested.
+- Two buttons in the legend tidy the canvas. "Untangle overlaps" (`tidy`) moves only nodes that sit on each other to the nearest free
+  spot and leaves the rest where the person put them. "Arrange automatically" (`logic/autolayout.ts`) lays the whole design out one
+  level at a time, innermost first, so a container is sized by what it holds and then sits as a fixed box among its siblings. ELK
+  (`elkjs`, loaded on first use) arranges the boxes of a level by what is connected, flow left to right. The subnets of a network are
+  not left to ELK: they go in a grid, tiers left to right (public, application, data) and availability zones top to bottom, as an
+  architect draws them; a subnet is "data" when a database sits in it or is joined to it. Card sizes are the ones the canvas measured
+  (a card with chips is taller than an empty one), and the nodes the engine adds (the Elastic IP of a NAT gateway) are folded into
+  the box of the node they hang under, which keeps the room they are drawn in free. Edges to a container and containment lines are not
+  given to ELK. It is one edit, so undo restores the old arrangement, and it overwrites positions drawn by hand and the sizes given to
+  containers. Edge routing (orthogonal paths that avoid nodes) is not done; edges are still drawn by `LinkEdge`.

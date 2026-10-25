@@ -77,7 +77,7 @@ export interface EdgeData extends Record<string, unknown> {
 export type Selection = { kind: "node" | "edge"; id: string } | null;
 
 /** Design nodes plus the nodes the engine added, each with a position so the canvas can draw them. */
-function visualDesign(design: Design, analysis: Analysis): { visual: Design; generated: Set<string> } {
+export function visualDesign(design: Design, analysis: Analysis): { visual: Design; generated: Set<string> } {
   const generated = new Set<string>();
   const nodes: DNode[] = [...design.nodes];
   const edges = analysis.normalized?.edges ?? [];

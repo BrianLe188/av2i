@@ -10,6 +10,7 @@ import { colorOf } from "../logic/colors.ts";
 import type { Analysis } from "../logic/analyze.ts";
 import { addEdge, addNode, removeEdges, removeNodes, subtree, updateNode } from "../logic/design.ts";
 import { buildFlow, type EdgeData, type NodeData, type NodeActions, type Rect, type ResizeHandlers, type Selection } from "../logic/flow.ts";
+import { autoLayout } from "../logic/autolayout.ts";
 import { absolute, containerAt, LEAF, nearestFree, placeFree, sizeOf, tidy } from "../logic/layout.ts";
 import { canPlace, connect } from "../logic/placement.ts";
 import type { Lang, Strings } from "../i18n.ts";
@@ -22,8 +23,8 @@ import { Eye, EyeOff } from "lucide-react";
 const nodeTypes = { resource: ResourceNode };
 const edgeTypes = { link: LinkEdge };
 
-function Legend({ s, hidden, toggle, relatedOnly, setRelatedOnly, untangle, readOnly }: {
-  readOnly: boolean; s: Strings; hidden: ReadonlySet<EdgeGroup>; toggle: (g: EdgeGroup) => void; relatedOnly: boolean; setRelatedOnly: (v: boolean) => void; untangle: () => void;
+function Legend({ s, hidden, toggle, relatedOnly, setRelatedOnly, untangle, arrange, arranging, readOnly }: {
+  arrange: () => void; arranging: boolean; readOnly: boolean; s: Strings; hidden: ReadonlySet<EdgeGroup>; toggle: (g: EdgeGroup) => void; relatedOnly: boolean; setRelatedOnly: (v: boolean) => void; untangle: () => void;
 }) {
   const dash = (g: EdgeGroup) => (g === "access" ? "5 3" : g === "wiring" ? "2 2" : undefined);
   return (
@@ -51,6 +52,9 @@ function Legend({ s, hidden, toggle, relatedOnly, setRelatedOnly, untangle, read
         </button>
         <button type="button" onClick={untangle} disabled={readOnly} className="w-full rounded border px-1.5 py-1 text-left hover:bg-accent disabled:pointer-events-none disabled:opacity-50" data-testid="tidy">
           {s.tidy}
+        </button>
+        <button type="button" onClick={arrange} disabled={readOnly || arranging} className="w-full rounded border px-1.5 py-1 text-left hover:bg-accent disabled:pointer-events-none disabled:opacity-50" data-testid="auto-layout">
+          {s.autoLayout}
         </button>
       </div>
     </div>
@@ -134,6 +138,24 @@ function Flow({ design, analysis, selection, focus, lang, s, loadId, dark, onSel
     onEdit(() => next);
     onToast(s.tidied);
   }, [design, onEdit, onToast, s]);
+
+  const [arranging, setArranging] = useState(false);
+  /** Arranges the whole design with ELK; it is one edit, so undo brings the old arrangement back. */
+  const arrange = useCallback(async () => {
+    setArranging(true);
+    try {
+      const measured = new Map(rf.getNodes().filter((n) => !n.data.container && n.measured?.width && n.measured?.height).map((n) => [n.id, { w: n.measured!.width!, h: n.measured!.height! }]));
+      const next = await autoLayout(design, analysis, measured);
+      onEdit(() => next);
+      onToast(s.autoLaidOut);
+      // the nodes move on the next render; frame them once they have
+      requestAnimationFrame(() => requestAnimationFrame(() => void rf.fitView({ padding: 0.15, duration: 300 })));
+    } catch {
+      onToast(s.layoutFailed);
+    } finally {
+      setArranging(false);
+    }
+  }, [design, analysis, onEdit, onToast, rf, s]);
 
   const [connectFrom, setConnectFrom] = useState<string | null>(null);
 
@@ -233,7 +255,7 @@ function Flow({ design, analysis, selection, focus, lang, s, loadId, dark, onSel
       >
         <Background variant={BackgroundVariant.Dots} gap={22} size={1.4} />
         <Panel position="top-right" className="!m-2">
-          <Legend readOnly={readOnly} s={s} hidden={hidden} toggle={toggle} relatedOnly={relatedOnly} setRelatedOnly={setRelatedOnly} untangle={untangle} />
+          <Legend readOnly={readOnly} s={s} hidden={hidden} toggle={toggle} relatedOnly={relatedOnly} setRelatedOnly={setRelatedOnly} untangle={untangle} arrange={() => void arrange()} arranging={arranging} />
         </Panel>
         <Controls showInteractive={false} />
         <MiniMap pannable zoomable style={{ width: 150, height: 96 }} nodeColor={(n) => { const d = n.data as NodeData; return d.container ? `${colorOf(d.service)}33` : colorOf(d.service); }} nodeStrokeWidth={0} maskColor="rgba(120,130,150,0.15)" />
