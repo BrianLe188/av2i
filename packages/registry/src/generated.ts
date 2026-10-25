@@ -222,6 +222,7 @@ export const RuleIds = [
   "VAL-127",
   "VAL-128",
   "VAL-129",
-  "VAL-130"
+  "VAL-130",
+  "VAL-131"
 ] as const;
 export type RuleId = (typeof RuleIds)[number];

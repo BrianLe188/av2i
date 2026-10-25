@@ -316,12 +316,12 @@ Source aliases used below:
 
 - id: VAL-032
   severity: info
-  applies_to: [egress-path, ec2, ecs, lambda]
-  check: "a workload attached to a private subnet whose route table has no route to a NAT gateway has internet_egress = false"
+  applies_to: [egress-path, ec2]
+  check: "an EC2 instance in a private subnet (its route table has no route to an internet gateway), or outside any subnet, whose route table has no 0.0.0.0/0 route to a NAT gateway has internet_egress = false"
   message: { vi: "Workload này không có đường ra Internet; chỉ truy cập được tài nguyên trong VPC.", en: "This workload has no path to the internet; it can reach only resources in the VPC." }
-  fix: { vi: "Thêm NAT Gateway và route 0.0.0.0/0 nếu workload cần ra Internet.", en: "Add a NAT gateway and a 0.0.0.0/0 route if the workload needs the internet." }
+  fix: { vi: "Thêm NAT Gateway (đặt trong subnet public) và route 0.0.0.0/0 tới nó trong route table của subnet này, nếu workload cần ra Internet.", en: "Add a NAT gateway (in a public subnet) and a 0.0.0.0/0 route to it in this subnet's route table, if the workload needs the internet." }
   source: https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc-internet.html
-  status: verified            # severity is info because a workload that only talks inside the VPC is valid
+  status: verified            # severity is info because a workload that only talks inside the VPC is valid; ECS and Lambda are not checked yet
 
 - id: VAL-033
   severity: error
@@ -1223,4 +1223,13 @@ Source aliases used below:
   fix: { vi: "Giảm số lượng hoặc nâng quota (Service Quotas).", en: "Reduce the count or raise the quota in Service Quotas." }
   source: https://docs.aws.amazon.com/vpc/latest/userguide/amazon-vpc-limits.html
   status: verified
+
+- id: VAL-131
+  severity: info
+  applies_to: [egress-path, ec2]
+  check: "an EC2 instance in a public subnet (route to an internet gateway) has no public IPv4 address (no associate_public_ip_address, no map_public_ip_on_launch on the subnet, no Elastic IP) and its route table has no 0.0.0.0/0 route to a NAT gateway, so internet_egress = false"
+  message: { vi: "Instance nằm trong subnet public nhưng không có địa chỉ IPv4 public nên không ra được Internet.", en: "This instance is in a public subnet but has no public IPv4 address, so it cannot reach the internet." }
+  fix: { vi: "Gắn Elastic IP, bật associate_public_ip_address trên instance (hoặc map_public_ip_on_launch trên subnet). Một NAT Gateway đặt cùng subnet không phục vụ instance này: route của subnet đã trỏ tới Internet Gateway.", en: "Attach an Elastic IP, or set associate_public_ip_address on the instance (or map_public_ip_on_launch on the subnet). A NAT gateway in the same subnet does not serve it: the subnet's route already points at the internet gateway." }
+  source: https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Internet_Gateway.html
+  status: verified            # the public address rule is in the egress-path relation
 ```

@@ -178,6 +178,7 @@ usual design puts instances in private subnets behind a load balancer.
 | Instance type and AMI architecture differ | Launch fails (unverified) |
 | Public address wanted but subnet has no internet-gateway route | Instance has an address and no internet access (S6). Rule [VAL-031](../rules/validation.md) |
 | Private instance with no NAT gateway or endpoint | Cannot reach the internet or AWS public endpoints. Rule [VAL-032](../rules/validation.md) |
+| Instance in a public subnet with no public address | Cannot reach the internet, and a NAT gateway beside it does not help. Rule [VAL-131](../rules/validation.md) |
 | `security_groups` used in a non-default VPC | Not applicable; use `vpc_security_group_ids` (S1) |
 | `ebs_block_device` mixed with `aws_ebs_volume` / `aws_volume_attachment` on the same instance | Conflict; Terraform treats other devices as drift (S1) |
 | `volume_tags` with block-device tags | Resource cycling (S1) |

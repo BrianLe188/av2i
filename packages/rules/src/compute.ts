@@ -17,8 +17,16 @@ export const VAL_030: RuleImpl = (ctx) =>
 export const VAL_031: RuleImpl = (ctx) =>
   ctx.g.nodesOf("ec2").filter((n) => { const f = ctx.facts.workloads.get(n.key); const s = f?.subnet ? ctx.facts.subnets.get(f.subnet) : undefined; return !!f?.publicAddress && !s?.public; }).map((n) => hit(n.key));
 
+/** The instance's subnet routes to an internet gateway: the public side of the egress path. */
+const inPublicSubnet = (ctx: Parameters<RuleImpl>[0], f: { subnet: string | null }) => !!f.subnet && ctx.facts.subnets.get(f.subnet)?.public === true;
+
+/** No way out for an instance in a private subnet (or none): it needs a NAT gateway. */
 export const VAL_032: RuleImpl = (ctx) =>
-  [...ctx.facts.workloads].filter(([k, f]) => ctx.g.node(k)?.service === "ec2" && !f.internetEgress).map(([k]) => hit(k));
+  [...ctx.facts.workloads].filter(([k, f]) => ctx.g.node(k)?.service === "ec2" && !f.internetEgress && !inPublicSubnet(ctx, f)).map(([k]) => hit(k));
+
+/** No way out for an instance in a public subnet: it has no public address, and a NAT gateway cannot help because the route is the internet gateway. */
+export const VAL_131: RuleImpl = (ctx) =>
+  [...ctx.facts.workloads].filter(([k, f]) => ctx.g.node(k)?.service === "ec2" && !f.internetEgress && inPublicSubnet(ctx, f)).map(([k]) => hit(k));
 
 export const SEC_006: RuleImpl = (ctx) =>
   ctx.g.nodesOf("ec2").filter((n) => ctx.g.prop(n.key, "metadata_options.http_tokens") !== "required").map((n) => hit(n.key));

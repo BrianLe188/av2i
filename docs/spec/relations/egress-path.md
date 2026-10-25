@@ -19,7 +19,7 @@ evaluation:
   via_nat:  "NOT public_subnet AND nat_egress"       # also valid for a public subnet without a public address when its table routes to a NAT gateway
   none:     "otherwise"
   s3_path:  "internet_egress OR (the route table of the subnet is associated with an S3 gateway endpoint AND the bucket is in the Region of the VPC)"
-invalid_when: [VAL-012, VAL-013, VAL-031, VAL-032, VAL-038, VAL-042, VAL-045, VAL-070, VAL-126]
+invalid_when: [VAL-012, VAL-013, VAL-031, VAL-032, VAL-131, VAL-038, VAL-042, VAL-045, VAL-070, VAL-126]
 sources:
   S1: https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Internet_Gateway.html
   S2: https://docs.aws.amazon.com/vpc/latest/userguide/vpc-nat-gateway.html
@@ -58,7 +58,7 @@ internet-gateway route in its own table" (S2, decision D-002).
 | # | Workload | Subnet and routes | Result |
 |---|---|---|---|
 | 1 | EC2 | public subnet, public address | Direct internet access, reachable from outside if security groups allow (S1) |
-| 2 | EC2 | public subnet, no public address | No internet access, even with the gateway route (S1) |
+| 2 | EC2 | public subnet, no public address | No internet access, even with the gateway route (S1). Rule [VAL-131](../rules/validation.md) |
 | 3 | EC2 | private subnet, NAT gateway route | Outbound only (S2) |
 | 4 | EC2 | private subnet, no NAT | No internet and no AWS public endpoints. Rule [VAL-032](../rules/validation.md) |
 | 5 | EC2 | public subnet, public address, but the subnet's table has no internet-gateway route | Address is useless. Rule [VAL-031](../rules/validation.md) |
