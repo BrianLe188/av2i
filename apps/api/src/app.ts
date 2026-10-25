@@ -4,6 +4,7 @@ import cookie from "@fastify/cookie";
 import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
 import { COOKIE, findSession } from "./auth/sessions.ts";
+import { findToken, looksLikeToken } from "./auth/tokens.ts";
 import type { Config } from "./config.ts";
 import { makeAuth, type Ctx } from "./context.ts";
 import type { Db } from "./db.ts";
@@ -12,6 +13,7 @@ import { authRoutes } from "./routes/auth.ts";
 import { groupRoutes } from "./routes/groups.ts";
 import { policyRoutes } from "./routes/policies.ts";
 import { projectRoutes } from "./routes/projects.ts";
+import { tokenRoutes } from "./routes/tokens.ts";
 import { userRoutes } from "./routes/users.ts";
 
 /** Every state-changing call must carry this header: a form on another site cannot add it, so it cannot ride the cookie. */
@@ -24,11 +26,27 @@ export function buildApp(deps: { db: Db; config: Config; logger?: FastifyServerO
   const app = Fastify({ logger: deps.logger ?? false, trustProxy: config.trustProxy, bodyLimit: 1_000_000 });
   void app.register(cookie);
 
+  /** `Authorization: Bearer av2i_...`, or null when the call carries no bearer secret. */
+  const bearerOf = (header: string | undefined) => {
+    const m = /^Bearer\s+(\S+)$/i.exec(header ?? "");
+    return m ? m[1]! : null;
+  };
+
   app.addHook("onRequest", async (req) => {
     if (!req.url.startsWith("/api/")) return;
     const route = req.routeOptions.config ?? {};
-    if (!["GET", "HEAD", "OPTIONS"].includes(req.method) && req.headers[CSRF_HEADER] !== CSRF_VALUE) throw forbidden("csrf", "Missing the X-Requested-With header.");
+    const bearer = bearerOf(req.headers.authorization);
+    // a bearer call is not carried by a cookie, so a page on another site cannot forge it: the CSRF header only guards cookie calls
+    if (!bearer && !["GET", "HEAD", "OPTIONS"].includes(req.method) && req.headers[CSRF_HEADER] !== CSRF_VALUE) throw forbidden("csrf", "Missing the X-Requested-With header.");
     if (route.public) return;
+    if (bearer) {
+      // when a secret is sent it alone decides: a valid cookie next to a bad token is not a way in
+      const found = looksLikeToken(bearer) ? await findToken(db, bearer, req.ip) : null;
+      if (!found) throw unauthorized("invalid_token", "That API token is not valid.");
+      req.auth = makeAuth(ctx, found, found);
+      if (found.mustChangePassword && !route.allowMustChange) throw new HttpError(403, "password_change_required", "Change your password first.");
+      return;
+    }
     const token = req.cookies[COOKIE];
     const session = token ? await findSession(db, config, token) : null;
     if (!session) throw unauthorized();
@@ -50,6 +68,7 @@ export function buildApp(deps: { db: Db; config: Config; logger?: FastifyServerO
   groupRoutes(app, ctx);
   policyRoutes(app, ctx);
   projectRoutes(app, ctx);
+  tokenRoutes(app, ctx);
 
   app.all("/api/*", { config: { public: true } }, async (_req, reply) => reply.code(404).send({ error: { code: "not_found", message: "Not found." } }));
 

@@ -45,7 +45,7 @@ export function projectRoutes(app: FastifyInstance, ctx: Ctx): void {
     const extra: Statement[] = [];
     if (project.owner_id === auth.session.userId) extra.push(...ownerStatements(project.id));
     for (const s of await sharesOf(auth.session.userId, [project.id])) extra.push(...shareStatements(s.role as ShareRole, project.id));
-    return [...(await auth.statements()), ...extra];
+    return [...(await auth.statements()), ...auth.scope(extra)];
   };
 
   /** 404 when the person may not even read the project (it must not reveal that it exists), 403 when they may read but not do `action`. */
@@ -87,8 +87,8 @@ export function projectRoutes(app: FastifyInstance, ctx: Ctx): void {
     for (const s of await sharesOf(auth.session.userId)) shares.set(s.project_id, [...(shares.get(s.project_id) ?? []), s.role as ShareRole]);
     const stated = rows.map((r) => {
       const res = resource.project(r.id);
-      const own = r.owner_id === auth.session.userId ? ownerStatements(r.id) : [];
-      const shared = (shares.get(r.id) ?? []).flatMap((role) => shareStatements(role, r.id));
+      const own = r.owner_id === auth.session.userId ? auth.scope(ownerStatements(r.id)) : [];
+      const shared = auth.scope((shares.get(r.id) ?? []).flatMap((role) => shareStatements(role, r.id)));
       const all = [...policies, ...own, ...shared];
       // a project that only a policy opens also needs project:List; owning or being shared one is enough by itself
       const visible = evaluate(all, { action: "project:Read", resource: res }).allowed && (own.length > 0 || shared.length > 0 || evaluate(policies, { action: "project:List", resource: res }).allowed);

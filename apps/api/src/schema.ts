@@ -113,6 +113,20 @@ export interface ProjectSharesTable {
   created_at: Ts;
 }
 
+export interface ApiTokensTable {
+  id: Generated<string>;
+  user_id: string;
+  name: string;
+  token_hash: Buffer;
+  prefix: string;
+  actions: string[] | null;
+  expires_at: TsNull;
+  last_used_at: TsNull;
+  last_used_ip: string | null;
+  revoked_at: TsNull;
+  created_at: Ts;
+}
+
 export interface Database {
   users: UsersTable;
   sessions: SessionsTable;
@@ -125,4 +139,5 @@ export interface Database {
   projects: ProjectsTable;
   project_versions: ProjectVersionsTable;
   project_shares: ProjectSharesTable;
+  api_tokens: ApiTokensTable;
 }

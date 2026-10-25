@@ -1,4 +1,4 @@
-import { evaluate, type Action, type Statement } from "@av2i/authz";
+import { evaluate, restrictToActions, type Action, type Statement } from "@av2i/authz";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { statementsFor } from "./access.ts";
 import { audit } from "./audit.ts";
@@ -14,8 +14,12 @@ export interface Ctx {
 
 export interface Auth {
   session: SessionUser;
-  /** the person's policy statements, read once per request */
+  /** a cookie session, or an API token (which is limited to what it was made for and cannot manage accounts) */
+  via: "session" | "token";
+  /** the person's policy statements, read once per request and already narrowed to the token's scope */
   statements: () => Promise<Statement[]>;
+  /** narrows statements of another origin (ownership, shares) the same way; unchanged for a session */
+  scope: (statements: Statement[]) => Statement[];
 }
 
 declare module "fastify" {
@@ -30,9 +34,17 @@ declare module "fastify" {
   }
 }
 
-export function makeAuth(ctx: Ctx, session: SessionUser): Auth {
+export function makeAuth(ctx: Ctx, session: SessionUser, token?: { scope: string[] | null }): Auth {
+  const scope = (statements: Statement[]) => (token?.scope ? restrictToActions(statements, token.scope) : statements);
   let cache: Promise<Statement[]> | undefined;
-  return { session, statements: () => (cache ??= statementsFor(ctx.db, session.userId)) };
+  return { session, via: token ? "token" : "session", scope, statements: () => (cache ??= statementsFor(ctx.db, session.userId).then(scope)) };
+}
+
+/** Account and token management are for a person at the keyboard: a token, which may sit in a script, cannot do them. */
+export function sessionOnly(req: FastifyRequest): Auth {
+  const auth = authOf(req);
+  if (auth.via !== "session") throw forbidden("session_required", "Sign in with your password to do this; an API token cannot.");
+  return auth;
 }
 
 export const authOf = (req: FastifyRequest): Auth => {

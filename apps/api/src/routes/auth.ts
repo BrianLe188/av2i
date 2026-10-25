@@ -4,14 +4,14 @@ import { audit } from "../audit.ts";
 import { burnVerify, checkNewPassword, hashPassword, verifyPassword } from "../auth/password.ts";
 import { createSession, revokeSession, revokeUserSessions, type SessionUser } from "../auth/sessions.ts";
 import { clearUser, recordFailure, retryAfter } from "../auth/throttle.ts";
-import { authOf, clearSessionCookie, makeAuth, setSessionCookie, type Ctx } from "../context.ts";
+import { authOf, clearSessionCookie, makeAuth, sessionOnly, setSessionCookie, type Auth, type Ctx } from "../context.ts";
 import { badRequest, HttpError, unauthorized } from "../errors.ts";
 
 const MAX_FAILED = 10;
 const LOCK_MS = 15 * 60_000;
 
-async function me(ctx: Ctx, s: SessionUser) {
-  const actions = s.mustChangePassword ? [] : allowedActions(await makeAuth(ctx, s).statements());
+async function me(ctx: Ctx, s: SessionUser, auth: Auth = makeAuth(ctx, s)) {
+  const actions = s.mustChangePassword ? [] : allowedActions(await auth.statements());
   return { user: { id: s.userId, username: s.username, displayName: s.displayName, mustChangePassword: s.mustChangePassword }, actions };
 }
 
@@ -58,20 +58,20 @@ export function authRoutes(app: FastifyInstance, ctx: Ctx): void {
   });
 
   app.post("/api/auth/logout", { config: { allowMustChange: true } }, async (req, reply) => {
-    const { session } = authOf(req);
+    const { session } = sessionOnly(req);
     await revokeSession(db, session.sessionId);
     clearSessionCookie(reply);
     await audit(db, { actor: { userId: session.userId, username: session.username }, action: "auth.logout", outcome: "success", ip: req.ip });
     return { ok: true };
   });
 
-  app.get("/api/auth/me", { config: { allowMustChange: true } }, async (req) => me(ctx, authOf(req).session));
+  app.get("/api/auth/me", { config: { allowMustChange: true } }, async (req) => me(ctx, authOf(req).session, authOf(req)));
 
   app.post("/api/auth/change-password", {
     config: { allowMustChange: true },
     schema: { body: { type: "object", required: ["currentPassword", "newPassword"], additionalProperties: false, properties: { currentPassword: { type: "string", minLength: 1, maxLength: 1024 }, newPassword: { type: "string", minLength: 1, maxLength: 1024 } } } },
   }, async (req, reply) => {
-    const { session } = authOf(req);
+    const { session } = sessionOnly(req);
     const { currentPassword, newPassword } = req.body as { currentPassword: string; newPassword: string };
     const keys = { username: session.username, ip: req.ip };
     const wait = await retryAfter(db, keys);

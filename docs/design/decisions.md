@@ -329,5 +329,16 @@ policy) can list, add, change or remove shares, and the same permission opens th
 users and groups, the whole list because installs are small). The owner cannot be shared with (they already have everything) and a disabled
 user cannot be picked; a person who cannot read the project gets 404, one who can read but not share gets 403. Neither role includes
 `project:Share`, so an editor cannot pass the project on. Adding and removing a share are audited (`project.shared`, `project.unshared`).
-The studio shows a Share button on the canvas only when the server said `can.share`. Not part of this step: API tokens and SSO.
+The studio shows a Share button on the canvas only when the server said `can.share`.
+
+**API tokens in practice (A4, second part).** A person makes tokens for scripts and CI on their account page. The secret is `av2i_` plus 256
+random bits, shown once; only its SHA-256 is stored, with the first characters kept to tell tokens apart. A token has a name, an expiry
+(1 to 730 days, or none) and optionally a scope, a list of actions. It is sent as `Authorization: Bearer ...` and alone decides the call: a
+valid cookie next to a bad secret is refused. A bearer call does not need the `X-Requested-With` header, because only cookie calls can be
+forged from another site. A token is the person acting with fewer rights, never more: the person's policies, ownership and shares are
+evaluated as for a session, then narrowed to the scope (`restrictToActions` keeps every Deny whole and drops an Allow left with no action).
+It stops working when revoked, expired, or the account is disabled, and it is refused while the password still has to be changed. A token
+cannot make or list tokens, change the password or log out (`403 session_required`), so a leaked one cannot mint others or lock the person
+out. At most 20 are active per person. Creating and revoking are audited (never the secret); each use only updates `last_used_at` and the
+address, at most once a minute. Not done: an administrator revoking someone else's token (disabling the account does it), SSO.
 

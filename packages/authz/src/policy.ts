@@ -86,3 +86,18 @@ export function parseDocument(raw: unknown): Parsed {
   });
   return errors.length ? { ok: false, errors } : { ok: true, statements };
 }
+
+/**
+ * What a statement list allows once it is narrowed to `actions` (an API token's scope): each Allow keeps only the known actions that
+ * it names and the scope names, and a statement left with none is dropped. Deny statements stay whole, so narrowing never removes a Deny.
+ */
+export function restrictToActions(statements: readonly Statement[], actions: readonly string[]): Statement[] {
+  const scope = new Set(actions);
+  const out: Statement[] = [];
+  for (const s of statements) {
+    if (s.effect === "Deny") { out.push(s); continue; }
+    const kept = (Object.keys(ACTIONS) as Action[]).filter((a) => scope.has(a) && s.actions.some((p) => matchesAction(p, a)));
+    if (kept.length > 0) out.push({ ...s, actions: kept });
+  }
+  return out;
+}

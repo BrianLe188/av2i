@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  ACTIONS, ADMINISTRATOR, checkNewPassword, BUILTIN_POLICIES, allowedActions, can, evaluate, matchesAction, matchesResource, ownerStatements, parseDocument, resource, shareStatements,
+  ACTIONS, ADMINISTRATOR, checkNewPassword, BUILTIN_POLICIES, allowedActions, can, evaluate, matchesAction, matchesResource, ownerStatements, parseDocument, resource, restrictToActions, shareStatements,
   type Statement,
 } from "../src/index.ts";
 
@@ -96,5 +96,27 @@ describe("checkNewPassword", () => {
     expect(checkNewPassword("administrator", "ann")).toBe("too_common");
     expect(checkNewPassword("x".repeat(300), "ann")).toBe("too_long");
     expect(checkNewPassword("a-good-long-one", "ann")).toBeNull();
+  });
+});
+
+describe("restrictToActions", () => {
+  const ask = (s: Statement[], action: string, res = "av2i:project/p1") => evaluate(s, { action: action as never, resource: res }).allowed;
+
+  it("keeps only the scoped actions of a wildcard allow", () => {
+    const narrowed = restrictToActions([allow(["project:*"], ["*"])], ["project:Read", "user:List"]);
+    expect(ask(narrowed, "project:Read")).toBe(true);
+    expect(ask(narrowed, "project:Write")).toBe(false);
+    expect(ask(narrowed, "user:List", "av2i:user/u")).toBe(false);
+  });
+
+  it("never grants an action the statements did not", () => {
+    expect(ask(restrictToActions([allow(["project:Read"], ["*"])], ["project:Read", "project:Write"]), "project:Write")).toBe(false);
+  });
+
+  it("keeps a Deny whole, and drops an Allow left with nothing", () => {
+    const narrowed = restrictToActions([allow(["project:*"], ["*"]), deny(["project:Delete"], ["*"]), allow(["user:*"], ["*"])], ["project:Delete", "project:Read"]);
+    expect(narrowed).toHaveLength(2);
+    expect(ask(narrowed, "project:Delete")).toBe(false);
+    expect(ask(narrowed, "project:Read")).toBe(true);
   });
 });

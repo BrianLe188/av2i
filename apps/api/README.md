@@ -40,6 +40,16 @@ The API reads `.env` at the repository root if it exists (`.env` is not committe
 
 Put a reverse proxy with HTTPS in front of any installation others can reach: the password travels in the sign in request.
 
+## Calling the API from a script
+
+Make a token on the account page (Token API), then send it as a bearer secret; no cookie and no `X-Requested-With` header are needed.
+
+```bash
+curl -H "Authorization: Bearer $AV2I_TOKEN" http://localhost:3000/api/projects
+```
+
+A token has the rights of the person who made it, or fewer if it was given a scope. It cannot create tokens or change the password.
+
 ## Tests
 
 The tests create a throwaway database in a PostgreSQL they can reach (`TEST_DATABASE_URL`, by default the `av2i-pg` container above)
