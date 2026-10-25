@@ -1,15 +1,13 @@
 import { useState } from "react";
-import { Plus, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { OptionSelect } from "@/components/ui/option-select";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { Props, Value } from "@av2i/model";
 import type { Field } from "../logic/form.ts";
 import { getIn } from "../logic/design.ts";
 import { parseInput } from "../logic/form.ts";
 import type { Strings } from "../i18n.ts";
+import { SgRules, type SgRule } from "./SgRules.tsx";
 
 interface FieldsProps {
   fields: Field[];
@@ -28,12 +26,26 @@ interface FieldsProps {
 export function Fields({ fields, props, prefix = "", s, groups, refs = [], onSet }: FieldsProps) {
   return (
     <>
-      {fields.map((f) => (
+      {fields.map((f) => f.key === "egress_rules" && fields.some((x) => x.key === "ingress_rules") ? null : f.key === "ingress_rules" ? (
+        <SgRules
+          key={f.key}
+          ingress={getRules(props, `${prefix}ingress_rules`)}
+          egress={getRules(props, `${prefix}egress_rules`)}
+          s={s}
+          groups={groups}
+          onSet={(k, v) => onSet(prefix + k, v as unknown as Value | undefined)}
+        />
+      ) : (
         <FieldRow key={f.key} field={f} path={prefix + f.key} props={props} s={s} groups={groups} refs={refs} onSet={onSet} />
       ))}
     </>
   );
 }
+
+const getRules = (props: Props, path: string): SgRule[] | undefined => {
+  const v = getIn(props, path);
+  return Array.isArray(v) ? (v as unknown as SgRule[]) : undefined;
+};
 
 function FieldRow({ field, path, props, s, groups, refs, onSet }: { field: Field; path: string; props: Props; s: Strings; groups: FieldsProps["groups"]; refs: NonNullable<FieldsProps["refs"]>; onSet: FieldsProps["onSet"] }) {
   const value = getIn(props, path);
@@ -71,12 +83,7 @@ function FieldRow({ field, path, props, s, groups, refs, onSet }: { field: Field
       );
     }
     case "rules":
-      return (
-        <div className="my-2">
-          {label}
-          <RulesEditor value={Array.isArray(value) ? (value as unknown as Rule[]) : undefined} egress={field.key === "egress_rules"} s={s} groups={groups} onChange={(v) => onSet(path, v as unknown as Value | undefined)} />
-        </div>
-      );
+      return null;
     case "boolean":
       return (
         <div className="my-2">
@@ -110,12 +117,7 @@ function FieldRow({ field, path, props, s, groups, refs, onSet }: { field: Field
       );
     }
     case "rules":
-      return (
-        <div className="my-2">
-          {label}
-          <RulesEditor value={Array.isArray(value) ? (value as unknown as Rule[]) : undefined} egress={field.key === "egress_rules"} s={s} groups={groups} onChange={(v) => onSet(path, v as unknown as Value | undefined)} />
-        </div>
-      );
+      return null;
     case "boolean":
       return (
         <div className="my-2">
@@ -173,79 +175,4 @@ function FieldRow({ field, path, props, s, groups, refs, onSet }: { field: Field
         </div>
       );
   }
-}
-
-interface Rule {
-  ip_protocol: string;
-  from_port?: number;
-  to_port?: number;
-  cidr_ipv4?: string;
-  cidr_ipv6?: string;
-  prefix_list_id?: string;
-  referenced_security_group_id?: string;
-  description?: string;
-}
-
-const PEERS = ["cidr_ipv4", "cidr_ipv6", "prefix_list_id", "referenced_security_group_id"] as const;
-const PROTOCOLS = ["tcp", "udp", "icmp", "icmpv6", "-1"];
-
-function RulesEditor({ value, egress, s, groups, onChange }: { value: Rule[] | undefined; egress: boolean; s: Strings; groups: FieldsProps["groups"]; onChange: (v: Rule[] | undefined) => void }) {
-  const peerLabel: Record<(typeof PEERS)[number], string> = { cidr_ipv4: s.cidr4, cidr_ipv6: s.cidr6, prefix_list_id: s.prefix, referenced_security_group_id: s.sgref };
-  if (value === undefined && egress) {
-    return (
-      <div className="flex flex-col items-start gap-2">
-        <p className="text-xs text-muted-foreground">{s.defaultEgress}</p>
-        <Button variant="outline" size="sm" onClick={() => onChange([])}>{s.customEgress}</Button>
-      </div>
-    );
-  }
-  const rules = value ?? [];
-  const set = (i: number, r: Rule) => onChange(rules.map((x, j) => (j === i ? r : x)));
-  const peerOf = (r: Rule) => PEERS.find((p) => r[p] !== undefined) ?? "cidr_ipv4";
-  return (
-    <div className="flex flex-col gap-2">
-      {rules.map((r, i) => {
-        const peer = peerOf(r);
-        const all = r.ip_protocol === "-1";
-        return (
-          <div className="flex flex-col gap-1 rounded-md border p-1.5" key={i} data-testid={`rule-${i}`}>
-            <div className="flex items-center gap-1">
-              <Select value={r.ip_protocol} onValueChange={(v) => { const { from_port, to_port, ...rest } = r; set(i, v === "-1" ? { ...rest, ip_protocol: "-1" } : { ...r, ip_protocol: v, from_port: from_port ?? 0, to_port: to_port ?? 0 }); }}>
-                <SelectTrigger size="sm" aria-label={s.protocol} className="w-24"><SelectValue /></SelectTrigger>
-                <SelectContent>{PROTOCOLS.map((p) => <SelectItem key={p} value={p}>{p === "-1" ? "all" : p}</SelectItem>)}</SelectContent>
-              </Select>
-              {!all && (
-                <>
-                  <Input className="h-8 w-[70px]" type="number" aria-label={s.fromPort} defaultValue={r.from_port} key={`f${r.from_port}`} onBlur={(e) => set(i, { ...r, from_port: e.target.value === "" ? undefined : Number(e.target.value) })} />
-                  <span>–</span>
-                  <Input className="h-8 w-[70px]" type="number" aria-label={s.toPort} defaultValue={r.to_port} key={`t${r.to_port}`} onBlur={(e) => set(i, { ...r, to_port: e.target.value === "" ? undefined : Number(e.target.value) })} />
-                </>
-              )}
-              <Button variant="ghost" size="icon-xs" aria-label={s.delete} className="ml-auto" onClick={() => onChange(rules.filter((_, j) => j !== i))}><X /></Button>
-            </div>
-            <div className="flex items-center gap-1">
-              <Select
-                value={peer}
-                onValueChange={(v) => { const { cidr_ipv4, cidr_ipv6, prefix_list_id, referenced_security_group_id, ...rest } = r; void [cidr_ipv4, cidr_ipv6, prefix_list_id, referenced_security_group_id]; set(i, { ...rest, [v]: v === "referenced_security_group_id" ? (groups[0]?.key ?? "") : "" }); }}
-              >
-                <SelectTrigger size="sm" aria-label={s.peer} className="w-32"><SelectValue /></SelectTrigger>
-                <SelectContent>{PEERS.map((p) => <SelectItem key={p} value={p}>{peerLabel[p]}</SelectItem>)}</SelectContent>
-              </Select>
-              {peer === "referenced_security_group_id" ? (
-                <Select value={r.referenced_security_group_id ?? ""} onValueChange={(v) => set(i, { ...r, referenced_security_group_id: v })}>
-                  <SelectTrigger size="sm" className="min-w-0 flex-1"><SelectValue /></SelectTrigger>
-                  <SelectContent>{groups.map((g) => <SelectItem key={g.key} value={g.key}>{g.label}</SelectItem>)}</SelectContent>
-                </Select>
-              ) : (
-                <Input className="h-8 min-w-0 flex-1" key={`${peer}${r[peer]}`} defaultValue={r[peer] ?? ""} placeholder={peer === "cidr_ipv4" ? "10.0.0.0/16" : ""} aria-label={peerLabel[peer]} data-testid={`rule-${i}-peer`} onBlur={(e) => set(i, { ...r, [peer]: e.target.value })} />
-              )}
-            </div>
-            <Input className="h-8" placeholder={s.description} defaultValue={r.description ?? ""} key={`d${r.description}`} onBlur={(e) => set(i, { ...r, description: e.target.value === "" ? undefined : e.target.value })} />
-          </div>
-        );
-      })}
-      <Button variant="outline" size="sm" className="w-fit" data-testid={egress ? "add-egress" : "add-ingress"} onClick={() => onChange([...rules, { ip_protocol: "tcp", from_port: 443, to_port: 443, cidr_ipv4: "10.0.0.0/16" }])}><Plus />{s.addRule}</Button>
-      {egress && <Button variant="link" size="sm" className="w-fit px-0" onClick={() => onChange(undefined)}>{s.default}</Button>}
-    </div>
-  );
 }

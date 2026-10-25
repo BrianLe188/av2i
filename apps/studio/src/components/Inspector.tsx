@@ -38,7 +38,7 @@ export function Inspector({ selection, readOnly, ...rest }: Props) {
   const { s } = rest;
   return (
     <aside className="flex min-h-0 flex-col border-l bg-card" style={{ gridArea: "insp" }} aria-label={s.inspector}>
-      <ScrollArea className="min-h-0 flex-1">
+      <ScrollArea className="min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
       <div className="p-3">
       <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{s.inspector}</h2>
       <fieldset disabled={readOnly} className="m-0 min-w-0 border-0 p-0">
