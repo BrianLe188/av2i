@@ -1,7 +1,7 @@
 ---
 id: serverless-backend
 title: { vi: "API serverless: ALB, Lambda, S3, RDS, IAM", en: "Serverless API: ALB, Lambda, S3, RDS, IAM" }
-services: [vpc, subnet, internet-gateway, route-table, vpc-endpoint-s3, security-group, lambda, ecr, alb, rds, s3, acm, route53, iam-role, iam-policy]
+services: [vpc, subnet, internet-gateway, route-table, vpc-endpoint-s3, security-group, lambda, ecr, alb, rds, db-subnet-group, s3, acm, route53, iam-role, iam-policy]
 executable: true
 design:
   schema: 1
@@ -26,7 +26,8 @@ design:
     - { key: edge_fn, label: "Edge function", service: lambda, props: { function_name: edge, filename: edge.zip, handler: index.handler, runtime: nodejs22.x } }
     - { key: data_fn, label: "Data function", service: lambda, parent: priv_a, props: { function_name: data, image_tag: v1, timeout: 30 } }
     - { key: repo, label: "Images", service: ecr, props: { name: data-fn, image_tag_mutability: IMMUTABLE, image_scanning_configuration: { scan_on_push: true } } }
-    - { key: db, label: "Database", service: rds, parent: priv_a, props: { engine: postgres, instance_class: db.t3.micro, allocated_storage: 20, username: app, deletion_protection: true } }
+    - { key: db_group, label: "Database subnets", service: db-subnet-group, parent: vpc, props: { name: data-db } }
+    - { key: db, label: "Database", service: rds, parent: vpc, props: { engine: postgres, instance_class: db.t3.micro, allocated_storage: 20, username: app, deletion_protection: true } }
     - { key: uploads, label: "Uploads", service: s3, props: { bucket: av2i-example-uploads } }
     - { key: data_role, label: "Data role", service: iam-role, props: { name: api-data, managed_policies: ["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole", "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"] } }
     - { key: audit, label: "Audit metrics", service: iam-policy, props: { name: api-audit, description: "Publish metrics", policy: {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": ["cloudwatch:PutMetricData"], "Resource": "*", "Condition": {"StringEquals": {"cloudwatch:namespace": "Backend"}}}]} } }
@@ -39,7 +40,9 @@ design:
     - { id: e_rt_priv_b, mechanism: route-association, from: rt_priv, to: priv_b }
     - { id: e_alb_b, mechanism: containment, from: pub_b, to: alb }
     - { id: e_fn_b, mechanism: containment, from: priv_b, to: data_fn }
-    - { id: e_db_b, mechanism: db-subnet-group, from: db, to: priv_b }
+    - { id: e_dbg_a, mechanism: containment, from: priv_a, to: db_group }
+    - { id: e_dbg_b, mechanism: containment, from: priv_b, to: db_group }
+    - { id: e_db_group, mechanism: db-subnet-group, from: db, to: db_group }
     - { id: e_sg_alb, mechanism: sg-attach, from: sg_alb, to: alb }
     - { id: e_sg_fn, mechanism: sg-attach, from: sg_fn, to: data_fn }
     - { id: e_sg_db, mechanism: sg-attach, from: sg_db, to: db }

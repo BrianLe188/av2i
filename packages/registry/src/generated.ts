@@ -4,6 +4,7 @@ export const ServiceIds = [
   "acm",
   "alb",
   "cloudfront",
+  "db-subnet-group",
   "ec2",
   "ecr",
   "ecs",

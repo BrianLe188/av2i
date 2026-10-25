@@ -50,7 +50,7 @@ properties:
 limits:
   - { id: subnets_per_vpc, value: 200, adjustable: true, src: [S3], status: verified }
   - { id: reserved_addresses_ipv4, value: 5, adjustable: false, src: [S1], status: verified, note: "network, router (.1), DNS (.2), future use (.3), broadcast (last)" }
-relations: [containment, route-association, nat-placement, db-subnet-group]
+relations: [containment, route-association, nat-placement]
 cost: { model: free, notes: "" }
 status: verified
 ---
@@ -89,7 +89,7 @@ their files.
 - [route-association](../relations/route-association.md): chooses the route table, which decides public or
   private.
 - [nat-placement](../relations/nat-placement.md): a zonal public NAT gateway sits in a public subnet.
-- [db-subnet-group](../relations/db-subnet-group.md): RDS needs subnets in at least two AZs.
+- [containment](../relations/containment.md): a line from a subnet adds it to a [DB subnet group](db-subnet-group.md).
 
 ## Failure modes
 

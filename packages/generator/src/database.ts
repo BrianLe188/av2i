@@ -5,17 +5,23 @@ import { roleRef } from "./iam.ts";
 
 /**
  * A DB instance with the safe defaults of decision D-017: storage encrypted, the master password kept by RDS in
- * Secrets Manager, seven days of backups, not publicly accessible and a final snapshot. The DB subnet group is created
- * from the subnets the instance spans (relations/db-subnet-group.md). A password written on the node never reaches the
- * file: it becomes a sensitive variable.
+ * Secrets Manager, seven days of backups, not publicly accessible and a final snapshot. A DB subnet group is a node of its
+ * own (relations/db-subnet-group.md): it becomes `aws_db_subnet_group` over the subnets drawn into it, and the instance
+ * names the group it is drawn to. A password written on the node never reaches the file: it becomes a sensitive
+ * variable.
  */
 export function planDatabase(c: PlanCtx): void {
   const { g, add } = c;
+  for (const grp of g.nodesOf("db-subnet-group")) {
+    const name = typeof grp.props.name === "string" && grp.props.name !== "" ? grp.props.name : hyphen(grp.key);
+    const args: [string, Expr][] = [["name", name], ...c.optional(grp, ["description"])];
+    if (!grp.props.description) args.push(["description", "Managed by av2i"]);
+    args.push(["subnet_ids", g.subnetsOf(grp.key).map((s) => ref(`aws_subnet.${s.key}.id`))], c.tags(grp));
+    add("database.tf", resource("aws_db_subnet_group", grp.key, args), grp.key);
+  }
   for (const n of g.nodesOf("rds")) {
-    const subnets = g.subnetsOf(n.key);
     const groupName = hyphen(n.key);
-    add("database.tf", resource("aws_db_subnet_group", n.key, [["name", groupName], ["subnet_ids", subnets.map((s) => ref(`aws_subnet.${s.key}.id`))], c.tags(n)]), n.key);
-
+    const group = g.dbSubnetGroupOf(n.key);
     const identifier = (n.props.identifier as string | undefined) ?? groupName;
     const p = n.props;
     const args: [string, Expr][] = [["identifier", identifier], ["engine", p.engine as string]];
@@ -32,7 +38,7 @@ export function planDatabase(c: PlanCtx): void {
     } else {
       args.push(["manage_master_user_password", p.manage_master_user_password === false ? false : true]);
     }
-    args.push(["db_subnet_group_name", ref(`aws_db_subnet_group.${n.key}.name`)]);
+    if (group) args.push(["db_subnet_group_name", ref(`aws_db_subnet_group.${group.key}.name`)]);
     const sgs = g.securityGroupsOf(n.key);
     if (sgs.length) args.push(["vpc_security_group_ids", sgs.map((s) => ref(`aws_security_group.${s.key}.id`))]);
     args.push(["publicly_accessible", p.publicly_accessible === true]);

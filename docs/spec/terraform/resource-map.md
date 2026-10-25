@@ -31,7 +31,8 @@ What each service and mechanism generates. Networking group only for now. Pitfal
 | Service | Resource(s) | Key arguments emitted | Notes |
 |---|---|---|---|
 | s3 | `aws_s3_bucket`, `aws_s3_bucket_public_access_block`, `aws_s3_bucket_ownership_controls`, `aws_s3_bucket_versioning`, `aws_s3_bucket_server_side_encryption_configuration`, `aws_s3_bucket_lifecycle_configuration`, `aws_s3_bucket_policy` | bucket `bucket`, `force_destroy`, `tags`; access block all four `true`; ownership `BucketOwnerEnforced`; versioning `Enabled`; encryption `AES256` unless a key is chosen; one lifecycle resource; one policy | P-035 to P-038, P-043, P-044. No inline arguments on the bucket |
-| rds | `aws_db_subnet_group`, `aws_db_instance` | subnet group `name`, `subnet_ids`; instance `identifier`, `engine`, `engine_version`, `instance_class`, `allocated_storage`, `storage_type`, `storage_encrypted = true`, `db_name`, `username`, `manage_master_user_password = true`, `db_subnet_group_name`, `vpc_security_group_ids`, `publicly_accessible = false`, `multi_az`, `backup_retention_period`, `deletion_protection`, `skip_final_snapshot`, `final_snapshot_identifier`, `tags` | P-039 to P-042 |
+| db-subnet-group | `aws_db_subnet_group` | `name`, `description`, `subnet_ids` (the subnets drawn into the group), `tags` | one group per node; several instances may use it |
+| rds | `aws_db_instance` | instance `db_subnet_group_name`, `identifier`, `engine`, `engine_version`, `instance_class`, `allocated_storage`, `storage_type`, `storage_encrypted = true`, `db_name`, `username`, `manage_master_user_password = true`, `db_subnet_group_name`, `vpc_security_group_ids`, `publicly_accessible = false`, `multi_az`, `backup_retention_period`, `deletion_protection`, `skip_final_snapshot`, `final_snapshot_identifier`, `tags` | P-039 to P-042 |
 
 ### Delivery and certificates
 
@@ -68,7 +69,7 @@ What each service and mechanism generates. Networking group only for now. Pitfal
 | dns-alias | `aws_route53_record` | A alias, plus AAAA when the distribution has IPv6 on |
 | cert-attach | listener `certificate_arn` (+ `aws_lb_listener_certificate`), distribution `viewer_certificate` | CloudFront certificate in `us-east-1` |
 | cert-validation | `aws_route53_record` (CNAME), `aws_acm_certificate_validation` | one record per distinct record name |
-| db-subnet-group | `aws_db_subnet_group` | `name`, `subnet_ids`; instance `db_subnet_group_name` |
+| db-subnet-group | `aws_db_instance.db_subnet_group_name` | the name of the group the instance is drawn to |
 | resource-policy | `aws_s3_bucket_policy`, `aws_lambda_permission`, `aws_ecr_repository_policy` | one bucket policy per bucket with merged statements; one Lambda permission per invoker (`action`, `function_name`, `principal`, `source_arn`) |
 | network-access | `aws_vpc_security_group_ingress_rule` (+ egress when needed) | `security_group_id` = callee group, `referenced_security_group_id` = caller group, port from the callee |
 | egress-path | none | derived from routes, associations, gateways and addresses |

@@ -1,10 +1,10 @@
 ---
 id: relation-matrix
 title: { vi: "Ma trận quan hệ giữa các service", en: "Service relation matrix" }
-services: [vpc, subnet, internet-gateway, nat-gateway, elastic-ip, route-table, vpc-endpoint-s3, security-group, ec2, lambda, ecs, ecr, s3, rds, alb, route53, cloudfront, acm, iam-role, iam-policy]
+services: [vpc, subnet, internet-gateway, nat-gateway, elastic-ip, route-table, vpc-endpoint-s3, security-group, ec2, lambda, ecs, ecr, s3, rds, db-subnet-group, alb, route53, cloudfront, acm, iam-role, iam-policy]
 cell_values: [valid, conditional, invalid, none]
 direction: "a cell reads from the row service to the column service, in the direction the mechanism is drawn or derived"
-counts: { valid: 40, conditional: 21, invalid: 42, none: 297 }
+counts: { valid: 44, conditional: 19, invalid: 46, none: 332 }
 status: unverified
 pairs:
   - { from: vpc, to: vpc, value: none, mechanism: "-", note: "a resource of this kind has no relationship to another of the same kind" }
@@ -20,7 +20,8 @@ pairs:
   - { from: vpc, to: ecs, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: vpc, to: ecr, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: vpc, to: s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
-  - { from: vpc, to: rds, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: vpc, to: rds, value: valid, mechanism: "containment", note: "an instance belongs to one VPC and uses a DB subnet group of its subnets; derived from nesting" }
+  - { from: vpc, to: db-subnet-group, value: valid, mechanism: "containment", note: "a DB subnet group belongs to one VPC; derived from nesting" }
   - { from: vpc, to: alb, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: vpc, to: route53, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: vpc, to: cloudfront, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
@@ -40,7 +41,8 @@ pairs:
   - { from: subnet, to: ecs, value: valid, mechanism: "containment", note: "tasks run in 1 to 16 subnets of one VPC" }
   - { from: subnet, to: ecr, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: subnet, to: s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
-  - { from: subnet, to: rds, value: conditional, mechanism: "containment", note: "placed through a DB subnet group of 2 to 20 subnets in at least two AZs; see db-subnet-group" }
+  - { from: subnet, to: rds, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: subnet, to: db-subnet-group, value: valid, mechanism: "containment", note: "the group is made of 2 to 20 subnets in at least two AZs of one VPC; a subnet is added by a line" }
   - { from: subnet, to: alb, value: conditional, mechanism: "containment", note: "at least two subnets in different AZs, each at least /27 with 8 free addresses" }
   - { from: subnet, to: route53, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: subnet, to: cloudfront, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
@@ -61,6 +63,7 @@ pairs:
   - { from: internet-gateway, to: ecr, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: internet-gateway, to: s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: internet-gateway, to: rds, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: internet-gateway, to: db-subnet-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: internet-gateway, to: alb, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: internet-gateway, to: route53, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: internet-gateway, to: cloudfront, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
@@ -81,6 +84,7 @@ pairs:
   - { from: nat-gateway, to: ecr, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: nat-gateway, to: s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: nat-gateway, to: rds, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: nat-gateway, to: db-subnet-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: nat-gateway, to: alb, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: nat-gateway, to: route53, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: nat-gateway, to: cloudfront, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
@@ -101,6 +105,7 @@ pairs:
   - { from: elastic-ip, to: ecr, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: elastic-ip, to: s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: elastic-ip, to: rds, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: elastic-ip, to: db-subnet-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: elastic-ip, to: alb, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: elastic-ip, to: route53, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: elastic-ip, to: cloudfront, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
@@ -121,6 +126,7 @@ pairs:
   - { from: route-table, to: ecr, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: route-table, to: s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: route-table, to: rds, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: route-table, to: db-subnet-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: route-table, to: alb, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: route-table, to: route53, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: route-table, to: cloudfront, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
@@ -141,6 +147,7 @@ pairs:
   - { from: vpc-endpoint-s3, to: ecr, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: vpc-endpoint-s3, to: s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: vpc-endpoint-s3, to: rds, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: vpc-endpoint-s3, to: db-subnet-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: vpc-endpoint-s3, to: alb, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: vpc-endpoint-s3, to: route53, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: vpc-endpoint-s3, to: cloudfront, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
@@ -161,6 +168,7 @@ pairs:
   - { from: security-group, to: ecr, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: security-group, to: s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: security-group, to: rds, value: valid, mechanism: "sg-attach", note: "attached through vpc_security_group_ids" }
+  - { from: security-group, to: db-subnet-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: security-group, to: alb, value: valid, mechanism: "sg-attach", note: "required for an application load balancer" }
   - { from: security-group, to: route53, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: security-group, to: cloudfront, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
@@ -181,6 +189,7 @@ pairs:
   - { from: ec2, to: ecr, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: ec2, to: s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: ec2, to: rds, value: valid, mechanism: "network-access", note: "same VPC; implemented as ingress on the callee's group referencing the caller's group" }
+  - { from: ec2, to: db-subnet-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: ec2, to: alb, value: invalid, mechanism: "-", note: "direction: listener-target is drawn from alb to ec2" }
   - { from: ec2, to: route53, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: ec2, to: cloudfront, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
@@ -201,6 +210,7 @@ pairs:
   - { from: lambda, to: ecr, value: invalid, mechanism: "-", note: "direction: image-source is drawn from ecr to lambda" }
   - { from: lambda, to: s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: lambda, to: rds, value: conditional, mechanism: "network-access", note: "the function must be attached to the same VPC" }
+  - { from: lambda, to: db-subnet-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: lambda, to: alb, value: invalid, mechanism: "-", note: "direction: listener-target is drawn from alb to lambda" }
   - { from: lambda, to: route53, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: lambda, to: cloudfront, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
@@ -221,6 +231,7 @@ pairs:
   - { from: ecs, to: ecr, value: invalid, mechanism: "-", note: "direction: image-source is drawn from ecr to ecs" }
   - { from: ecs, to: s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: ecs, to: rds, value: valid, mechanism: "network-access", note: "same VPC; implemented as ingress on the callee's group referencing the caller's group" }
+  - { from: ecs, to: db-subnet-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: ecs, to: alb, value: invalid, mechanism: "-", note: "direction: listener-target is drawn from alb to ecs" }
   - { from: ecs, to: route53, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: ecs, to: cloudfront, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
@@ -241,6 +252,7 @@ pairs:
   - { from: ecr, to: ecr, value: none, mechanism: "-", note: "a resource of this kind has no relationship to another of the same kind" }
   - { from: ecr, to: s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: ecr, to: rds, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: ecr, to: db-subnet-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: ecr, to: alb, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: ecr, to: route53, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: ecr, to: cloudfront, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
@@ -261,14 +273,15 @@ pairs:
   - { from: s3, to: ecr, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: s3, to: s3, value: none, mechanism: "-", note: "a resource of this kind has no relationship to another of the same kind" }
   - { from: s3, to: rds, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: s3, to: db-subnet-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: s3, to: alb, value: invalid, mechanism: "-", note: "direction: resource-policy is drawn from alb to s3" }
   - { from: s3, to: route53, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: s3, to: cloudfront, value: invalid, mechanism: "-", note: "direction: origin is drawn from cloudfront to s3" }
   - { from: s3, to: acm, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: s3, to: iam-role, value: invalid, mechanism: "-", note: "direction: grant is drawn from iam-role to s3" }
   - { from: s3, to: iam-policy, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
-  - { from: rds, to: vpc, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
-  - { from: rds, to: subnet, value: conditional, mechanism: "db-subnet-group", note: "2 to 20 subnets in at least two AZs of one VPC" }
+  - { from: rds, to: vpc, value: invalid, mechanism: "-", note: "direction: containment is drawn from vpc to rds" }
+  - { from: rds, to: subnet, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: rds, to: internet-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: rds, to: nat-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: rds, to: elastic-ip, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
@@ -281,12 +294,34 @@ pairs:
   - { from: rds, to: ecr, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: rds, to: s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: rds, to: rds, value: none, mechanism: "-", note: "a resource of this kind has no relationship to another of the same kind" }
+  - { from: rds, to: db-subnet-group, value: valid, mechanism: "db-subnet-group", note: "the instance uses exactly one group (db_subnet_group_name)" }
   - { from: rds, to: alb, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: rds, to: route53, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: rds, to: cloudfront, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: rds, to: acm, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: rds, to: iam-role, value: invalid, mechanism: "-", note: "direction: assume-role is drawn from iam-role to rds" }
   - { from: rds, to: iam-policy, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: db-subnet-group, to: vpc, value: invalid, mechanism: "-", note: "direction: containment is drawn from vpc to db-subnet-group" }
+  - { from: db-subnet-group, to: subnet, value: invalid, mechanism: "-", note: "direction: containment is drawn from subnet to db-subnet-group" }
+  - { from: db-subnet-group, to: internet-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: db-subnet-group, to: nat-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: db-subnet-group, to: elastic-ip, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: db-subnet-group, to: route-table, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: db-subnet-group, to: vpc-endpoint-s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: db-subnet-group, to: security-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: db-subnet-group, to: ec2, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: db-subnet-group, to: lambda, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: db-subnet-group, to: ecs, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: db-subnet-group, to: ecr, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: db-subnet-group, to: s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: db-subnet-group, to: rds, value: invalid, mechanism: "-", note: "direction: db-subnet-group is drawn from rds to db-subnet-group" }
+  - { from: db-subnet-group, to: db-subnet-group, value: none, mechanism: "-", note: "a resource of this kind has no relationship to another of the same kind" }
+  - { from: db-subnet-group, to: alb, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: db-subnet-group, to: route53, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: db-subnet-group, to: cloudfront, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: db-subnet-group, to: acm, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: db-subnet-group, to: iam-role, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: db-subnet-group, to: iam-policy, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: alb, to: vpc, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: alb, to: subnet, value: invalid, mechanism: "-", note: "direction: containment is drawn from subnet to alb" }
   - { from: alb, to: internet-gateway, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
@@ -301,6 +336,7 @@ pairs:
   - { from: alb, to: ecr, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: alb, to: s3, value: conditional, mechanism: "resource-policy", note: "access logs only; the bucket needs a statement for the log delivery principal" }
   - { from: alb, to: rds, value: invalid, mechanism: "-", note: "a load balancer forwards to target groups, never to a database" }
+  - { from: alb, to: db-subnet-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: alb, to: alb, value: none, mechanism: "-", note: "a resource of this kind has no relationship to another of the same kind" }
   - { from: alb, to: route53, value: invalid, mechanism: "-", note: "direction: dns-alias is drawn from route53 to alb" }
   - { from: alb, to: cloudfront, value: invalid, mechanism: "-", note: "direction: origin is drawn from cloudfront to alb" }
@@ -321,6 +357,7 @@ pairs:
   - { from: route53, to: ecr, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: route53, to: s3, value: invalid, mechanism: "-", note: "alias to an S3 website endpoint is not specified in this version; serve a static site through CloudFront instead" }
   - { from: route53, to: rds, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: route53, to: db-subnet-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: route53, to: alb, value: valid, mechanism: "dns-alias", note: "alias A record; evaluate_target_health is required" }
   - { from: route53, to: route53, value: none, mechanism: "-", note: "a resource of this kind has no relationship to another of the same kind" }
   - { from: route53, to: cloudfront, value: conditional, mechanism: "dns-alias", note: "public zone; the distribution must list the name in aliases with a covering certificate" }
@@ -341,6 +378,7 @@ pairs:
   - { from: cloudfront, to: ecr, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: cloudfront, to: s3, value: valid, mechanism: "origin", note: "regular endpoint with origin access control; the platform adds the bucket policy statement" }
   - { from: cloudfront, to: rds, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: cloudfront, to: db-subnet-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: cloudfront, to: alb, value: conditional, mechanism: "origin", note: "the ALB must be internet-facing; with HTTPS its certificate must match the origin name" }
   - { from: cloudfront, to: route53, value: invalid, mechanism: "-", note: "direction: dns-alias is drawn from route53 to cloudfront" }
   - { from: cloudfront, to: cloudfront, value: none, mechanism: "-", note: "a resource of this kind has no relationship to another of the same kind" }
@@ -361,6 +399,7 @@ pairs:
   - { from: acm, to: ecr, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: acm, to: s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: acm, to: rds, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: acm, to: db-subnet-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: acm, to: alb, value: conditional, mechanism: "cert-attach", note: "same Region as the load balancer (unverified); must cover every served name" }
   - { from: acm, to: route53, value: valid, mechanism: "cert-validation", note: "derived: one CNAME per distinct validation name; the zone must be delegated" }
   - { from: acm, to: cloudfront, value: conditional, mechanism: "cert-attach", note: "the certificate must be in us-east-1; needs a provider alias" }
@@ -381,6 +420,7 @@ pairs:
   - { from: iam-role, to: ecr, value: valid, mechanism: "grant", note: "levels pull and push; image pulls by ECS and Lambda need no explicit grant" }
   - { from: iam-role, to: s3, value: valid, mechanism: "grant", note: "same account needs only the identity grant; levels read and readwrite" }
   - { from: iam-role, to: rds, value: conditional, mechanism: "assume-role", note: "monitoring role (assume-role) or IAM database authentication (grant, unverified); both need the condition stated" }
+  - { from: iam-role, to: db-subnet-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: iam-role, to: alb, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: iam-role, to: route53, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: iam-role, to: cloudfront, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
@@ -401,6 +441,7 @@ pairs:
   - { from: iam-policy, to: ecr, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: iam-policy, to: s3, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: iam-policy, to: rds, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
+  - { from: iam-policy, to: db-subnet-group, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: iam-policy, to: alb, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: iam-policy, to: route53, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
   - { from: iam-policy, to: cloudfront, value: none, mechanism: "-", note: "AWS has no direct relationship between them in this scope" }
@@ -411,7 +452,7 @@ pairs:
 
 # Service relation matrix
 
-Every ordered pair of the 20 Tier 1 services has exactly one value (see [00-conventions](../00-conventions.md#8-matrix-cells)).
+Every ordered pair of the 21 Tier 1 services has exactly one value (see [00-conventions](../00-conventions.md#8-matrix-cells)).
 The list in the front matter is the source of truth; the grid below is a view of it.
 
 A cell reads **from the row service to the column service**, in the direction the mechanism is drawn or derived

@@ -1,9 +1,10 @@
-resource "aws_db_subnet_group" "db" {
-  name       = "db"
-  subnet_ids = [aws_subnet.db_a.id, aws_subnet.db_b.id]
+resource "aws_db_subnet_group" "db_group" {
+  name        = "backend-db"
+  description = "Managed by av2i"
+  subnet_ids  = [aws_subnet.db_a.id, aws_subnet.db_b.id]
 
   tags = {
-    Name = "Database"
+    Name = "Database subnets"
   }
 }
 
@@ -15,7 +16,7 @@ resource "aws_db_instance" "db" {
   storage_encrypted           = true
   username                    = "app"
   manage_master_user_password = true
-  db_subnet_group_name        = aws_db_subnet_group.db.name
+  db_subnet_group_name        = aws_db_subnet_group.db_group.name
   vpc_security_group_ids      = [aws_security_group.sg_db.id]
   publicly_accessible         = false
   backup_retention_period     = 7

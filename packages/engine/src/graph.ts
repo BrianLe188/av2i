@@ -104,7 +104,7 @@ export class Graph {
 
   /**
    * Subnets a workload spans: its parent plus any subnet connected by a containment edge, and for a database the
-   * subnets of its DB subnet group. In design order, without repeats.
+   * subnets of the DB subnet group it is drawn to. In design order, without repeats.
    */
   subnetsOf(key: string): NormalizedNode[] {
     const out: NormalizedNode[] = [];
@@ -112,9 +112,16 @@ export class Graph {
     add(this.subnetOf(key));
     for (const e of this.design.edges) {
       if (e.mechanism === "containment" && e.to === key) add(this.nodes.get(e.from));
-      if (e.mechanism === "db-subnet-group" && e.from === key) add(this.nodes.get(e.to));
+      if (e.mechanism === "db-subnet-group" && e.from === key) for (const s of this.subnetsOf(e.to)) add(s);
     }
     return out;
+  }
+
+  /** The DB subnet group a database is drawn to. */
+  dbSubnetGroupOf(db: string): NormalizedNode | undefined {
+    const e = this.edges("db-subnet-group").find((x) => x.from === db);
+    const n = e ? this.nodes.get(e.to) : undefined;
+    return n?.service === "db-subnet-group" ? n : undefined;
   }
 
   /** Roles a consumer runs as, with the slot each fills (assume-role edges run from the role to the consumer). */

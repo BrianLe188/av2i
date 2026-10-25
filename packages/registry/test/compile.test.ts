@@ -33,7 +33,7 @@ describe("the real specification", () => {
   });
 
   it("compiles every service, mechanism and rule", () => {
-    expect(Object.keys(registry.services)).toHaveLength(20);
+    expect(Object.keys(registry.services)).toHaveLength(21);
     expect(Object.keys(registry.mechanisms)).toHaveLength(20);
     expect(Object.keys(registry.rules).length).toBeGreaterThan(170);
     expect(registry.matrix.pairs).toHaveLength(registry.matrix.services.length ** 2);

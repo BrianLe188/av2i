@@ -3,8 +3,8 @@ id: containment
 title: { vi: "Chứa / đặt trong", en: "Containment (placement)" }
 participants:
   - { role: parent, service: vpc }
-  - { role: child_vpc_level, service: [subnet, route-table, security-group, internet-gateway, nat-gateway, vpc-endpoint-s3] }
-  - { role: child_subnet_level, service: [nat-gateway, ec2, ecs, lambda, rds, alb] }
+  - { role: child_vpc_level, service: [subnet, route-table, security-group, internet-gateway, nat-gateway, vpc-endpoint-s3, db-subnet-group, rds] }
+  - { role: child_subnet_level, service: [nat-gateway, ec2, ecs, lambda, alb, db-subnet-group] }
 direction: parent->child
 same_vpc: true
 cardinality: { parent: one, child: one }     # a child has exactly one VPC; subnet-level children have one or more subnets (see cases)
@@ -39,7 +39,8 @@ the user draws. It is the nesting on the canvas, and every mechanism marked `sam
 | ecs (Fargate service) | 1 to 16 subnets | many | Each task gets one network interface in one of the subnets (verified, see [ecs](../services/ecs.md)). Two or more AZs recommended |
 | lambda | none, or 1 or more subnets of one VPC | optional | Hyperplane interfaces in the chosen subnets; two or more AZs recommended; a VPC with dedicated tenancy is not supported (verified, see [lambda](../services/lambda.md)) |
 | ecr | none | none | Regional, outside any VPC |
-| rds | 2 to 20 subnets through a DB subnet group, in at least two AZs, one VPC | optional per instance | The instance runs in one of the group's subnets and so one AZ chosen by RDS (verified, see [rds](../services/rds.md) and [db-subnet-group](db-subnet-group.md)) |
+| db-subnet-group | 2 to 20 subnets, in at least two AZs, one VPC | many | The group is the set of subnets RDS may use; a line from each subnet adds it (verified, see [db-subnet-group](../services/db-subnet-group.md)) |
+| rds | none | none | The instance sits in the VPC and uses a DB subnet group; RDS picks the subnet and so the AZ (verified, see [rds](../services/rds.md) and [db-subnet-group](db-subnet-group.md)) |
 | s3 | none | none | Regional, outside any VPC |
 | alb | at least 2 subnets, one per AZ, in one VPC | many | Public subnets for internet-facing, private for internal (the public requirement is `unverified`). Each subnet at least /27 with 8 free addresses (verified, see [alb](../services/alb.md)) |
 | route53, cloudfront | none | none | Global, outside any VPC |

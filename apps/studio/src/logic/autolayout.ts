@@ -78,15 +78,11 @@ export function layoutInput(design: Design, analysis: Analysis, measured: Readon
       publicSubnets = new Set([...facts.subnets].filter(([, f]) => f.public).map(([k]) => k));
     } catch { /* an unfinished design has no facts: its subnets are placed by name */ }
   }
-  // a database sits in one subnet and reaches the others of its subnet group by a line, so the subnets on either end hold data
+  // the subnets of a DB subnet group are where the data lives, whichever databases use the group
   const dataSubnets = new Set<string>();
-  for (const n of visual.nodes) {
-    if (n.service !== "rds") continue;
-    if (n.parent) dataSubnets.add(n.parent);
-    for (const e of design.edges) {
-      const other = e.from === n.key ? e.to : e.to === n.key ? e.from : null;
-      if (other && visual.nodes.find((v) => v.key === other)?.service === "subnet") dataSubnets.add(other);
-    }
+  for (const e of design.edges) {
+    if (e.mechanism !== "containment") continue;
+    if (visual.nodes.find((v) => v.key === e.to)?.service === "db-subnet-group") dataSubnets.add(e.from);
   }
   const holdsData = (key: string) => dataSubnets.has(key);
   const tierOf = (key: string) => (publicSubnets.has(key) ? TIER_PUBLIC : holdsData(key) ? TIER_DATA : TIER_APP);

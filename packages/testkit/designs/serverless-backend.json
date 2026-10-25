@@ -227,10 +227,19 @@
       }
     },
     {
+      "key": "db_group",
+      "label": "Database subnets",
+      "service": "db-subnet-group",
+      "parent": "vpc",
+      "props": {
+        "name": "data-db"
+      }
+    },
+    {
       "key": "db",
       "label": "Database",
       "service": "rds",
-      "parent": "priv_a",
+      "parent": "vpc",
       "props": {
         "engine": "postgres",
         "instance_class": "db.t3.micro",
@@ -339,10 +348,22 @@
       "to": "data_fn"
     },
     {
-      "id": "e_db_b",
+      "id": "e_dbg_a",
+      "mechanism": "containment",
+      "from": "priv_a",
+      "to": "db_group"
+    },
+    {
+      "id": "e_dbg_b",
+      "mechanism": "containment",
+      "from": "priv_b",
+      "to": "db_group"
+    },
+    {
+      "id": "e_db_group",
       "mechanism": "db-subnet-group",
       "from": "db",
-      "to": "priv_b"
+      "to": "db_group"
     },
     {
       "id": "e_sg_alb",

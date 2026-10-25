@@ -76,7 +76,10 @@ const cases: Case[] = [
   c("VAL-060", "no instance class", CB, true, unset("db", "props.instance_class")),
   c("VAL-060", "no storage", CB, true, unset("db", "props.allocated_storage")),
   c("VAL-060", "no user", CB, true, unset("db", "props.username")),
-  c("VAL-060", "no subnet group", CB, true, remove("db-subnet-group", "db", "db_b"), { op: "set", node: "db", path: "parent", value: null }),
+  c("VAL-060", "no subnet group", CB, true, remove("db-subnet-group", "db", "db_group")),
+  c("VAL-058", "a group with one subnet", CB, true, remove("containment", "db_b", "db_group")),
+  c("VAL-058", "a group with two subnets in two zones", CB, false),
+  c("VAL-058", "a group with no instance still needs two zones", CB, true, remove("db-subnet-group", "db", "db_group"), remove("containment", "db_b", "db_group")),
   c("VAL-060", "neither a password nor a managed one", CB, true, set("db", "props.manage_master_user_password", false)),
   c("VAL-060", "a password and not a managed one", CB, false, set("db", "props.manage_master_user_password", false), set("db", "props.password", "Sup3rSecretPass")),
 

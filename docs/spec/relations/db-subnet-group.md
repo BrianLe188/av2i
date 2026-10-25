@@ -3,13 +3,12 @@ id: db-subnet-group
 title: { vi: "Nhóm subnet của cơ sở dữ liệu", en: "DB subnet group" }
 participants:
   - { role: database, service: rds }
-  - { role: members, service: subnet }
-direction: database->members
+  - { role: group, service: db-subnet-group }
+direction: database->group
 same_vpc: true
-cardinality: { database: one, members: "2 to 20" }      # one group per instance; a group may serve many instances
-user_drawn: true                                         # the user picks the subnets; the platform creates the group object
+cardinality: { database: one, group: one }               # one group per instance; a group may serve many instances. The group's own 2 to 20 subnets come from containment lines
+user_drawn: true                                         # the user draws the instance to its group, and the subnets into the group
 generates:
-  - { terraform: "aws_db_subnet_group (name, subnet_ids)", on: group }
   - { terraform: "aws_db_instance.db_subnet_group_name", on: database }
 conditions:
   - { text: { vi: "Ít nhất hai subnet ở hai Availability Zone khác nhau", en: "At least two subnets in two different Availability Zones" }, when: always }
@@ -29,8 +28,9 @@ status: verified          # items marked unverified in the cases below
 
 A DB subnet group is the set of subnets RDS may use for an instance. RDS picks one subnet and one address from it
 and the instance lives in that subnet's AZ (S1). It exists so that a standby can be placed in another AZ on
-failover or conversion to Multi-AZ. On the canvas this is "the database lives in these subnets"; the platform
-creates the group object.
+failover or conversion to Multi-AZ. On the canvas the group is its own node, as it is its own resource in AWS: the
+subnets are drawn into it with a line (a containment line from each subnet), and each database is drawn to the group it
+uses. The database is not placed in a subnet.
 
 ## Cases
 

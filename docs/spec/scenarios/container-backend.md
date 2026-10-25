@@ -1,7 +1,7 @@
 ---
 id: container-backend
 title: { vi: "Backend container: ECS Fargate, ECR, RDS, S3 và Lambda trong VPC", en: "Container backend: ECS Fargate, ECR, RDS, S3 and Lambda in a VPC" }
-services: [vpc, subnet, internet-gateway, nat-gateway, elastic-ip, route-table, security-group, ecs, ecr, rds, s3, lambda, iam-role, ec2]
+services: [vpc, subnet, internet-gateway, nat-gateway, elastic-ip, route-table, security-group, ecs, ecr, rds, db-subnet-group, s3, lambda, iam-role, ec2]
 executable: true
 design:
   schema: 1
@@ -27,7 +27,8 @@ design:
     - { key: repo, label: "Backend images", service: ecr, props: { name: backend, image_tag_mutability: IMMUTABLE, image_scanning_configuration: { scan_on_push: true } } }
     - { key: cluster, label: "Backend cluster", service: ecs, props: { part: cluster, name: backend } }
     - { key: web, label: "Web", service: ecs, parent: app_a, props: { part: service, name: web, cluster: cluster, cpu: "512", memory: "1024", desired_count: 2, container_port: 8080, image_tag: v1 } }
-    - { key: db, label: "Database", service: rds, parent: db_a, props: { engine: postgres, instance_class: db.t3.micro, allocated_storage: 20, username: app, deletion_protection: true } }
+    - { key: db, label: "Database", service: rds, parent: vpc, props: { engine: postgres, instance_class: db.t3.micro, allocated_storage: 20, username: app, deletion_protection: true } }
+    - { key: db_group, label: "Database subnets", service: db-subnet-group, parent: vpc, props: { name: backend-db } }
     - { key: files, label: "Files", service: s3, props: { bucket: av2i-example-files } }
     - { key: task_role, label: "Task role", service: iam-role, props: { name: backend-task } }
     - { key: fn, label: "Worker", service: lambda, parent: app_a, props: { function_name: worker, filename: lambda.zip, handler: index.handler, runtime: nodejs22.x, memory_size: 256, timeout: 10 } }
@@ -41,7 +42,9 @@ design:
     - { id: e_rt_app_b_app, mechanism: route-association, from: rt_app_b, to: app_b }
     - { id: e_web_b, mechanism: containment, from: app_b, to: web }
     - { id: e_fn_b, mechanism: containment, from: app_b, to: fn }
-    - { id: e_db_b, mechanism: db-subnet-group, from: db, to: db_b }
+    - { id: e_dbg_a, mechanism: containment, from: db_a, to: db_group }
+    - { id: e_dbg_b, mechanism: containment, from: db_b, to: db_group }
+    - { id: e_db_group, mechanism: db-subnet-group, from: db, to: db_group }
     - { id: e_sg_task, mechanism: sg-attach, from: sg_task, to: web }
     - { id: e_sg_db, mechanism: sg-attach, from: sg_db, to: db }
     - { id: e_sg_fn, mechanism: sg-attach, from: sg_fn, to: fn }
@@ -82,8 +85,8 @@ variants:
   - { id: lambda-image, change: "the function runs an image from the repository", patch: [{"op": "unset", "node": "fn", "path": "props.filename"}, {"op": "unset", "node": "fn", "path": "props.handler"}, {"op": "unset", "node": "fn", "path": "props.runtime"}, {"op": "add-edge", "edge": {"id": "e_repo_fn", "mechanism": "image-source", "from": "repo", "to": "fn"}}], fires: [SEC-010], severity: info }
   - { id: lambda-image-tag, change: "the function runs the image tagged v1", patch: [{"op": "unset", "node": "fn", "path": "props.filename"}, {"op": "unset", "node": "fn", "path": "props.handler"}, {"op": "unset", "node": "fn", "path": "props.runtime"}, {"op": "set", "node": "fn", "path": "props.image_tag", "value": "v1"}, {"op": "add-edge", "edge": {"id": "e_repo_fn", "mechanism": "image-source", "from": "repo", "to": "fn"}}], fires: [], severity: info }
   - { id: db-open, change: "the database port open to the world", patch: [{"op": "set", "node": "sg_db", "path": "props.ingress_rules", "value": [{"ip_protocol": "tcp", "from_port": 5432, "to_port": 5432, "cidr_ipv4": "0.0.0.0/0"}]}], fires: [SEC-023], severity: error }
-  - { id: db-one-subnet, change: "the database spans one subnet", patch: [{"op": "remove-edge", "mechanism": "db-subnet-group", "from": "db", "to": "db_b"}], fires: [VAL-058], severity: error }
-  - { id: db-multi-az-one-az, change: "multi_az with one Availability Zone", patch: [{"op": "remove-edge", "mechanism": "db-subnet-group", "from": "db", "to": "db_b"}, {"op": "set", "node": "db", "path": "props.multi_az", "value": true}], fires: [VAL-058, VAL-067], severity: error }
+  - { id: db-one-subnet, change: "the database spans one subnet", patch: [{"op": "remove-edge", "mechanism": "containment", "from": "db_b", "to": "db_group"}], fires: [VAL-058], severity: error }
+  - { id: db-multi-az-one-az, change: "multi_az with one Availability Zone", patch: [{"op": "remove-edge", "mechanism": "containment", "from": "db_b", "to": "db_group"}, {"op": "set", "node": "db", "path": "props.multi_az", "value": true}], fires: [VAL-058, VAL-067], severity: error }
   - { id: db-bad-identifier, change: "an identifier with two hyphens", patch: [{"op": "set", "node": "db", "path": "props.identifier", "value": "bad--id"}], fires: [VAL-059], severity: error }
   - { id: db-no-username, change: "no master user", patch: [{"op": "unset", "node": "db", "path": "props.username"}], fires: [VAL-060], severity: error }
   - { id: db-short-password, change: "a password of 5 characters", patch: [{"op": "set", "node": "db", "path": "props.password", "value": "abc12"}], fires: [SEC-020, VAL-061], severity: error }
@@ -152,7 +155,7 @@ gateway per Availability Zone so that no private subnet depends on another zone.
 
 - A service in several subnets and a function in a VPC take the extra subnets from `containment` edges drawn from the
   subnet to the workload; `parent` is the first subnet (DD-014).
-- A database lives in `parent` and the subnets it is connected to with `db-subnet-group` edges.
+- A database lives in the VPC and uses a DB subnet group, which is its own node: the subnets are drawn into it with `containment` edges from the subnet and the database is drawn to it with a `db-subnet-group` edge.
 - An ECS node is a cluster or a service (`props.part`); the task definition is generated from the service (DD-014).
 - A required role is derived when the slot is empty, so VAL-044 and the "no role" half of VAL-110 hold by construction;
   a role the user draws into a required slot must hold the managed policy itself (VAL-111, VAL-116).

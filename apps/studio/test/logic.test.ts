@@ -184,8 +184,11 @@ describe("the M3 services", () => {
     expect(canPlace(reg, null, "ecs", { part: "cluster" }).ok).toBe(true);
     expect(canPlace(reg, null, "ecs", { part: "service" }).ok).toBe(false);
     expect(canPlace(reg, "subnet", "ecs", { part: "service" }).ok).toBe(true);
-    expect(canPlace(reg, "subnet", "rds").ok).toBe(true);
+    expect(canPlace(reg, "vpc", "rds").ok).toBe(true);
+    expect(canPlace(reg, "subnet", "rds").ok).toBe(false);
     expect(canPlace(reg, null, "rds").ok).toBe(false);
+    expect(canPlace(reg, "vpc", "db-subnet-group").ok).toBe(true);
+    expect(canPlace(reg, null, "db-subnet-group").ok).toBe(false);
   });
 
   it("shows only the properties of the part", () => {
@@ -205,7 +208,8 @@ describe("the M3 services", () => {
     is("web", "repo", "image-source", "repo");
     is("web", "task_role", "assume-role", "task_role");
     is("files", "task_role", "grant", "task_role");
-    is("db", "db_a", "db-subnet-group", "db");
+    is("db", "db_group", "db-subnet-group", "db");
+    is("db_a", "db_group", "containment", "db_a");
     is("web", "db", "network-access", "web");
     is("web", "pub_a", "containment", "pub_a");
   });

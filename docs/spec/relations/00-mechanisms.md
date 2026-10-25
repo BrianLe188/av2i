@@ -20,7 +20,7 @@ documentation. Treat the participants and notes as the working hypothesis to con
 | `sg-reference` | security-group, security-group | a to b | A rule allows traffic from or to another group instead of a CIDR | `referenced_security_group_id` on the rule |
 | `network-access` | ec2 / lambda / ecs, rds; alb, ec2 / ecs | caller to callee | One workload may reach another on a port; implemented as security group rules | ingress rule on the callee's group |
 | `egress-path` | ec2 / ecs / lambda, route-table, internet-gateway, nat-gateway | derived | Whether a workload can reach the internet or AWS public endpoints, from placement, routes and addresses. Reported, not drawn | none of its own |
-| `db-subnet-group` | rds, subnet (two or more) | rds to subnets | RDS needs subnets in at least two availability zones | `aws_db_subnet_group` |
+| `db-subnet-group` | rds, db-subnet-group | rds to group | A DB instance uses a DB subnet group, which holds subnets in at least two availability zones (the subnets join the group by `containment`) | `aws_db_instance.db_subnet_group_name` |
 | `listener-target` | alb, ec2 / ecs (and lambda) | alb to target | The load balancer forwards listener traffic to a target group | `aws_lb_listener`, `aws_lb_target_group`, attachment |
 | `assume-role` | iam-role, ec2 / lambda / ecs | role to consumer | A service runs as a role; the trust policy names who may assume it | `aws_iam_role` trust policy, instance profile, `role`, `task_role_arn`, `execution_role_arn` |
 | `grant` | iam-role, s3 / ecr / rds (and later more) | role to target | The role may perform a set of actions on the target | `aws_iam_role_policy` statements |

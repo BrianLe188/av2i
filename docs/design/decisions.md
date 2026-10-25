@@ -159,7 +159,8 @@ list; (2) `parent` is the first subnet and the others are extra `containment` ed
 "subnet group" node. Chosen: (2). It keeps the canvas nesting (a workload sits in one subnet box), reuses a mechanism the matrix
 already has (subnet to ecs and lambda are `containment`) and needs no new node type. A database is the same with
 `db-subnet-group` edges from the instance to its other subnets; the DB subnet group resource is created from them, as the
-specification says the platform does. `Graph.subnetsOf` is the one place that knows this.
+specification says the platform does. `Graph.subnetsOf` is the one place that knows this. The database part of this decision is
+superseded by DD-022.
 
 The spec gives ECS three resources. A node is a cluster or a service (`props.part`); the task definition is generated from the
 service, because a service and its task definition never exist apart in a Fargate design and one node keeps the canvas short.
@@ -341,4 +342,23 @@ It stops working when revoked, expired, or the account is disabled, and it is re
 cannot make or list tokens, change the password or log out (`403 session_required`), so a leaked one cannot mint others or lock the person
 out. At most 20 are active per person. Creating and revoking are audited (never the secret); each use only updates `last_used_at` and the
 address, at most once a minute. Not done: an administrator revoking someone else's token (disabling the account does it), SSO.
+
+## DD-022 The DB subnet group is a node of its own
+
+Status: decided (supersedes the database part of DD-014).
+
+In AWS a DB instance is never placed in a subnet. It is created in a VPC with a DB subnet group, a resource of its own that holds
+2 to 20 subnets in at least two AZs, and RDS picks the subnet and so the AZ. Drawing the instance inside one subnet and a line to
+the others made people read "the database is in that subnet", and made them connect the subnet it already sat in as well.
+
+Now `db-subnet-group` is a service (`aws_db_subnet_group`). It sits in the VPC. A subnet is added to it with a `containment` line
+from the subnet (the mechanism an ECS service or a Lambda function already uses for extra subnets), and a database is drawn to
+the group it uses with a `db-subnet-group` line (rds to group, one per database, a group may serve many). The database sits in the
+VPC, not in a subnet. The inspector of a group shows the subnets of its VPC as boxes; ticking one draws the same line, so the
+lines and the boxes are one fact and cannot disagree. VAL-058 now checks the group as a node (2 to 20 subnets, one VPC, two AZs),
+whether or not a database uses it; VAL-060 still fires for a database with no group.
+
+A design saved before this change is upgraded when it is opened (`upgradeDesign` in `@av2i/model`): each database in a subnet gets
+a group named as the old group was, with the subnets it spanned, and moves up to the VPC. The Terraform it writes keeps the same
+group name; only the resource address changes (the group key instead of the database key).
 

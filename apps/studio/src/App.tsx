@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Design } from "@av2i/model";
+import { upgradeDesign, type Design } from "@av2i/model";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,7 +38,7 @@ const classify = (e: unknown): Failure => (e instanceof ApiError ? (e.status ===
 export function App({ prefs, user, project }: { prefs: Prefs; user: User; project: ProjectFull }) {
   const projectId = project.project.id;
   const writable = project.can.write;
-  const initial = useMemo(() => withPositions(project.project.design), [project]);
+  const initial = useMemo(() => withPositions(upgradeDesign(project.project.design)), [project]);
   /** the design the server last gave us: a change that is exactly this object is not saved back */
   const fromServer = useRef<Design>(initial);
   const [hist, setHist] = useState(() => H.start(initial));
@@ -86,7 +86,7 @@ export function App({ prefs, user, project }: { prefs: Prefs; user: User; projec
   const edit = useCallback((f: (d: Design) => Design) => { if (writable) setHist((h) => H.push(h, f(h.present))); }, [writable]);
   /** what the server sent replaces the design on screen and is not saved back */
   const adopt = useCallback((d: Design, rev: number) => {
-    const next = withPositions(d);
+    const next = withPositions(upgradeDesign(d));
     fromServer.current = next;
     queue.adopt(rev, next);
     setHist(H.start(next));
@@ -120,7 +120,7 @@ export function App({ prefs, user, project }: { prefs: Prefs; user: User; projec
       return;
     }
     const r = addNode(reg, current, item.service, target, position, item.props);
-    setHist((h) => H.push(h, withPositions(r.design)));
+    setHist((h) => H.push(h, withPositions(upgradeDesign(r.design))));
     setSelection({ kind: "node", id: r.key });
     setFocus(new Set());
   }, [hist.present, selection, s, lang, writable]);
@@ -144,7 +144,7 @@ export function App({ prefs, user, project }: { prefs: Prefs; user: User; projec
     try {
       const d = JSON.parse(await file.text()) as Design;
       if (d.schema !== 1 || !Array.isArray(d.nodes) || !Array.isArray(d.edges)) throw new Error("not a design");
-      replace(withPositions(d));
+      replace(withPositions(upgradeDesign(d)));
       setToast(s.opened);
     } catch { setToast(s.badFile); }
   };

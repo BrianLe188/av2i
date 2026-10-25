@@ -9,8 +9,8 @@ export const DRAWN = ["route", "route-association", "sg-attach", "eip-attach", "
 const PLACEMENT = ["containment", "igw-attach", "nat-placement"];
 /** Where an undirected mechanism starts: the owner of the relation. */
 const SOURCE_FIRST = ["route-table", "security-group", "elastic-ip", "iam-role", "ecr", "acm", "route53", "cloudfront", "alb"];
-/** Services that may sit in several subnets: a subnet connected to one by a containment line adds a subnet. */
-const SPANS = ["ecs", "lambda", "alb"];
+/** Services that may sit in several subnets, and the DB subnet group, which is made of them: a subnet connected to one by a containment line adds a subnet. */
+const SPANS = ["ecs", "lambda", "alb", "db-subnet-group"];
 
 export const CONTAINERS = ["vpc", "subnet"];
 

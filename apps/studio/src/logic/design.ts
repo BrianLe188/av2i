@@ -4,7 +4,7 @@ import type { Design, Edge, Node, Props, Value } from "@av2i/model";
 const KEY_BASE: Record<string, string> = {
   vpc: "vpc", subnet: "subnet", "internet-gateway": "igw", "nat-gateway": "nat", "elastic-ip": "eip",
   "route-table": "rt", "vpc-endpoint-s3": "s3ep", "security-group": "sg", ec2: "ec2",
-  ecr: "repo", s3: "bucket", rds: "db", lambda: "fn", "iam-role": "role", alb: "alb", "iam-policy": "policy", acm: "cert", route53: "zone", cloudfront: "cdn",
+  ecr: "repo", s3: "bucket", rds: "db", "db-subnet-group": "dbsg", lambda: "fn", "iam-role": "role", alb: "alb", "iam-policy": "policy", acm: "cert", route53: "zone", cloudfront: "cdn",
 };
 
 /** Keys are immutable and become Terraform local names (DD-011): lowercase, digits and underscores. */
@@ -66,6 +66,8 @@ export function defaultProps(service: string, design: Design, parent: string | n
       return { availability_mode: "zonal", connectivity_type: "public" };
     case "security-group":
       return { name: key.replace(/_/g, "-"), description: "Managed by av2i", ingress_rules: [] };
+    case "db-subnet-group":
+      return { name: hyphen(key), description: "Managed by av2i" };
     case "ec2":
       return { instance_type: "t3.micro", metadata_options: { http_tokens: "required" }, root_block_device: { encrypted: true } };
     default:

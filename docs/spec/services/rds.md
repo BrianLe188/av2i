@@ -2,7 +2,7 @@
 id: rds
 title: { vi: "RDS (cơ sở dữ liệu quan hệ)", en: "Amazon RDS DB instance" }
 terraform:
-  resources: [aws_db_instance, aws_db_subnet_group]
+  resources: [aws_db_instance]
 scope: az
 placement:
   requires: [vpc, db-subnet-group]
@@ -262,14 +262,14 @@ patterns that fit a NoSQL service (Tier 2).
 
 ## Placement
 
-A DB subnet group of private subnets in two or more AZs of one VPC. The instance itself sits in one of them.
+VPC level, not in a subnet. The instance uses a [DB subnet group](db-subnet-group.md) of private subnets in two or more AZs of one VPC, and RDS places it in one of them.
 
 ## Relations
 
-- [db-subnet-group](../relations/db-subnet-group.md): the subnets it may use.
+- [db-subnet-group](../relations/db-subnet-group.md): the [DB subnet group](db-subnet-group.md) whose subnets it may use.
 - [sg-attach](../relations/sg-attach.md): `vpc_security_group_ids`; at least one explicit group.
 - [network-access](../relations/network-access.md): callers (EC2, ECS, Lambda) reach it on the engine port.
-- containment: VPC through the subnet group.
+- containment: the VPC holds the instance; its subnets come from the DB subnet group.
 - [assume-role](../relations/assume-role.md): the Enhanced Monitoring role (`monitoring_role_arn`).
 - [grant](../relations/grant.md): IAM database authentication (`rds-db:connect`), an `unverified` registry row.
 
@@ -300,9 +300,9 @@ See front matter. Security: encrypt at creation ([SEC-018](../rules/security.md)
 
 ## Terraform mapping
 
-`aws_db_subnet_group` (`name`, `subnet_ids`) and `aws_db_instance` (`identifier`, `engine`, `engine_version`,
+`aws_db_instance` (`identifier`, `engine`, `engine_version`,
 `instance_class`, `allocated_storage`, `storage_type`, `storage_encrypted`, `db_name`, `username`,
-`manage_master_user_password` or `password`, `db_subnet_group_name`, `vpc_security_group_ids`,
+`manage_master_user_password` or `password`, `db_subnet_group_name` (the name of the [DB subnet group](db-subnet-group.md)), `vpc_security_group_ids`,
 `publicly_accessible`, `multi_az`, `backup_retention_period`, `deletion_protection`, `skip_final_snapshot`,
 `final_snapshot_identifier`, `tags`). Read the resolved engine version from `engine_version_actual` (S1). For the
 managed password, reference `master_user_secret[0].secret_arn` when ordering other resources after the instance

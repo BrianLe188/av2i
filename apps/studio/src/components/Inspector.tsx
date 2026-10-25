@@ -17,6 +17,7 @@ import type { Selection } from "../logic/flow.ts";
 import { title } from "../logic/placement.ts";
 import type { Lang, Strings } from "../i18n.ts";
 import { Fields } from "./Fields.tsx";
+import { GroupMembers } from "./GroupMembers.tsx";
 
 const REGIONS = ["ap-southeast-1", "ap-southeast-2", "ap-northeast-1", "ap-south-1", "us-east-1", "us-west-2", "eu-west-1", "eu-central-1"];
 
@@ -123,6 +124,7 @@ function NodePanel({ id, design, analysis, lang, s, onEdit, onSelect }: PanelPro
       <Meta label={s.key}>{node.key}</Meta>
       <Meta label={s.parent}>{parent ? parent.label : s.none}</Meta>
       <Fields fields={required} props={node.props} s={s} groups={groups} refs={refs} onSet={onSet} />
+      {node.service === "db-subnet-group" && <GroupMembers reg={reg} design={design} group={id} s={s} onEdit={onEdit} />}
       {optional.length > 0 && (
         <Collapsible className="mt-3">
           <CollapsibleTrigger className="group flex w-full items-center gap-1 text-sm text-muted-foreground hover:text-foreground">

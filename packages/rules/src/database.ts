@@ -7,13 +7,22 @@ const dbs = (ctx: Ctx) => ctx.g.nodesOf("rds");
 
 const azs = (ctx: Ctx, key: string) => new Set(ctx.g.subnetsOf(key).map((s) => text(s.props.availability_zone)).filter((a): a is string => !!a));
 
-/** Anything that fails here is also reported by the more specific rules; this one counts the group, not the instance. */
-export const VAL_058: RuleImpl = (ctx) =>
-  dbs(ctx).filter((d) => {
-    const subnets = ctx.g.subnetsOf(d.key);
+/** The group is checked as a node of its own: it holds 2 to 20 subnets of one VPC in two AZs, whether or not an instance uses it yet. */
+export const VAL_058: RuleImpl = (ctx) => {
+  const groups = ctx.g.nodesOf("db-subnet-group").filter((grp) => {
+    const subnets = ctx.g.subnetsOf(grp.key);
     const vpcs = new Set(subnets.map((s) => ctx.g.vpcOf(s.key)?.key));
-    return subnets.length < 2 || subnets.length > 20 || vpcs.size > 1 || azs(ctx, d.key).size < 2;
-  }).map((d) => hit(d.key, ...ctx.g.subnetsOf(d.key).map((s) => s.key)));
+    const own = ctx.g.vpcOf(grp.key)?.key;
+    const zones = new Set(subnets.map((s) => text(s.props.availability_zone)).filter((a): a is string => !!a));
+    return subnets.length < 2 || subnets.length > 20 || vpcs.size > 1 || zones.size < 2 || (own !== undefined && vpcs.size === 1 && !vpcs.has(own));
+  }).map((grp) => hit(grp.key, ...ctx.g.subnetsOf(grp.key).map((s) => s.key)));
+  // an instance in another VPC than its group cannot use it
+  const apart = dbs(ctx).filter((d) => {
+    const grp = ctx.g.dbSubnetGroupOf(d.key);
+    return !!grp && ctx.g.vpcOf(d.key)?.key !== ctx.g.vpcOf(grp.key)?.key;
+  }).map((d) => hit(d.key));
+  return [...groups, ...apart];
+};
 
 export const VAL_059: RuleImpl = (ctx) =>
   dbs(ctx).filter((d) => {

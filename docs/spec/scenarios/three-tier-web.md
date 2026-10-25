@@ -1,7 +1,7 @@
 ---
 id: three-tier-web
 title: { vi: "Web 3 tầng: ALB, EC2, RDS", en: "Three-tier web: ALB, EC2, RDS" }
-services: [vpc, subnet, internet-gateway, nat-gateway, elastic-ip, route-table, vpc-endpoint-s3, security-group, ec2, rds, alb, route53, acm, iam-role, s3]
+services: [vpc, subnet, internet-gateway, nat-gateway, elastic-ip, route-table, vpc-endpoint-s3, security-group, ec2, rds, db-subnet-group, alb, route53, acm, iam-role, s3]
 nodes:
   - { id: vpc, service: vpc, props: { cidr_block: "10.0.0.0/16", enable_dns_support: true, enable_dns_hostnames: true } }
   - { id: igw, service: internet-gateway }
@@ -25,6 +25,7 @@ nodes:
   - { id: sg-db, service: security-group }
   - { id: alb, service: alb, props: { internal: false, load_balancer_type: application } }
   - { id: app, service: ec2, props: { count: 2, associate_public_ip_address: false } }
+  - { id: db-group, service: db-subnet-group }
   - { id: db, service: rds, props: { engine: postgres, multi_az: true, publicly_accessible: false, manage_master_user_password: true } }
   - { id: zone, service: route53, props: { zone: public } }
   - { id: cert, service: acm, props: { validation_method: DNS } }
@@ -55,7 +56,8 @@ connections:
   - { from: app, to: db, mechanism: network-access, kind: drawn, note: "port 5432" }
   - { from: sg-app, to: sg-alb, mechanism: sg-reference, kind: generated, note: "app ingress from the load balancer group, target and health check port" }
   - { from: sg-db, to: sg-app, mechanism: sg-reference, kind: generated, note: "database ingress from the app group on 5432" }
-  - { from: db, to: db-a, mechanism: db-subnet-group, kind: drawn, note: "db-a and db-b" }
+  - { from: db-a, to: db-group, mechanism: containment, kind: drawn, note: "db-a and db-b" }
+  - { from: db, to: db-group, mechanism: db-subnet-group, kind: drawn }
   - { from: zone, to: alb, mechanism: dns-alias, kind: drawn }
   - { from: cert, to: alb, mechanism: cert-attach, kind: drawn }
   - { from: cert, to: zone, mechanism: cert-validation, kind: derived }
