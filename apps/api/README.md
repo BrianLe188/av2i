@@ -37,6 +37,14 @@ The API reads `.env` at the repository root if it exists (`.env` is not committe
 | `SESSION_MAX_HOURS` | `168` | a session ends this long after sign in, used or not |
 | `STATIC_DIR` | unset | folder with the built studio (the image sets it) |
 | `TRUST_PROXY` | `false` | read the client address and protocol from `X-Forwarded-*`; set it behind a reverse proxy that does HTTPS |
+| `STATE_ENCRYPTION_KEY` | unset | 32 random bytes in base64 (`openssl rand -base64 32`) that encrypt OpenTofu state and stored plans. Without it runs are refused. Keep a copy: state cannot be read without it |
+| `TOFU_BIN` | `tofu` | the OpenTofu binary (the image has it) |
+| `RUN_WORKERS` | `2` | how many runs may work at once; each project runs one at a time |
+| `RUNS_DIR` | system temp folder | temporary folders of runs and the provider cache |
+| `RUNNER_API_URL` | `http://127.0.0.1:<PORT>` | how the tofu process reaches this server's state backend |
+
+`AWS_*` variables of the server (an instance role on AWS, or an IAM user on another host) are the identity runs use; nothing else of the
+server's environment reaches the tofu process (DD-023).
 
 Put a reverse proxy with HTTPS in front of any installation others can reach: the password travels in the sign in request.
 

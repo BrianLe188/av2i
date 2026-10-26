@@ -31,6 +31,8 @@ declare module "fastify" {
     public?: boolean;
     /** reachable while the password still has to be changed */
     allowMustChange?: boolean;
+    /** called by an OpenTofu process with a run's own secret (no cookie, no CSRF header): the route checks it itself */
+    runAuth?: boolean;
   }
 }
 

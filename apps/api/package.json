@@ -11,6 +11,11 @@
   },
   "dependencies": {
     "@av2i/authz": "workspace:*",
+    "@av2i/engine": "workspace:*",
+    "@av2i/generator": "workspace:*",
+    "@av2i/model": "workspace:*",
+    "@av2i/registry": "workspace:*",
+    "@av2i/rules": "workspace:*",
     "@fastify/cookie": "^11.1.3",
     "@fastify/static": "^10.1.7",
     "@node-rs/argon2": "^2.2.2",

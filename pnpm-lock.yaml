@@ -181,6 +181,21 @@ importers:
       '@av2i/authz':
         specifier: workspace:*
         version: link:../../packages/authz
+      '@av2i/engine':
+        specifier: workspace:*
+        version: link:../../packages/engine
+      '@av2i/generator':
+        specifier: workspace:*
+        version: link:../../packages/generator
+      '@av2i/model':
+        specifier: workspace:*
+        version: link:../../packages/model
+      '@av2i/registry':
+        specifier: workspace:*
+        version: link:../../packages/registry
+      '@av2i/rules':
+        specifier: workspace:*
+        version: link:../../packages/rules
       '@fastify/cookie':
         specifier: ^11.1.3
         version: 11.1.3

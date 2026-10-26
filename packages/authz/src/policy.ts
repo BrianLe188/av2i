@@ -15,6 +15,12 @@ export const ACTIONS = {
   "project:Write": "av2i:project/*",
   "project:Delete": "av2i:project/*",
   "project:Share": "av2i:project/*",
+  "run:Plan": "av2i:project/*",
+  "run:Approve": "av2i:project/*",
+  "run:Apply": "av2i:project/*",
+  "run:ApplyDestructive": "av2i:project/*",
+  "state:Read": "av2i:project/*",
+  "connection:Manage": "av2i:connection/*",
   "user:Create": "av2i:user/*",
   "user:List": "av2i:user/*",
   "user:Read": "av2i:user/*",
@@ -33,6 +39,7 @@ export const resource = {
   user: (id: string) => `av2i:user/${id}`,
   group: (id: string) => `av2i:group/${id}`,
   policy: (name: string) => `av2i:policy/${name}`,
+  connection: (id: string) => `av2i:connection/${id}`,
   audit: () => "av2i:audit/*",
 };
 

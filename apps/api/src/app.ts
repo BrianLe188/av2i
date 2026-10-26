@@ -13,6 +13,8 @@ import { authRoutes } from "./routes/auth.ts";
 import { groupRoutes } from "./routes/groups.ts";
 import { policyRoutes } from "./routes/policies.ts";
 import { projectRoutes } from "./routes/projects.ts";
+import { runRoutes } from "./routes/runs.ts";
+import { stateRoutes } from "./routes/state.ts";
 import { tokenRoutes } from "./routes/tokens.ts";
 import { userRoutes } from "./routes/users.ts";
 
@@ -37,7 +39,7 @@ export function buildApp(deps: { db: Db; config: Config; logger?: FastifyServerO
     const route = req.routeOptions.config ?? {};
     const bearer = bearerOf(req.headers.authorization);
     // a bearer call is not carried by a cookie, so a page on another site cannot forge it: the CSRF header only guards cookie calls
-    if (!bearer && !["GET", "HEAD", "OPTIONS"].includes(req.method) && req.headers[CSRF_HEADER] !== CSRF_VALUE) throw forbidden("csrf", "Missing the X-Requested-With header.");
+    if (!bearer && !route.runAuth && !["GET", "HEAD", "OPTIONS"].includes(req.method) && req.headers[CSRF_HEADER] !== CSRF_VALUE) throw forbidden("csrf", "Missing the X-Requested-With header.");
     if (route.public) return;
     if (bearer) {
       // when a secret is sent it alone decides: a valid cookie next to a bad token is not a way in
@@ -69,6 +71,8 @@ export function buildApp(deps: { db: Db; config: Config; logger?: FastifyServerO
   policyRoutes(app, ctx);
   projectRoutes(app, ctx);
   tokenRoutes(app, ctx);
+  stateRoutes(app, ctx);
+  runRoutes(app, ctx);
 
   app.all("/api/*", { config: { public: true } }, async (_req, reply) => reply.code(404).send({ error: { code: "not_found", message: "Not found." } }));
 

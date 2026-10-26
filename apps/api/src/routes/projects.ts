@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { sql, type Transaction } from "kysely";
 import { audit } from "../audit.ts";
 import { authOf, need, type Ctx } from "../context.ts";
+import { projectAccess } from "../project-access.ts";
 import { checkShape, LIMITS } from "../designs.ts";
 import type { Database } from "../schema.ts";
 import { badRequest, HttpError, notFound } from "../errors.ts";
@@ -24,41 +25,7 @@ interface Row {
 
 export function projectRoutes(app: FastifyInstance, ctx: Ctx): void {
   const { db } = ctx;
-  const actor = (req: FastifyRequest) => {
-    const s = authOf(req).session;
-    return { userId: s.userId, username: s.username };
-  };
-
-  /** The shares that reach this person: given to them, or to a group they belong to. */
-  const sharesOf = async (userId: string, projectIds?: string[]) => {
-    let q = db.selectFrom("project_shares").select(["project_id", "role"]).where((eb) => eb.or([
-      eb("user_id", "=", userId),
-      eb("group_id", "in", eb.selectFrom("group_members").select("group_id").where("user_id", "=", userId)),
-    ]));
-    if (projectIds) q = q.where("project_id", "in", projectIds);
-    return q.execute();
-  };
-
-  /** Everything that may allow an action on this project: the person's policies, ownership and shares. A Deny among the policies still wins. */
-  const accessOf = async (req: FastifyRequest, project: { id: string; owner_id: string }): Promise<Statement[]> => {
-    const auth = authOf(req);
-    const extra: Statement[] = [];
-    if (project.owner_id === auth.session.userId) extra.push(...ownerStatements(project.id));
-    for (const s of await sharesOf(auth.session.userId, [project.id])) extra.push(...shareStatements(s.role as ShareRole, project.id));
-    return [...(await auth.statements()), ...auth.scope(extra)];
-  };
-
-  /** 404 when the person may not even read the project (it must not reveal that it exists), 403 when they may read but not do `action`. */
-  const authorize = async (req: FastifyRequest, project: { id: string; owner_id: string }, action: Action): Promise<Statement[]> => {
-    const statements = await accessOf(req, project);
-    const res = resource.project(project.id);
-    if (!evaluate(statements, { action: "project:Read", resource: res }).allowed) throw notFound("No such project.");
-    if (action !== "project:Read" && !evaluate(statements, { action, resource: res }).allowed) {
-      await audit(db, { actor: actor(req), action: "authz.denied", resource: res, outcome: "denied", ip: req.ip, details: { action, reason: "no-allow" } });
-      throw new HttpError(403, "forbidden", "You are not allowed to do that.");
-    }
-    return statements;
-  };
+  const { actor, sharesOf, authorize } = projectAccess(ctx);
 
   const load = async (id: string) => {
     const row = await db.selectFrom("projects").select(["id", "name", "owner_id", "rev", "updated_at", "updated_by"]).where("id", "=", id).where("deleted_at", "is", null).executeTakeFirst();
@@ -131,6 +98,7 @@ export function projectRoutes(app: FastifyInstance, ctx: Ctx): void {
         write: evaluate(statements, { action: "project:Write", resource: res }).allowed,
         delete: evaluate(statements, { action: "project:Delete", resource: res }).allowed,
         share: evaluate(statements, { action: "project:Share", resource: res }).allowed,
+        plan: evaluate(statements, { action: "run:Plan", resource: res }).allowed,
       },
     };
   });

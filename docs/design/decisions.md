@@ -26,6 +26,8 @@ Numbered `DD-nnn` to keep them apart from the specification's `D-nnn` ([../spec/
 | DD-019 | decided | One bucket policy per bucket, from every relation |
 | DD-020 | decided | The deployer policy |
 | DD-021 | decided | Accounts, sessions and IAM-style authorization on a server |
+| DD-022 | decided | The DB subnet group is a node of its own |
+| DD-023 | decided | The platform runs OpenTofu: plan with approval, state in the platform |
 
 ## DD-001 Language and runtime
 
@@ -124,6 +126,8 @@ Assumption in this design: the platform produces files (Terraform, the deployer 
 `plan` for them. Reason: it removes the largest security and liability surface for a solo-built commercial product. A later
 "plan preview" through a role the user grants would be a separate decision. The owner should confirm this is the product
 boundary.
+
+Superseded in part by DD-023: the platform now can run `plan` and `apply` through roles the user grants. It still stores no long-lived AWS secret, and the export of files stays.
 
 ## DD-011 Terraform local names
 
@@ -362,3 +366,18 @@ A design saved before this change is upgraded when it is opened (`upgradeDesign`
 a group named as the old group was, with the subnets it spanned, and moves up to the VPC. The Terraform it writes keeps the same
 group name; only the resource address changes (the group key instead of the database key).
 
+
+## DD-023 The platform runs OpenTofu: plan with approval, state in the platform
+
+Status: decided (owner, 26 October 2026; supersedes the "never applies" part of DD-010).
+
+Customers install the platform on their own servers, so running OpenTofu there is their choice and their infrastructure. Export of files stays.
+
+- **Tool and place.** OpenTofu, pinned in the image, run as a child process inside the API container in a temporary directory per run. Jobs wait in a PostgreSQL table (`runs`) and workers take them with `for update skip locked`; one run per project at a time. A run left `running` by a restart is marked failed on the next start. Logs are stored line by line (`run_logs`) and streamed to the studio.
+- **Credentials (R2).** The platform holds no long-lived AWS secret. The server's own identity is the instance role on AWS, or an IAM user that may only call `sts:AssumeRole` elsewhere. An AWS connection stores two role ARNs and an ExternalId: a read-only role for `plan` and a writing role for `apply`; before a run the worker assumes the right one and hands the short-lived keys to the process only. In R1 the process simply inherits the server's `AWS_*` variables.
+- **State.** Default is the `http` backend served by the API; state is rows in PostgreSQL, one per version, encrypted with AES-GCM under a key from `STATE_ENCRYPTION_KEY` (a `key_id` is kept for rotation). A lock row stops two writers. Later (R3): an S3 backend that reuses the AWS connection, and a state viewer.
+- **Changes only by approved plan.** `plan -out` is stored with the hash of the design and the state serial; apply runs that exact plan file and never plans again. A plan older than 24 hours, or made from a design that has changed, cannot be applied.
+- **Destructive plans.** A plan that deletes or replaces anything needs `run:ApplyDestructive` and the project name typed again; the server checks both. `destroy` is not offered yet.
+- **Four eyes.** Optional per project: when on, whoever made the plan cannot approve it; another person with `run:Approve` must.
+- **Permissions.** `connection:Manage`, `run:Plan`, `run:Approve`, `run:Apply`, `run:ApplyDestructive`, `state:Read`.
+- **Order.** R1: queue, runner, plan, logs, encrypted http state. R2: connections and two roles, approve and apply, permissions, destructive guard, four eyes. R3: S3 state and viewer.

@@ -17,6 +17,7 @@ import { store, type Prefs } from "./prefs.ts";
 import { ApiError } from "./api.ts";
 import { ConflictDialog, type Conflict } from "./components/ConflictDialog.tsx";
 import { HistoryDialog } from "./components/HistoryDialog.tsx";
+import { RunDialog } from "./components/RunDialog.tsx";
 import { ShareDialog } from "./components/ShareDialog.tsx";
 import { SaveQueue, type Failure, type SyncStatus } from "./logic/sync.ts";
 import { createProject, getProject, saveProject, type ProjectFull } from "./projects.ts";
@@ -53,6 +54,7 @@ export function App({ prefs, user, project }: { prefs: Prefs; user: User; projec
   const [conflict, setConflict] = useState<Conflict | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [runOpen, setRunOpen] = useState(false);
 
   const s = strings(lang);
   const design = hist.present;
@@ -177,6 +179,7 @@ export function App({ prefs, user, project }: { prefs: Prefs; user: User; projec
         onStatusClick={() => status === "conflict" && conflict === null && setConflict({ currentRev: queue.rev, updatedBy: null, updatedAt: null })}
         onHistory={() => setHistoryOpen(true)}
         onShare={project.can.share ? () => setShareOpen(true) : undefined}
+        onRun={project.can.plan ? () => setRunOpen(true) : undefined}
         onAccount={(what) => (what === "logout" ? void auth.logout() : void leave("/account"))}
       />
       <Palette lang={lang} s={s} onAdd={(service) => add(service, undefined)} disabled={!writable} />
@@ -205,6 +208,7 @@ export function App({ prefs, user, project }: { prefs: Prefs; user: User; projec
       beforeChange={() => queue.flush()} onRestored={(d, rev) => adopt(d, rev)}
     />
     <ShareDialog s={s} projectId={projectId} open={shareOpen} onClose={() => setShareOpen(false)} />
+    <RunDialog s={s} projectId={projectId} open={runOpen} onClose={() => setRunOpen(false)} beforeRun={() => queue.flush()} />
     <ConflictDialog
       s={s} conflict={conflict} onClose={() => setConflict(null)}
       onReload={() => void reload()} onOverwrite={() => { if (conflict) queue.overwrite(conflict.currentRev); setConflict(null); }} onCopy={() => void copyMine()}

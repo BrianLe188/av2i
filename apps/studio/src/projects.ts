@@ -16,7 +16,7 @@ export interface ProjectSummary {
 
 export interface ProjectFull {
   project: { id: string; name: string; owner: string | null; ownerId: string; rev: number; updatedAt: string; updatedBy: string | null; design: Design };
-  can: { write: boolean; delete: boolean; share: boolean };
+  can: { write: boolean; delete: boolean; share: boolean; plan: boolean };
 }
 
 export interface VersionRow { version: number; note: string; auto: boolean; createdAt: string; by: string | null; nodes: number }
@@ -36,3 +36,15 @@ export const listShares = (id: string) => api<{ owner: string | null; shares: Sh
 export const shareTargets = (id: string) => api<{ users: string[]; groups: string[] }>("GET", `/api/projects/${id}/share-targets`);
 export const putShare = (id: string, who: { user: string } | { group: string }, role: "viewer" | "editor") => api("PUT", `/api/projects/${id}/shares`, { ...who, role });
 export const removeShare = (id: string, shareId: string) => api("DELETE", `/api/projects/${id}/shares/${shareId}`);
+
+export interface PlanSummary { add: number; change: number; destroy: number; replace: number; destructive: boolean; resources: { address: string; type: string; actions: string[] }[] }
+export interface RunRow {
+  id: string; projectId: string; kind: "plan" | "apply"; status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+  createdBy: string | null; createdAt: string; startedAt: string | null; finishedAt: string | null; error: string | null; summary: PlanSummary | null;
+}
+
+export const queuePlan = (id: string) => api<{ run: RunRow }>("POST", `/api/projects/${id}/runs`, { kind: "plan" }).then((r) => r.run);
+export const listRuns = (id: string) => api<{ runs: RunRow[] }>("GET", `/api/projects/${id}/runs`).then((r) => r.runs);
+export const getRun = (id: string) => api<{ run: RunRow }>("GET", `/api/runs/${id}`).then((r) => r.run);
+export const runLogs = (id: string, after: number) => api<{ lines: { seq: number; line: string }[]; done: boolean }>("GET", `/api/runs/${id}/logs?after=${after}`);
+export const cancelRun = (id: string) => api<{ run: RunRow }>("POST", `/api/runs/${id}/cancel`).then((r) => r.run);

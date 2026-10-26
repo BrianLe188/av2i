@@ -127,6 +127,52 @@ export interface ApiTokensTable {
   created_at: Ts;
 }
 
+export interface RunsTable {
+  id: Generated<string>;
+  project_id: string;
+  kind: "plan" | "apply";
+  status: Generated<"queued" | "running" | "succeeded" | "failed" | "cancelled">;
+  design: ColumnType<unknown, string, string>;
+  design_hash: string;
+  created_by: string | null;
+  created_at: Ts;
+  started_at: TsNull;
+  finished_at: TsNull;
+  error: string | null;
+  summary: ColumnType<unknown, string | null | undefined, string | null>;
+  plan_data: Buffer | null;
+  plan_nonce: Buffer | null;
+  plan_key_id: string | null;
+  state_serial: number | null;
+  state_token_hash: Buffer | null;
+}
+
+export interface RunLogsTable {
+  run_id: string;
+  seq: number;
+  at: Ts;
+  line: string;
+}
+
+export interface StateVersionsTable {
+  id: Generated<number>;
+  project_id: string;
+  serial: number;
+  lineage: string;
+  key_id: string;
+  nonce: Buffer;
+  data: Buffer;
+  run_id: string | null;
+  created_at: Ts;
+}
+
+export interface StateLocksTable {
+  project_id: string;
+  lock_id: string;
+  info: ColumnType<unknown, string, string>;
+  created_at: Ts;
+}
+
 export interface Database {
   users: UsersTable;
   sessions: SessionsTable;
@@ -140,4 +186,8 @@ export interface Database {
   project_versions: ProjectVersionsTable;
   project_shares: ProjectSharesTable;
   api_tokens: ApiTokensTable;
+  runs: RunsTable;
+  run_logs: RunLogsTable;
+  state_versions: StateVersionsTable;
+  state_locks: StateLocksTable;
 }

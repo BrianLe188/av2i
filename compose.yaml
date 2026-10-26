@@ -27,6 +27,10 @@ services:
       ADMIN_INITIAL_PASSWORD: ${ADMIN_INITIAL_PASSWORD:-}
       # set to true when a reverse proxy that terminates HTTPS sits in front
       TRUST_PROXY: ${TRUST_PROXY:-false}
+      # encrypts OpenTofu state and stored plans (openssl rand -base64 32). Keep a copy: without it the state cannot be read.
+      STATE_ENCRYPTION_KEY: ${STATE_ENCRYPTION_KEY:-}
+      # the server's own AWS identity for runs: on AWS use the instance role; elsewhere add AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+      # and AWS_REGION here, for an IAM user that may only call sts:AssumeRole (never a key that can write to the account)
     ports:
       - "${PORT:-3000}:3000"
 

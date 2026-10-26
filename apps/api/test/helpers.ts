@@ -1,4 +1,6 @@
 import { randomBytes } from "node:crypto";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import pg from "pg";
 import { buildApp, CSRF_HEADER, CSRF_VALUE } from "../src/app.ts";
 import { ensureAdmin, syncBuiltinPolicies } from "../src/bootstrap.ts";
@@ -52,7 +54,8 @@ export async function testApp(over: Partial<Config> = {}): Promise<TestApp> {
   url.pathname = `/${name}`;
   const config: Config = {
     port: 0, host: "127.0.0.1", databaseUrl: url.toString(), adminInitialPassword: undefined,
-    sessionIdleMinutes: 480, sessionMaxHours: 168, staticDir: undefined, trustProxy: false, ...over,
+    sessionIdleMinutes: 480, sessionMaxHours: 168, staticDir: undefined, trustProxy: false,
+    stateKey: randomBytes(32), tofuBin: "tofu", runWorkers: 1, runsDir: join(tmpdir(), `av2i-test-${name}`), runnerApiUrl: "http://127.0.0.1:0", ...over,
   };
   const db = createDb(config.databaseUrl);
   await migrate(db);
