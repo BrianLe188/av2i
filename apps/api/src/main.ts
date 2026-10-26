@@ -5,7 +5,7 @@ import { createDb } from "./db.ts";
 import { migrate } from "./migrate.ts";
 import { purgeSessions } from "./auth/sessions.ts";
 import { runsHooks } from "./routes/runs.ts";
-import { execute } from "./runs/runner.ts";
+import { execute, sweepRunDirs } from "./runs/runner.ts";
 import { failStale, startWorkers } from "./runs/queue.ts";
 import { mkdirSync } from "node:fs";
 
@@ -19,6 +19,8 @@ await syncBuiltinPolicies(db);
 await ensureAdmin(db, config, { warn: (m) => app.log.warn(m) });
 
 mkdirSync(config.runsDir, { recursive: true });
+const swept = sweepRunDirs(config.runsDir);
+if (swept) app.log.warn(`removed ${swept} folder(s) left by runs cut off by the last restart`);
 const cut = await failStale(db);
 if (cut) app.log.warn(`${cut} run(s) were cut off by the last restart and marked failed`);
 const workers = startWorkers(db, config.runWorkers, (run) => execute(db, config, run), (e) => app.log.error(e));

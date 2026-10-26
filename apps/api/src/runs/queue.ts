@@ -30,11 +30,17 @@ export async function claim(db: Db): Promise<Claimed | null> {
   });
 }
 
-/** A run still marked running when the server starts was cut off by the restart: nothing is working on it. */
+/**
+ * A run still marked running when the server starts was cut off by the restart: nothing is working on it. It is marked failed and the
+ * state lock its tofu process held is released (the process cannot unlock it any more). Returns how many runs it ended.
+ */
 export async function failStale(db: Db): Promise<number> {
-  const r = await db.updateTable("runs").set({ status: "failed", finished_at: sql`now()`, error: "The server restarted while this run was working.", state_token_hash: null })
-    .where("status", "=", "running").executeTakeFirst();
-  return Number(r.numUpdatedRows);
+  return db.transaction().execute(async (trx) => {
+    const rows = await trx.updateTable("runs").set({ status: "failed", finished_at: sql`now()`, error: "The server restarted while this run was working.", state_token_hash: null })
+      .where("status", "=", "running").returning("project_id").execute();
+    if (rows.length) await trx.deleteFrom("state_locks").where("project_id", "in", rows.map((r) => r.project_id)).execute();
+    return rows.length;
+  });
 }
 
 export interface Workers {

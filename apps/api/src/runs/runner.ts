@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { generate } from "@av2i/generator";
 import type { Design } from "@av2i/model";
@@ -79,6 +79,14 @@ function run(bin: string, args: string[], opts: { cwd: string; env: NodeJS.Proce
       resolve({ code: code ?? 1, stdout });
     });
   });
+}
+
+/** Folders a cut-off run left behind (they hold the plan file in clear): removed at start, when no run can be using one. Returns how many. */
+export function sweepRunDirs(runsDir: string): number {
+  if (!existsSync(runsDir)) return 0;
+  const gone = readdirSync(runsDir).filter((n) => /^run-/.test(n));
+  for (const n of gone) rmSync(join(runsDir, n), { recursive: true, force: true });
+  return gone.length;
 }
 
 export function backendFile(config: Config, projectId: string): string {

@@ -7,7 +7,9 @@ import { hashToken } from "../src/routes/state.ts";
 import { open, seal } from "../src/runs/crypto.ts";
 import { summarizePlan } from "../src/runs/plan.ts";
 import { claim, failStale } from "../src/runs/queue.ts";
-import { execute } from "../src/runs/runner.ts";
+import { execute, sweepRunDirs } from "../src/runs/runner.ts";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 
 const available = await postgresAvailable();
 const design = JSON.parse(readFileSync(join(import.meta.dirname, "../../../packages/testkit/designs/container-backend.json"), "utf8"));
@@ -22,6 +24,19 @@ describe("state encryption", () => {
     bad.data[0] = bad.data[0]! ^ 1;
     expect(() => open(key, bad)).toThrow();
     expect(() => open(randomBytes(32), sealed)).toThrow(/key/);
+  });
+});
+
+describe("folders of cut-off runs", () => {
+  it("removes run folders and leaves the provider cache", () => {
+    const root = mkdtempSync(join(tmpdir(), "av2i-sweep-"));
+    mkdirSync(join(root, "run-abc"));
+    writeFileSync(join(root, "run-abc", "plan.bin"), "x");
+    mkdirSync(join(root, "plugin-cache"));
+    expect(sweepRunDirs(root)).toBe(1);
+    expect(existsSync(join(root, "run-abc"))).toBe(false);
+    expect(existsSync(join(root, "plugin-cache"))).toBe(true);
+    expect(sweepRunDirs(join(root, "missing"))).toBe(0);
   });
 });
 
@@ -117,7 +132,10 @@ describe.skipIf(!available)("runs", () => {
     expect(await failStale(t.db)).toBe(1);
     expect((await t.call("GET", `/api/runs/${a.body.run.id}`, { cookie: alice.cookie })).body.run.status).toBe("failed");
     expect((await claim(t.db))?.id).toBe(b.body.run.id);
+    // the lock the cut-off tofu held is released with it
+    await t.db.insertInto("state_locks").values({ project_id: projectId, lock_id: "dead", info: "{}" }).execute();
     await failStale(t.db);
+    expect(await t.db.selectFrom("state_locks").selectAll().where("project_id", "=", projectId).execute()).toEqual([]);
   });
 
   describe("state backend", () => {
