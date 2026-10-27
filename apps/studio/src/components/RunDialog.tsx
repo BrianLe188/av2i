@@ -8,24 +8,30 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ApiError } from "../api.ts";
 import type { Strings } from "../i18n.ts";
-import { cancelRun, getRun, listRuns, preflight, queuePlan, runLogs, type Preflight, type RunRow } from "../projects.ts";
+import { Input } from "@/components/ui/input";
+import { cancelRun, getRun, listRuns, listVariables, preflight, queuePlan, removeVariable, runLogs, setVariable, type Preflight, type RunRow, type VariableRow } from "../projects.ts";
 import { describe } from "./auth/errors.ts";
 
 const LIVE = new Set(["queued", "running"]);
 const fill = (t: string, v: { add: number; change: number; destroy: number; replace: number }) => t.replace(/\{(\w+)\}/g, (_, k: string) => String(v[k as keyof typeof v] ?? 0));
 
 /** Runs OpenTofu plan for the project and follows the run: status, what the plan would do, and the log as it grows. */
-export function RunDialog({ s, projectId, open, onClose, beforeRun }: { s: Strings; projectId: string; open: boolean; onClose: () => void; beforeRun: () => Promise<unknown> }) {
+export function RunDialog({ s, projectId, open, onClose, beforeRun, canSetVariables }: { s: Strings; projectId: string; open: boolean; onClose: () => void; beforeRun: () => Promise<unknown>; canSetVariables: boolean }) {
   const [runs, setRuns] = useState<RunRow[]>([]);
   const [current, setCurrent] = useState<string | null>(null);
   const [lines, setLines] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pre, setPre] = useState<Preflight | null>(null);
+  const [vars, setVars] = useState<VariableRow[] | null>(null);
   const last = useRef(0);
   const end = useRef<HTMLDivElement>(null);
 
   const fail = useCallback((e: unknown) => setError(e instanceof ApiError && (s.run.errors as Record<string, string>)[e.code] ? (s.run.errors as Record<string, string>)[e.code]! : describe(e, s)), [s]);
+
+  const loadVars = useCallback(async () => {
+    try { setVars(await listVariables(projectId)); } catch (e) { fail(e); }
+  }, [projectId, fail]);
 
   const refresh = useCallback(async () => {
     try {
@@ -34,7 +40,7 @@ export function RunDialog({ s, projectId, open, onClose, beforeRun }: { s: Strin
       setCurrent((c) => c ?? l[0]?.id ?? null);
     } catch (e) { fail(e); }
   }, [projectId, fail]);
-  useEffect(() => { if (open) { setError(null); setCurrent(null); setPre(null); void refresh(); void preflight(projectId).then(setPre).catch(fail); } }, [open, refresh, projectId, fail]);
+  useEffect(() => { if (open) { setError(null); setCurrent(null); setPre(null); void refresh(); void preflight(projectId).then(setPre).catch(fail); void loadVars(); } }, [open, refresh, projectId, fail, loadVars]);
 
   // follow the chosen run: new log lines and its status every second while it is waiting or running
   useEffect(() => {
@@ -71,20 +77,21 @@ export function RunDialog({ s, projectId, open, onClose, beforeRun }: { s: Strin
     try { const r = await cancelRun(id); setRuns((x) => x.map((y) => (y.id === id ? r : y))); toast(s.run.status.cancelled); } catch (e) { fail(e); }
   };
 
-  const ready = !!pre && pre.key && pre.tofu.ok && pre.identity.ok;
+  const ready = !!pre && pre.key && pre.tofu.ok && pre.identity.ok && !!vars && vars.every((v) => v.set);
   const run = runs.find((r) => r.id === current) ?? null;
   const sum = run?.summary ?? null;
   const tone = (st: RunRow["status"]) => (st === "succeeded" ? "default" : st === "failed" ? "destructive" : "secondary");
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-3xl" data-testid="run-dialog">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl" data-testid="run-dialog">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Play className="size-4" />{s.run.title}</DialogTitle>
           <DialogDescription>{s.run.text}</DialogDescription>
         </DialogHeader>
         {error && <Alert variant="destructive"><AlertDescription data-testid="run-error">{error}</AlertDescription></Alert>}
         <Checks s={s} pre={pre} />
+        {vars && vars.length > 0 && <Variables s={s} projectId={projectId} vars={vars} can={canSetVariables} onChanged={loadVars} fail={fail} />}
         <div className="flex items-center gap-2">
           <Button size="sm" onClick={() => void start()} disabled={busy || !ready} title={ready ? undefined : s.run.ready} data-testid="run-start">{busy ? <Loader2 className="animate-spin" /> : <Play />}{busy ? s.run.starting : s.run.start}</Button>
           {run && <Badge variant={tone(run.status)} data-testid="run-status">{s.run.status[run.status]}</Badge>}
@@ -104,7 +111,7 @@ export function RunDialog({ s, projectId, open, onClose, beforeRun }: { s: Strin
           </div>
         )}
         {run?.error && <p className="text-sm text-destructive">{run.error}</p>}
-        <div className="min-h-0 flex-1">
+        <div>
           <p className="mb-1 text-xs font-medium text-muted-foreground">{s.run.logs}</p>
           <ScrollArea className="h-56 rounded-md border bg-muted/40 [&_[data-slot=scroll-area-viewport]>div]:!block">
             <pre className="p-3 font-mono text-xs leading-5 whitespace-pre-wrap break-all" data-testid="run-log">{lines.length ? lines.join("\n") : s.run.noLogs}</pre>
@@ -152,5 +159,38 @@ function Checks({ s, pre }: { s: Strings; pre: Preflight | null }) {
       ))}
       <li className="pl-5 text-muted-foreground">{s.run.limit.replace("{m}", String(pre.timeoutMinutes))}</li>
     </ul>
+  );
+}
+
+/** The values a design asks for. Write-only: a saved value is shown as set, never read back. */
+function Variables({ s, projectId, vars, can, onChanged, fail }: { s: Strings; projectId: string; vars: VariableRow[]; can: boolean; onChanged: () => Promise<void>; fail: (e: unknown) => void }) {
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const save = async (name: string) => {
+    try { await setVariable(projectId, name, draft[name] ?? ""); setDraft((d) => ({ ...d, [name]: "" })); toast(s.run.varSaved); await onChanged(); } catch (e) { fail(e); }
+  };
+  const remove = async (name: string) => {
+    try { await removeVariable(projectId, name); toast(s.run.varRemoved); await onChanged(); } catch (e) { fail(e); }
+  };
+  return (
+    <div className="space-y-2 rounded-md border p-2 text-xs" data-testid="run-vars">
+      <p className="font-medium">{s.run.vars}</p>
+      <p className="text-muted-foreground">{s.run.varsText} {s.run.varNote}</p>
+      {vars.map((v) => (
+        <div key={v.name} className="space-y-1">
+          <div className="flex items-center gap-2">
+            <code className="font-mono">{v.name}</code>
+            <span className="text-muted-foreground">{s.run.varNode.replace("{n}", v.node)}</span>
+            <Badge variant={v.set ? "default" : "destructive"}>{v.set ? s.run.varSet : s.run.varMissing}</Badge>
+            {v.set && can && <Button size="sm" variant="ghost" onClick={() => void remove(v.name)} data-testid={`var-remove-${v.name}`}>{s.run.varRemove}</Button>}
+          </div>
+          {can ? (
+            <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); void save(v.name); }}>
+              <Input type={v.sensitive ? "password" : "text"} autoComplete="new-password" placeholder={s.run.varValue} value={draft[v.name] ?? ""} onChange={(e) => setDraft((d) => ({ ...d, [v.name]: e.target.value }))} className="h-8 flex-1" data-testid={`var-input-${v.name}`} />
+              <Button size="sm" type="submit" disabled={!(draft[v.name] ?? "")} data-testid={`var-save-${v.name}`}>{s.run.varSave}</Button>
+            </form>
+          ) : !v.set && <p className="text-muted-foreground">{s.run.varNoRight}</p>}
+        </div>
+      ))}
+    </div>
   );
 }

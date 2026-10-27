@@ -99,6 +99,7 @@ export function projectRoutes(app: FastifyInstance, ctx: Ctx): void {
         delete: evaluate(statements, { action: "project:Delete", resource: res }).allowed,
         share: evaluate(statements, { action: "project:Share", resource: res }).allowed,
         plan: evaluate(statements, { action: "run:Plan", resource: res }).allowed,
+        variables: evaluate(statements, { action: "variable:Write", resource: res }).allowed,
       },
     };
   });

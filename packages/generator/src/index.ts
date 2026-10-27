@@ -6,6 +6,21 @@ import { aliasOf, aliasRegions } from "./delivery.ts";
 import { deployerPolicy } from "./deployer.ts";
 
 export { plan, type PlannedResource, type FileName } from "./plan.ts";
+/** An input a design needs a value for before it can be planned (a database password, for now). */
+export interface RequiredVariable {
+  name: string;
+  sensitive: boolean;
+  /** the node that asked for it */
+  node: string;
+}
+
+/** The variables the generated files declare, with no default: the platform has to supply a value for each at run time. */
+export function variablesOf(design: Design): RequiredVariable[] {
+  return plan(design)
+    .filter((p) => p.file === "variables.tf" && p.block.type === "variable")
+    .map((p) => ({ name: p.block.labels[0]!, sensitive: p.block.args.some(([k, v]) => k === "sensitive" && v === true), node: p.from }));
+}
+
 export { printBlocks, quote, ref, type Block, type Expr } from "./hcl.ts";
 
 /** Pinned by decision D-001. */

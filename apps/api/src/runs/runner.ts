@@ -8,6 +8,7 @@ import { sql } from "kysely";
 import type { Config } from "../config.ts";
 import type { Db } from "../db.ts";
 import { requireKey, seal } from "./crypto.ts";
+import { requiredOf, valuesOf } from "./variables.ts";
 import { summarizePlan } from "./plan.ts";
 import type { Claimed } from "./queue.ts";
 
@@ -18,7 +19,8 @@ const PASS = /^(PATH|LANG|LC_.*|TZ|AWS_.*|HTTPS?_PROXY|NO_PROXY|http_proxy|https
 export function redactor(secrets: string[]): (line: string) => string {
   return (line) => {
     let out = line.replace(/\b(AKIA|ASIA)[A-Z0-9]{16}\b/g, "$1****************");
-    for (const s of secrets) if (s) out = out.split(s).join("****");
+    // a very short value would blank half the log; a database password is never that short
+    for (const s of secrets) if (s.length >= 4) out = out.split(s).join("****");
     return out;
   };
 }
@@ -130,7 +132,9 @@ export function backendFile(config: Config, projectId: string): string {
 
 /** Plans a design with OpenTofu in a folder of its own and stores the plan (encrypted) and a summary of it. Apply comes with R2. */
 export async function execute(db: Db, config: Config, claimed: Claimed): Promise<void> {
-  const log = logWriter(db, claimed.id, redactor([claimed.token]));
+  // the values of variables join this list as they are read, so a secret that shows up in tofu's output never reaches the log
+  const secrets = [claimed.token];
+  const log = logWriter(db, claimed.id, redactor(secrets));
   let dir: string | null = null;
   let error: string | null = null;
   const deadline = Date.now() + config.runTimeoutMs;
@@ -143,6 +147,11 @@ export async function execute(db: Db, config: Config, claimed: Claimed): Promise
     writeFileSync(join(work, "backend.tf"), backendFile(config, claimed.project_id));
     const env: NodeJS.ProcessEnv = { HOME: work, TF_IN_AUTOMATION: "1", TF_INPUT: "0", TF_PLUGIN_CACHE_DIR: join(config.runsDir, "plugin-cache"), TF_HTTP_USERNAME: "run", TF_HTTP_PASSWORD: claimed.token };
     for (const [k, v] of Object.entries(process.env)) if (v !== undefined && PASS.test(k)) env[k] = v;
+    const needed = requiredOf(claimed.design as Design).map((v) => v.name);
+    const values = await valuesOf(db, key, claimed.project_id, needed);
+    const absent = needed.filter((n) => !(n in values));
+    if (absent.length) throw new Error(`No value is set for: ${absent.join(", ")}.`);
+    for (const [n, v] of Object.entries(values)) { env[`TF_VAR_${n}`] = v; secrets.push(v); }
     const step = async (title: string, args: string[], capture = false) => {
       log.line(`$ tofu ${title}`);
       const left = deadline - Date.now();

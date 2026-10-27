@@ -17,6 +17,7 @@ import { runRoutes } from "./routes/runs.ts";
 import { stateRoutes } from "./routes/state.ts";
 import { tokenRoutes } from "./routes/tokens.ts";
 import { userRoutes } from "./routes/users.ts";
+import { variableRoutes } from "./routes/variables.ts";
 
 /** Every state-changing call must carry this header: a form on another site cannot add it, so it cannot ride the cookie. */
 export const CSRF_HEADER = "x-requested-with";
@@ -73,6 +74,7 @@ export function buildApp(deps: { db: Db; config: Config; logger?: FastifyServerO
   tokenRoutes(app, ctx);
   stateRoutes(app, ctx);
   runRoutes(app, ctx);
+  variableRoutes(app, ctx);
 
   app.all("/api/*", { config: { public: true } }, async (_req, reply) => reply.code(404).send({ error: { code: "not_found", message: "Not found." } }));
 

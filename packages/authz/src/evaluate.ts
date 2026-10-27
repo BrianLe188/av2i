@@ -33,7 +33,7 @@ export const shareStatements = (role: ShareRole, projectId: string): Statement[]
 
 /** The owner may do everything with their project except create it (that is checked before it exists). */
 export const ownerStatements = (projectId: string): Statement[] => [
-  { sid: "owner", effect: "Allow", actions: ["project:Read", "project:Write", "project:Delete", "project:Share", "run:Plan", "run:Approve", "run:Apply", "state:Read"], resources: [resource.project(projectId)] },
+  { sid: "owner", effect: "Allow", actions: ["project:Read", "project:Write", "project:Delete", "project:Share", "run:Plan", "run:Approve", "run:Apply", "state:Read", "variable:Write"], resources: [resource.project(projectId)] },
 ];
 
 /** Which actions the person may take on "any" resource of the kind: what the interface offers. The server decides every call again. */

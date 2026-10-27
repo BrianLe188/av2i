@@ -28,6 +28,7 @@ Numbered `DD-nnn` to keep them apart from the specification's `D-nnn` ([../spec/
 | DD-021 | decided | Accounts, sessions and IAM-style authorization on a server |
 | DD-022 | decided | The DB subnet group is a node of its own |
 | DD-023 | decided | The platform runs OpenTofu: plan with approval, state in the platform |
+| DD-024 | decided | Values a design asks for are set per project, encrypted, write-only |
 
 ## DD-001 Language and runtime
 
@@ -389,3 +390,17 @@ Additions (27 October 2026, after the first real plans):
 - **State writes are checked by the server as well as by OpenTofu** (R2b): a write is refused when the lineage differs from the stored state or the serial is not greater than the newest one.
 - **`errored.tfstate` is kept** (R2b). When apply created resources but the state could not be written, OpenTofu leaves that file in its folder; the runner stores it encrypted before deleting the folder, marks the run failed with a warning, and lets a person with `state:Read` download it. Apply is not enabled before this exists.
 - **The state is the content of `terraform.tfstate`, held in memory by OpenTofu**; nothing of it stays on disk between runs.
+
+## DD-024 Values a design asks for are set per project, encrypted, write-only
+
+Status: decided (owner, 27 October 2026).
+
+A design can ask for a value that must never be written in a file: today the database password, when it is supplied instead of managed by RDS (`variable "<node>_password"`, `sensitive`, no default). Planning without it fails with "No value for required variable", which `moto-check` showed.
+
+- **What is asked** is read from the generated files, not guessed: `variablesOf(design)` lists the `variable` blocks the generator plans (name, sensitive, the node that asked).
+- **Where the value lives.** `project_variables`: one row per project and name, encrypted with the state key (AES-GCM, `key_id` kept). The value is written once through `PUT /api/projects/:id/variables/:name` and is never returned: the studio shows "set" or "not set", and a person replaces or removes it. Only a name the design asks for now can be set.
+- **Who.** A new action, `variable:Write`, separate from `project:Write` so that someone who may edit a design cannot read or replace its secrets by editing the design. The owner has it; a share role does not. Setting and removing are audited by name, never by value.
+- **How tofu gets it.** The runner reads the values of the variables the design asks for and gives them as `TF_VAR_<name>` in the environment of the process only; they are added to the list of secrets that are masked in the log. A run is refused at queueing, with `variables_missing` and the names, when a value is not set.
+- **The password typed on the node is not used.** The node's `password` text only says "I supply it"; the value comes from here. This keeps the secret out of the design, its history and the copy a run keeps (SEC-020 already warns about it).
+- **A plan keeps the values it was made with.** A run stores a stamp of the variables it was queued with (`runs.variables_hash`, from the names and the times they were set); apply (R2b) refuses a plan whose stamp differs from the current one, like a changed design.
+- **What stays visible.** The value is in the saved plan and in the state, both encrypted in the platform's database; OpenTofu keeps a sensitive value in state as clear text, which is one more reason the state is encrypted. Not done: values for variables that are not secret, a value shared by several projects, rotation of the state key.

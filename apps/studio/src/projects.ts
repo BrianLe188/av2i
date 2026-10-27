@@ -16,7 +16,7 @@ export interface ProjectSummary {
 
 export interface ProjectFull {
   project: { id: string; name: string; owner: string | null; ownerId: string; rev: number; updatedAt: string; updatedBy: string | null; design: Design };
-  can: { write: boolean; delete: boolean; share: boolean; plan: boolean };
+  can: { write: boolean; delete: boolean; share: boolean; plan: boolean; variables: boolean };
 }
 
 export interface VersionRow { version: number; note: string; auto: boolean; createdAt: string; by: string | null; nodes: number }
@@ -56,3 +56,8 @@ export interface Preflight {
   timeoutMinutes: number;
 }
 export const preflight = (id: string) => api<Preflight>("GET", `/api/projects/${id}/preflight`);
+
+export interface VariableRow { name: string; sensitive: boolean; node: string; set: boolean; updatedAt: string | null; updatedBy: string | null }
+export const listVariables = (id: string) => api<{ variables: VariableRow[] }>("GET", `/api/projects/${id}/variables`).then((r) => r.variables);
+export const setVariable = (id: string, name: string, value: string) => api("PUT", `/api/projects/${id}/variables/${encodeURIComponent(name)}`, { value });
+export const removeVariable = (id: string, name: string) => api("DELETE", `/api/projects/${id}/variables/${encodeURIComponent(name)}`);

@@ -11,6 +11,7 @@ import { projectAccess } from "../project-access.ts";
 import { callerIdentity } from "../aws.ts";
 import { requireKey } from "../runs/crypto.ts";
 import { tofuVersion } from "../runs/runner.ts";
+import { requiredOf, stampOf, storedOf } from "../runs/variables.ts";
 
 const idParams = { type: "object", required: ["id"], properties: { id: { type: "string", format: "uuid" } } } as const;
 /** Waiting runs per project: a person who keeps pressing Plan cannot fill the queue. */
@@ -54,11 +55,15 @@ export function runRoutes(app: FastifyInstance, ctx: Ctx): void {
     if (structural.length) throw new HttpError(422, "design_invalid", "The design is not valid.", { problems: structural.map((p) => `${p.where}: ${p.message}`) });
     const errors = runRules(design, registry).filter((f) => f.severity === "error");
     if (errors.length) throw new HttpError(422, "design_has_errors", "Fix the errors in the design first.", { findings: errors.map((f) => ({ rule: f.rule, targets: f.targets, message: f.message })) });
+    const required = requiredOf(design);
+    const stored = await storedOf(db, id);
+    const missing = required.filter((v) => !stored.some((s) => s.name === v.name)).map((v) => v.name);
+    if (missing.length) throw new HttpError(422, "variables_missing", "The design needs values that are not set yet.", { variables: missing });
     const waiting = await db.selectFrom("runs").select(db.fn.countAll<string>().as("n")).where("project_id", "=", id).where("status", "=", "queued").executeTakeFirstOrThrow();
     if (Number(waiting.n) >= MAX_QUEUED) throw new HttpError(429, "queue_full", "This project already has several runs waiting.");
     const json = JSON.stringify(design);
     const me = actor(req);
-    const row = await db.insertInto("runs").values({ project_id: id, kind: "plan", design: json, design_hash: createHash("sha256").update(json).digest("hex"), created_by: me.userId, error: null, plan_data: null, plan_nonce: null, plan_key_id: null, state_serial: null, state_token_hash: null })
+    const row = await db.insertInto("runs").values({ project_id: id, kind: "plan", design: json, design_hash: createHash("sha256").update(json).digest("hex"), created_by: me.userId, error: null, plan_data: null, plan_nonce: null, plan_key_id: null, state_serial: null, state_token_hash: null, variables_hash: stampOf(required, stored) })
       .returning("id").executeTakeFirstOrThrow();
     await audit(db, { actor: me, action: "run.queued", resource: resource.project(id), outcome: "success", ip: req.ip, details: { run: row.id, kind: "plan" } });
     runsHooks.wake?.();

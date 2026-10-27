@@ -145,6 +145,7 @@ export interface RunsTable {
   plan_key_id: string | null;
   state_serial: number | null;
   state_token_hash: Buffer | null;
+  variables_hash: ColumnType<string | null, string | null | undefined, string | null>;
 }
 
 export interface RunLogsTable {
@@ -173,6 +174,16 @@ export interface StateLocksTable {
   created_at: Ts;
 }
 
+export interface ProjectVariablesTable {
+  project_id: string;
+  name: string;
+  key_id: string;
+  nonce: Buffer;
+  data: Buffer;
+  updated_by: string | null;
+  updated_at: Ts;
+}
+
 export interface Database {
   users: UsersTable;
   sessions: SessionsTable;
@@ -190,4 +201,5 @@ export interface Database {
   run_logs: RunLogsTable;
   state_versions: StateVersionsTable;
   state_locks: StateLocksTable;
+  project_variables: ProjectVariablesTable;
 }

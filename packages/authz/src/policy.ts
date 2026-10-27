@@ -20,6 +20,7 @@ export const ACTIONS = {
   "run:Apply": "av2i:project/*",
   "run:ApplyDestructive": "av2i:project/*",
   "state:Read": "av2i:project/*",
+  "variable:Write": "av2i:project/*",
   "connection:Manage": "av2i:connection/*",
   "user:Create": "av2i:user/*",
   "user:List": "av2i:user/*",
