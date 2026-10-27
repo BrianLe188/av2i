@@ -29,6 +29,7 @@ Numbered `DD-nnn` to keep them apart from the specification's `D-nnn` ([../spec/
 | DD-022 | decided | The DB subnet group is a node of its own |
 | DD-023 | decided | The platform runs OpenTofu: plan with approval, state in the platform |
 | DD-024 | decided | Values a design asks for are set per project, encrypted, write-only |
+| DD-025 | decided | AWS connections: a project's runs assume a role, the platform keeps no AWS secret |
 
 ## DD-001 Language and runtime
 
@@ -404,3 +405,13 @@ A design can ask for a value that must never be written in a file: today the dat
 - **The password typed on the node is not used.** The node's `password` text only says "I supply it"; the value comes from here. This keeps the secret out of the design, its history and the copy a run keeps (SEC-020 already warns about it).
 - **A plan keeps the values it was made with.** A run stores a stamp of the variables it was queued with (`runs.variables_hash`, from the names and the times they were set); apply (R2b) refuses a plan whose stamp differs from the current one, like a changed design.
 - **What stays visible.** The value is in the saved plan and in the state, both encrypted in the platform's database; OpenTofu keeps a sensitive value in state as clear text, which is one more reason the state is encrypted. Not done: values for variables that are not secret, a value shared by several projects, rotation of the state key.
+
+## DD-025 AWS connections: a project's runs assume a role, the platform keeps no AWS secret
+
+Status: decided (owner, 27 October 2026, all six open questions as recommended); the design is in [aws-connections.md](aws-connections.md).
+
+Carries out the credentials part of DD-023 (R2a). A **connection** holds the ARN of a read-only plan role, optionally the ARN of an apply role,
+and an ExternalId made by the platform; a project is tied to one connection. Before a run the worker assumes the right role with the server's
+own identity and gives only the temporary keys to the tofu process, which no longer inherits the server's `AWS_*`. A new action,
+`connection:Use`, decides who may plan against which account, apart from `run:Plan`. The platform generates the trust policy and a read-only
+plan policy; a least-privilege apply policy is not generated yet.
