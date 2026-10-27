@@ -22,6 +22,7 @@ export const ACTIONS = {
   "state:Read": "av2i:project/*",
   "variable:Write": "av2i:project/*",
   "connection:Manage": "av2i:connection/*",
+  "connection:Use": "av2i:connection/*",
   "user:Create": "av2i:user/*",
   "user:List": "av2i:user/*",
   "user:Read": "av2i:user/*",

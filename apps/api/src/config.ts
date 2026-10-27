@@ -19,6 +19,8 @@ export interface Config {
   tofuBin: string;
   /** how many runs may work at once (each project has at most one) */
   runWorkers: number;
+  /** development only: a project with no connection runs with the server's own AWS_* (DD-025) */
+  runWithServerIdentity: boolean;
   /** a run that takes longer is stopped and fails */
   runTimeoutMs: number;
   /** where runs make their temporary folders and keep the provider cache */
@@ -57,7 +59,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     stateKey: key(env.STATE_ENCRYPTION_KEY),
     tofuBin: env.TOFU_BIN || "tofu",
     runWorkers: int(env.RUN_WORKERS, 2, "RUN_WORKERS"),
-    runTimeoutMs: int(env.RUN_TIMEOUT_MINUTES, 30, "RUN_TIMEOUT_MINUTES") * 60_000,
+    // temporary keys of an assumed role last an hour at most (role chaining), so a run may not outlast them
+    runTimeoutMs: Math.min(int(env.RUN_TIMEOUT_MINUTES, 30, "RUN_TIMEOUT_MINUTES"), 55) * 60_000,
+    runWithServerIdentity: env.RUN_WITH_SERVER_IDENTITY === "true" || env.RUN_WITH_SERVER_IDENTITY === "1",
     runsDir: env.RUNS_DIR || join(tmpdir(), "av2i-runs"),
     runnerApiUrl: env.RUNNER_API_URL || `http://127.0.0.1:${port}`,
   };

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import pg from "pg";
 import { buildApp, CSRF_HEADER, CSRF_VALUE } from "../src/app.ts";
+import type { AssumeRequest, AwsGateway } from "../src/aws.ts";
 import { ensureAdmin, syncBuiltinPolicies } from "../src/bootstrap.ts";
 import { COOKIE } from "../src/auth/sessions.ts";
 import type { Config } from "../src/config.ts";
@@ -44,7 +45,29 @@ export interface TestApp {
 
 export const ADMIN_PASSWORD = "Correct-Horse-Battery-1";
 
-export async function testApp(over: Partial<Config> = {}): Promise<TestApp> {
+export const SERVER_ARN = "arn:aws:sts::111122223333:assumed-role/av2i-server/i-0abc";
+
+/** Stands in for AWS: roles listed in `deny` refuse to be assumed; every call is recorded. */
+export function fakeAws(opts: { deny?: Record<string, "trust" | "base" | "other"> } = {}): AwsGateway & { calls: { assume: AssumeRequest[] } } {
+  const calls = { assume: [] as AssumeRequest[] };
+  return {
+    calls,
+    async identity(keys) {
+      return keys ? { ok: true, account: "999988887777", arn: "arn:aws:sts::999988887777:assumed-role/fake/session" } : { ok: true, account: "111122223333", arn: SERVER_ARN, source: "instance" };
+    },
+    async assume(req) {
+      calls.assume.push(req);
+      const deny = opts.deny?.[req.roleArn];
+      if (deny) return { ok: false, code: deny, message: "denied by the fake" };
+      return {
+        ok: true, arn: `arn:aws:sts::${/:(\d{12}):/.exec(req.roleArn)![1]}:assumed-role/x/${req.sessionName}`, account: /:(\d{12}):/.exec(req.roleArn)![1]!,
+        keys: { accessKeyId: "ASIAFAKEKEYFAKEKEY12", secretAccessKey: "fake-secret-access-key-value", sessionToken: "fake-session-token-value", expiration: new Date(Date.now() + 3_600_000) },
+      };
+    },
+  };
+}
+
+export async function testApp(over: Partial<Config> = {}, aws?: AwsGateway): Promise<TestApp> {
   const name = `av2i_test_${randomBytes(6).toString("hex")}`;
   const root = new pg.Client({ connectionString: ADMIN_URL });
   await root.connect();
@@ -55,13 +78,13 @@ export async function testApp(over: Partial<Config> = {}): Promise<TestApp> {
   const config: Config = {
     port: 0, host: "127.0.0.1", databaseUrl: url.toString(), adminInitialPassword: undefined,
     sessionIdleMinutes: 480, sessionMaxHours: 168, staticDir: undefined, trustProxy: false,
-    stateKey: randomBytes(32), tofuBin: "tofu", runWorkers: 1, runTimeoutMs: 600_000, runsDir: join(tmpdir(), `av2i-test-${name}`), runnerApiUrl: "http://127.0.0.1:0", ...over,
+    stateKey: randomBytes(32), tofuBin: "tofu", runWorkers: 1, runTimeoutMs: 600_000, runWithServerIdentity: false, runsDir: join(tmpdir(), `av2i-test-${name}`), runnerApiUrl: "http://127.0.0.1:0", ...over,
   };
   const db = createDb(config.databaseUrl);
   await migrate(db);
   await syncBuiltinPolicies(db);
   await ensureAdmin(db, config, { warn: () => {} });
-  const app = buildApp({ db, config });
+  const app = buildApp({ db, config, ...(aws ? { aws } : {}) });
   await app.ready();
 
   const call: TestApp["call"] = async (method, url2, opts = {}) => {

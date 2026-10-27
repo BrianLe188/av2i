@@ -1,4 +1,5 @@
 import { buildApp } from "./app.ts";
+import { realGateway } from "./aws.ts";
 import { ensureAdmin, syncBuiltinPolicies } from "./bootstrap.ts";
 import { loadConfig } from "./config.ts";
 import { createDb } from "./db.ts";
@@ -11,7 +12,8 @@ import { mkdirSync } from "node:fs";
 
 const config = loadConfig();
 const db = createDb(config.databaseUrl);
-const app = buildApp({ db, config, logger: true });
+const aws = realGateway();
+const app = buildApp({ db, config, aws, logger: true });
 
 const applied = await migrate(db);
 if (applied.length) app.log.info(`applied migrations: ${applied.join(", ")}`);
@@ -23,7 +25,7 @@ const swept = sweepRunDirs(config.runsDir);
 if (swept) app.log.warn(`removed ${swept} folder(s) left by runs cut off by the last restart`);
 const cut = await failStale(db);
 if (cut) app.log.warn(`${cut} run(s) were cut off by the last restart and marked failed`);
-const workers = startWorkers(db, config.runWorkers, (run) => execute(db, config, run), (e) => app.log.error(e));
+const workers = startWorkers(db, config.runWorkers, (run) => execute(db, config, run, aws), (e) => app.log.error(e));
 runsHooks.wake = workers.wake;
 if (!config.stateKey) app.log.warn("STATE_ENCRYPTION_KEY is not set: OpenTofu runs are refused until it is (openssl rand -base64 32)");
 

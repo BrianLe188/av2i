@@ -11,6 +11,7 @@ export interface Claimed {
   design: unknown;
   design_hash: string;
   created_by: string | null;
+  connection_id: string | null;
   /** the secret the tofu process presents to the state backend; only its hash is stored */
   token: string;
 }
@@ -25,7 +26,7 @@ export async function claim(db: Db): Promise<Claimed | null> {
       .where("id", "=", (eb) => eb.selectFrom("runs as r").select("r.id").where("r.status", "=", "queued")
         .where((e) => e.not(e.exists(e.selectFrom("runs as x").select("x.id").whereRef("x.project_id", "=", "r.project_id").where("x.status", "=", "running"))))
         .orderBy("r.created_at").limit(1).forUpdate().skipLocked())
-      .returning(["id", "project_id", "kind", "design", "design_hash", "created_by"]).executeTakeFirst();
+      .returning(["id", "project_id", "kind", "design", "design_hash", "created_by", "connection_id"]).executeTakeFirst();
     return row ? ({ ...row, token } as Claimed) : null;
   });
 }

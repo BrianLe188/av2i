@@ -65,7 +65,7 @@ describe.skipIf(!available)("runs", () => {
   let projectId: string;
 
   beforeAll(async () => {
-    t = await testApp({ tofuBin: join(import.meta.dirname, "fake-tofu.sh") });
+    t = await testApp({ tofuBin: join(import.meta.dirname, "fake-tofu.sh"), runWithServerIdentity: true });
     admin = await t.admin();
     alice = await addMember(t, admin, "alice", ["ProjectEditor"]);
     viewer = await addMember(t, admin, "vera", ["ProjectViewer"]);
@@ -157,7 +157,7 @@ describe.skipIf(!available)("runs", () => {
     const r = await t.call("GET", `/api/projects/${projectId}/preflight`, { cookie: alice.cookie });
     expect(r.status).toBe(200);
     expect(r.body).toMatchObject({ key: true, tofu: { ok: true, version: "1.12.9" }, identity: { ok: false, reason: "none" }, timeoutMinutes: 10 });
-    const missing = testApp({ tofuBin: "/no/such/tofu", stateKey: undefined });
+    const missing = testApp({ tofuBin: "/no/such/tofu", stateKey: undefined, runWithServerIdentity: true });
     const m = await missing;
     try {
       const a = await m.admin();

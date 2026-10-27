@@ -8,7 +8,9 @@ import { audit } from "../audit.ts";
 import type { Ctx } from "../context.ts";
 import { HttpError, notFound } from "../errors.ts";
 import { projectAccess } from "../project-access.ts";
-import { callerIdentity } from "../aws.ts";
+import { sessionName } from "../aws.ts";
+import { evaluate } from "@av2i/authz";
+import { authOf } from "../context.ts";
 import { requireKey } from "../runs/crypto.ts";
 import { tofuVersion } from "../runs/runner.ts";
 import { requiredOf, stampOf, storedOf } from "../runs/variables.ts";
@@ -23,12 +25,18 @@ export interface RunsHooks {
 }
 export const runsHooks: RunsHooks = {};
 
+/** An assumed role answers the same for a minute: the dialog asks again each time it opens. */
+const PREFLIGHT = new Map<string, { at: number; stamp: string; result: unknown }>();
+
 export function runRoutes(app: FastifyInstance, ctx: Ctx): void {
-  const { db, config } = ctx;
+  const { db, config, aws } = ctx;
   const { actor, authorize } = projectAccess(ctx);
+  /** what the signed-in person may do with a connection: the policy decides, ownership of the project gives nothing */
+  const mayUse = async (req: Parameters<typeof authorize>[0], connectionId: string) =>
+    evaluate(await authOf(req).statements(), { action: "connection:Use", resource: resource.connection(connectionId) }).allowed;
 
   const projectOf = async (id: string) => {
-    const row = await db.selectFrom("projects").select(["id", "owner_id", "design", "name"]).where("id", "=", id).where("deleted_at", "is", null).executeTakeFirst();
+    const row = await db.selectFrom("projects").select(["id", "owner_id", "design", "name", "connection_id"]).where("id", "=", id).where("deleted_at", "is", null).executeTakeFirst();
     if (!row) throw notFound("No such project.");
     return row;
   };
@@ -55,6 +63,11 @@ export function runRoutes(app: FastifyInstance, ctx: Ctx): void {
     if (structural.length) throw new HttpError(422, "design_invalid", "The design is not valid.", { problems: structural.map((p) => `${p.where}: ${p.message}`) });
     const errors = runRules(design, registry).filter((f) => f.severity === "error");
     if (errors.length) throw new HttpError(422, "design_has_errors", "Fix the errors in the design first.", { findings: errors.map((f) => ({ rule: f.rule, targets: f.targets, message: f.message })) });
+    if (project.connection_id) {
+      if (!(await mayUse(req, project.connection_id))) throw new HttpError(403, "connection_forbidden", "You may not run against this project's AWS connection.");
+    } else if (!config.runWithServerIdentity) {
+      throw new HttpError(422, "no_connection", "Choose an AWS connection for this project first.");
+    }
     const required = requiredOf(design);
     const stored = await storedOf(db, id);
     const missing = required.filter((v) => !stored.some((s) => s.name === v.name)).map((v) => v.name);
@@ -63,7 +76,7 @@ export function runRoutes(app: FastifyInstance, ctx: Ctx): void {
     if (Number(waiting.n) >= MAX_QUEUED) throw new HttpError(429, "queue_full", "This project already has several runs waiting.");
     const json = JSON.stringify(design);
     const me = actor(req);
-    const row = await db.insertInto("runs").values({ project_id: id, kind: "plan", design: json, design_hash: createHash("sha256").update(json).digest("hex"), created_by: me.userId, error: null, plan_data: null, plan_nonce: null, plan_key_id: null, state_serial: null, state_token_hash: null, variables_hash: stampOf(required, stored) })
+    const row = await db.insertInto("runs").values({ project_id: id, kind: "plan", design: json, design_hash: createHash("sha256").update(json).digest("hex"), created_by: me.userId, error: null, plan_data: null, plan_nonce: null, plan_key_id: null, state_serial: null, state_token_hash: null, variables_hash: stampOf(required, stored), connection_id: project.connection_id })
       .returning("id").executeTakeFirstOrThrow();
     await audit(db, { actor: me, action: "run.queued", resource: resource.project(id), outcome: "success", ip: req.ip, details: { run: row.id, kind: "plan" } });
     runsHooks.wake?.();
@@ -74,9 +87,28 @@ export function runRoutes(app: FastifyInstance, ctx: Ctx): void {
   /** What a run would use, so the studio can say what is missing before anyone presses Plan. */
   app.get("/api/projects/:id/preflight", { schema: { params: idParams } }, async (req) => {
     const { id } = req.params as { id: string };
-    await authorize(req, await projectOf(id), "run:Plan");
-    const [tofu, identity] = await Promise.all([tofuVersion(config.tofuBin), callerIdentity()]);
-    return { key: !!config.stateKey, tofu, identity, timeoutMinutes: Math.round(config.runTimeoutMs / 60_000) };
+    const project = await projectOf(id);
+    await authorize(req, project, "run:Plan");
+    const connection = project.connection_id
+      ? await db.selectFrom("aws_connections").select(["id", "name", "plan_role_arn", "apply_role_arn", "external_id", "updated_at"]).where("id", "=", project.connection_id).executeTakeFirst()
+      : undefined;
+    const identity = await (async () => {
+      if (!connection) {
+        if (!config.runWithServerIdentity) return { ok: false as const, reason: "no_connection" as const, message: "No connection." };
+        const r = await aws.identity();
+        return r.ok ? { ...r, via: "server" as const } : r;
+      }
+      if (!(await mayUse(req, connection.id))) return { ok: false as const, reason: "forbidden" as const, message: "You may not use this connection." };
+      const cached = PREFLIGHT.get(connection.id);
+      if (cached && cached.at > Date.now() - 60_000 && cached.stamp === `${connection.updated_at.getTime()}`) return cached.result;
+      const a = await aws.assume({ roleArn: connection.plan_role_arn, externalId: connection.external_id, sessionName: sessionName("preflight", id) });
+      const result = !a.ok ? { ok: false as const, reason: a.code, message: a.message, roleArn: connection.plan_role_arn }
+        : await aws.identity(a.keys).then((i) => (i.ok ? { ok: true as const, account: i.account, arn: i.arn, via: "role" as const, roleArn: connection.plan_role_arn } : { ok: false as const, reason: "error" as const, message: i.message, roleArn: connection.plan_role_arn }));
+      PREFLIGHT.set(connection.id, { at: Date.now(), stamp: `${connection.updated_at.getTime()}`, result });
+      return result;
+    })();
+    const tofu = await tofuVersion(config.tofuBin);
+    return { key: !!config.stateKey, tofu, identity, connection: connection ? { id: connection.id, name: connection.name, planOnly: !connection.apply_role_arn } : null, timeoutMinutes: Math.round(config.runTimeoutMs / 60_000) };
   });
 
   app.get("/api/projects/:id/runs", { schema: { params: idParams } }, async (req) => {

@@ -9,6 +9,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { ApiError } from "../api.ts";
 import type { Strings } from "../i18n.ts";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { listConnections, setProjectConnection, type ConnectionRow } from "../connections.ts";
+import { connError } from "./connError.ts";
 import { cancelRun, getRun, listRuns, listVariables, preflight, queuePlan, removeVariable, runLogs, setVariable, type Preflight, type RunRow, type VariableRow } from "../projects.ts";
 import { describe } from "./auth/errors.ts";
 
@@ -24,6 +27,7 @@ export function RunDialog({ s, projectId, open, onClose, beforeRun, canSetVariab
   const [error, setError] = useState<string | null>(null);
   const [pre, setPre] = useState<Preflight | null>(null);
   const [vars, setVars] = useState<VariableRow[] | null>(null);
+  const [conns, setConns] = useState<ConnectionRow[]>([]);
   const last = useRef(0);
   const end = useRef<HTMLDivElement>(null);
 
@@ -40,7 +44,7 @@ export function RunDialog({ s, projectId, open, onClose, beforeRun, canSetVariab
       setCurrent((c) => c ?? l[0]?.id ?? null);
     } catch (e) { fail(e); }
   }, [projectId, fail]);
-  useEffect(() => { if (open) { setError(null); setCurrent(null); setPre(null); void refresh(); void preflight(projectId).then(setPre).catch(fail); void loadVars(); } }, [open, refresh, projectId, fail, loadVars]);
+  useEffect(() => { if (open) { setError(null); setCurrent(null); setPre(null); void refresh(); void preflight(projectId).then(setPre).catch(fail); void listConnections().then(setConns).catch(() => setConns([])); void loadVars(); } }, [open, refresh, projectId, fail, loadVars]);
 
   // follow the chosen run: new log lines and its status every second while it is waiting or running
   useEffect(() => {
@@ -90,6 +94,9 @@ export function RunDialog({ s, projectId, open, onClose, beforeRun, canSetVariab
           <DialogDescription>{s.run.text}</DialogDescription>
         </DialogHeader>
         {error && <Alert variant="destructive"><AlertDescription data-testid="run-error">{error}</AlertDescription></Alert>}
+        <ConnectionRow s={s} pre={pre} conns={conns} onChange={async (id) => {
+          try { await setProjectConnection(projectId, id); toast(s.conn.chosen); setPre(null); setPre(await preflight(projectId)); } catch (e) { setError(connError(e, s)); }
+        }} />
         <Checks s={s} pre={pre} />
         {vars && vars.length > 0 && <Variables s={s} projectId={projectId} vars={vars} can={canSetVariables} onChanged={loadVars} fail={fail} />}
         <div className="flex items-center gap-2">
@@ -145,9 +152,7 @@ function Checks({ s, pre }: { s: Strings; pre: Preflight | null }) {
   const rows: { ok: boolean; text: string; detail?: string }[] = [
     { ok: pre.key, text: pre.key ? s.run.keyOk : s.run.keyMissing },
     pre.tofu.ok ? { ok: true, text: s.run.tofuOk.replace("{v}", pre.tofu.version) } : { ok: false, text: s.run.tofuMissing, detail: pre.tofu.message },
-    pre.identity.ok
-      ? { ok: true, text: s.run.idOk.replace("{arn}", pre.identity.arn), detail: `${s.run.account} ${pre.identity.account}` }
-      : { ok: false, text: pre.identity.reason === "none" ? s.run.idNone : s.run.idError, ...(pre.identity.reason === "error" ? { detail: pre.identity.message } : {}) },
+    identityRow(s, pre.identity),
   ];
   return (
     <ul className="space-y-1 rounded-md border p-2 text-xs" data-testid="run-checks">
@@ -191,6 +196,37 @@ function Variables({ s, projectId, vars, can, onChanged, fail }: { s: Strings; p
           ) : !v.set && <p className="text-muted-foreground">{s.run.varNoRight}</p>}
         </div>
       ))}
+    </div>
+  );
+}
+
+function identityRow(s: Strings, id: Preflight["identity"]): { ok: boolean; text: string; detail?: string } {
+  if (id.ok) {
+    return id.via === "role"
+      ? { ok: true, text: s.run.idRole.replace("{r}", id.roleArn ?? ""), detail: `${s.run.account} ${id.account} · ${id.arn}` }
+      : { ok: true, text: s.run.idServer.replace("{arn}", id.arn), detail: `${s.run.account} ${id.account}` };
+  }
+  if (id.reason === "no_connection") return { ok: false, text: s.run.idNoConn };
+  if (id.reason === "forbidden") return { ok: false, text: s.run.idForbidden };
+  if (id.reason === "none") return { ok: false, text: s.run.idNone };
+  const hint = (s.conn.hint as Record<string, string>)[id.reason];
+  return { ok: false, text: hint ?? s.run.idError, detail: id.message };
+}
+
+/** Which AWS connection the runs of this project use: only the ones the person may use are offered. */
+function ConnectionRow({ s, pre, conns, onChange }: { s: Strings; pre: Preflight | null; conns: ConnectionRow[]; onChange: (id: string | null) => Promise<void> }) {
+  const value = pre?.connection?.id ?? "none";
+  return (
+    <div className="flex items-center gap-2 text-xs" data-testid="run-connection">
+      <span className="font-medium">{s.conn.choose}</span>
+      <Select value={value} onValueChange={(v) => void onChange(v === "none" ? null : v)} disabled={!pre}>
+        <SelectTrigger size="sm" className="h-8 w-64" data-testid="run-connection-select"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="none">{s.conn.chooseNone}</SelectItem>
+          {conns.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}{c.planOnly ? ` · ${s.conn.planOnly}` : ""}</SelectItem>)}
+          {pre?.connection && !conns.some((c) => c.id === pre.connection!.id) && <SelectItem value={pre.connection.id}>{pre.connection.name}</SelectItem>}
+        </SelectContent>
+      </Select>
     </div>
   );
 }

@@ -5,15 +5,17 @@ import { join } from "node:path";
 import { generate } from "@av2i/generator";
 import type { Design } from "@av2i/model";
 import { sql } from "kysely";
+import { realGateway, type AwsGateway } from "../aws.ts";
 import type { Config } from "../config.ts";
+import { runIdentity } from "./credentials.ts";
 import type { Db } from "../db.ts";
 import { requireKey, seal } from "./crypto.ts";
 import { requiredOf, valuesOf } from "./variables.ts";
 import { summarizePlan } from "./plan.ts";
 import type { Claimed } from "./queue.ts";
 
-/** What the tofu process may inherit: the server's own AWS identity (R1) and the settings a proxy or a private CA need. Nothing else. */
-const PASS = /^(PATH|LANG|LC_.*|TZ|AWS_.*|HTTPS?_PROXY|NO_PROXY|http_proxy|https_proxy|no_proxy|SSL_CERT_FILE|SSL_CERT_DIR)$/;
+/** What the tofu process may inherit: the settings a proxy or a private CA need. Its AWS identity is made per run (runs/credentials.ts), never copied from the server. */
+const PASS = /^(PATH|LANG|LC_.*|TZ|HTTPS?_PROXY|NO_PROXY|http_proxy|https_proxy|no_proxy|SSL_CERT_FILE|SSL_CERT_DIR)$/;
 
 /** Access keys and the run's own secret never reach the log. */
 export function redactor(secrets: string[]): (line: string) => string {
@@ -131,7 +133,7 @@ export function backendFile(config: Config, projectId: string): string {
 }
 
 /** Plans a design with OpenTofu in a folder of its own and stores the plan (encrypted) and a summary of it. Apply comes with R2. */
-export async function execute(db: Db, config: Config, claimed: Claimed): Promise<void> {
+export async function execute(db: Db, config: Config, claimed: Claimed, aws: AwsGateway = realGateway()): Promise<void> {
   // the values of variables join this list as they are read, so a secret that shows up in tofu's output never reaches the log
   const secrets = [claimed.token];
   const log = logWriter(db, claimed.id, redactor(secrets));
@@ -147,6 +149,11 @@ export async function execute(db: Db, config: Config, claimed: Claimed): Promise
     writeFileSync(join(work, "backend.tf"), backendFile(config, claimed.project_id));
     const env: NodeJS.ProcessEnv = { HOME: work, TF_IN_AUTOMATION: "1", TF_INPUT: "0", TF_PLUGIN_CACHE_DIR: join(config.runsDir, "plugin-cache"), TF_HTTP_USERNAME: "run", TF_HTTP_PASSWORD: claimed.token };
     for (const [k, v] of Object.entries(process.env)) if (v !== undefined && PASS.test(k)) env[k] = v;
+    const who = await runIdentity({ db, config, aws }, claimed);
+    Object.assign(env, who.env);
+    secrets.push(...who.secrets);
+    log.line(who.summary);
+    await db.updateTable("runs").set({ role_arn: who.roleArn, aws_account: who.account }).where("id", "=", claimed.id).execute();
     const needed = requiredOf(claimed.design as Design).map((v) => v.name);
     const values = await valuesOf(db, key, claimed.project_id, needed);
     const absent = needed.filter((n) => !(n in values));

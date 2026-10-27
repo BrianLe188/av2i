@@ -91,9 +91,10 @@ export function projectRoutes(app: FastifyInstance, ctx: Ctx): void {
     const row = await load(id);
     const statements = await authorize(req, row, "project:Read");
     const res = resource.project(id);
-    const full = await db.selectFrom("projects").select("design").where("id", "=", id).executeTakeFirstOrThrow();
+    const full = await db.selectFrom("projects").select(["design", "connection_id"]).where("id", "=", id).executeTakeFirstOrThrow();
+    const conn = full.connection_id ? await db.selectFrom("aws_connections").select(["id", "name"]).where("id", "=", full.connection_id).executeTakeFirst() : undefined;
     return {
-      project: { ...summary(row, await nameOf(row.owner_id), await nameOf(row.updated_by)), design: full.design },
+      project: { ...summary(row, await nameOf(row.owner_id), await nameOf(row.updated_by)), design: full.design, connection: conn ?? null },
       can: {
         write: evaluate(statements, { action: "project:Write", resource: res }).allowed,
         delete: evaluate(statements, { action: "project:Delete", resource: res }).allowed,

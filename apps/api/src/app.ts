@@ -3,6 +3,7 @@ import { join } from "node:path";
 import cookie from "@fastify/cookie";
 import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
+import { realGateway, type AwsGateway } from "./aws.ts";
 import { COOKIE, findSession } from "./auth/sessions.ts";
 import { findToken, looksLikeToken } from "./auth/tokens.ts";
 import type { Config } from "./config.ts";
@@ -10,6 +11,7 @@ import { makeAuth, type Ctx } from "./context.ts";
 import type { Db } from "./db.ts";
 import { forbidden, HttpError, unauthorized } from "./errors.ts";
 import { authRoutes } from "./routes/auth.ts";
+import { connectionRoutes } from "./routes/connections.ts";
 import { groupRoutes } from "./routes/groups.ts";
 import { policyRoutes } from "./routes/policies.ts";
 import { projectRoutes } from "./routes/projects.ts";
@@ -23,9 +25,9 @@ import { variableRoutes } from "./routes/variables.ts";
 export const CSRF_HEADER = "x-requested-with";
 export const CSRF_VALUE = "av2i";
 
-export function buildApp(deps: { db: Db; config: Config; logger?: FastifyServerOptions["logger"] }): FastifyInstance {
+export function buildApp(deps: { db: Db; config: Config; aws?: AwsGateway; logger?: FastifyServerOptions["logger"] }): FastifyInstance {
   const { db, config } = deps;
-  const ctx: Ctx = { db, config };
+  const ctx: Ctx = { db, config, aws: deps.aws ?? realGateway() };
   const app = Fastify({ logger: deps.logger ?? false, trustProxy: config.trustProxy, bodyLimit: 1_000_000 });
   void app.register(cookie);
 
@@ -75,6 +77,7 @@ export function buildApp(deps: { db: Db; config: Config; logger?: FastifyServerO
   stateRoutes(app, ctx);
   runRoutes(app, ctx);
   variableRoutes(app, ctx);
+  connectionRoutes(app, ctx);
 
   app.all("/api/*", { config: { public: true } }, async (_req, reply) => reply.code(404).send({ error: { code: "not_found", message: "Not found." } }));
 

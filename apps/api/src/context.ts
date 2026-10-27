@@ -3,6 +3,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { statementsFor } from "./access.ts";
 import { audit } from "./audit.ts";
 import { COOKIE, type SessionUser } from "./auth/sessions.ts";
+import type { AwsGateway } from "./aws.ts";
 import type { Config } from "./config.ts";
 import type { Db } from "./db.ts";
 import { forbidden, unauthorized } from "./errors.ts";
@@ -10,6 +11,7 @@ import { forbidden, unauthorized } from "./errors.ts";
 export interface Ctx {
   db: Db;
   config: Config;
+  aws: AwsGateway;
 }
 
 export interface Auth {

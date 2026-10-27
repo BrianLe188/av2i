@@ -34,7 +34,7 @@ describe.skipIf(!available)("project variables", () => {
   const plan = (cookie: string) => t.call("POST", `/api/projects/${projectId}/runs`, { cookie, body: { kind: "plan" } });
 
   beforeAll(async () => {
-    t = await testApp({ tofuBin: join(import.meta.dirname, "fake-tofu.sh") });
+    t = await testApp({ tofuBin: join(import.meta.dirname, "fake-tofu.sh"), runWithServerIdentity: true });
     admin = await t.admin();
     alice = await addMember(t, admin, "alice", ["ProjectEditor"]);
     editor = await addMember(t, admin, "erin", ["ProjectEditor"]);

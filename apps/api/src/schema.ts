@@ -91,6 +91,7 @@ export interface ProjectsTable {
   updated_at: Ts;
   updated_by: string | null;
   deleted_at: TsNull;
+  connection_id: ColumnType<string | null, string | null | undefined, string | null>;
 }
 
 export interface ProjectVersionsTable {
@@ -146,6 +147,9 @@ export interface RunsTable {
   state_serial: number | null;
   state_token_hash: Buffer | null;
   variables_hash: ColumnType<string | null, string | null | undefined, string | null>;
+  connection_id: ColumnType<string | null, string | null | undefined, string | null>;
+  role_arn: ColumnType<string | null, string | null | undefined, string | null>;
+  aws_account: ColumnType<string | null, string | null | undefined, string | null>;
 }
 
 export interface RunLogsTable {
@@ -184,6 +188,20 @@ export interface ProjectVariablesTable {
   updated_at: Ts;
 }
 
+export interface AwsConnectionsTable {
+  id: Generated<string>;
+  name: string;
+  description: Generated<string>;
+  plan_role_arn: string;
+  apply_role_arn: string | null;
+  external_id: string;
+  created_by: string | null;
+  created_at: Ts;
+  updated_at: Ts;
+  last_test_at: TsNull;
+  last_test: ColumnType<unknown, string | null | undefined, string | null>;
+}
+
 export interface Database {
   users: UsersTable;
   sessions: SessionsTable;
@@ -202,4 +220,5 @@ export interface Database {
   state_versions: StateVersionsTable;
   state_locks: StateLocksTable;
   project_variables: ProjectVariablesTable;
+  aws_connections: AwsConnectionsTable;
 }
