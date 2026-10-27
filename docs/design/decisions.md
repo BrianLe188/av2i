@@ -30,6 +30,7 @@ Numbered `DD-nnn` to keep them apart from the specification's `D-nnn` ([../spec/
 | DD-023 | decided | The platform runs OpenTofu: plan with approval, state in the platform |
 | DD-024 | decided | Values a design asks for are set per project, encrypted, write-only |
 | DD-025 | decided | AWS connections: a project's runs assume a role, the platform keeps no AWS secret |
+| DD-026 | decided | Apply the approved plan; keep the state right when an apply goes wrong |
 
 ## DD-001 Language and runtime
 
@@ -415,3 +416,14 @@ and an ExternalId made by the platform; a project is tied to one connection. Bef
 own identity and gives only the temporary keys to the tofu process, which no longer inherits the server's `AWS_*`. A new action,
 `connection:Use`, decides who may plan against which account, apart from `run:Plan`. The platform generates the trust policy and a read-only
 plan policy; a least-privilege apply policy is not generated yet.
+
+## DD-026 Apply the approved plan; keep the state right when an apply goes wrong
+
+Status: decided (owner, 27 October 2026, all eight open questions as recommended); the design is in [apply-and-approval.md](apply-and-approval.md).
+
+Carries out the apply part of DD-023 (R2b). An apply is a run of its own that applies the stored plan file of one plan, once, within 24 hours, while
+the generated files, the variables, the connection and the state are those the plan was made with; a plan with deletes or replacements needs
+`run:ApplyDestructive` and the typed project name; two approvers are optional per project. The server checks every state write (the run must be an
+apply holding the lock, the lineage must match, the serial must grow), and an `errored.tfstate` left by OpenTofu is stored sealed before its folder
+is deleted, with the project locked against new runs until a person restores, downloads or dismisses it. Apply, approve and restore need a
+person's session, not an API token.
