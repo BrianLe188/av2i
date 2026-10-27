@@ -41,6 +41,7 @@ The API reads `.env` at the repository root if it exists (`.env` is not committe
 | `TOFU_BIN` | `tofu` | the OpenTofu binary (the image has it) |
 | `RUN_WITH_SERVER_IDENTITY` | `false` | development only: a project with no AWS connection runs with the server's own `AWS_*` |
 | `RUN_TIMEOUT_MINUTES` | `30` | a run that takes longer is stopped (55 at most: assumed-role keys last an hour) |
+| `RUN_APPLY_TIMEOUT_MINUTES` | `55` | an apply is asked to stop at this limit and given 5 minutes to finish before it is killed (55 at most) |
 | `RUN_WORKERS` | `2` | how many runs may work at once; each project runs one at a time |
 | `RUNS_DIR` | system temp folder | temporary folders of runs and the provider cache |
 | `RUNNER_API_URL` | `http://127.0.0.1:<PORT>` | how the tofu process reaches this server's state backend |
@@ -48,6 +49,11 @@ The API reads `.env` at the repository root if it exists (`.env` is not committe
 The server's own AWS identity (an instance role or container role on AWS; elsewhere `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` of an IAM user
 that may only call `sts:AssumeRole`) is used for one thing: to assume the role of a project's AWS connection (DD-025). The tofu process gets only the
 temporary keys of that role, never the server's own, and nothing else of the server's environment (DD-023).
+
+**Stopping the platform while an apply runs.** `SIGTERM` waits for a running apply to finish. Give the container time: the compose file sets
+`stop_grace_period: 10m`; with the default 10 seconds of Docker an apply would be killed half way, which can leave AWS changed and the state behind.
+If the platform is killed anyway, the next start marks that apply *interrupted*, saves any state OpenTofu left in its folder, and the project then
+needs a plan to see where things stand.
 
 Put a reverse proxy with HTTPS in front of any installation others can reach: the password travels in the sign in request.
 

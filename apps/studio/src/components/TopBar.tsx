@@ -41,6 +41,8 @@ interface Props {
   onShare?: () => void;
   /** present only when the person may run plans on this project */
   onRun?: () => void;
+  /** an apply left a state that was not saved: the Plan button says so */
+  runAlert?: boolean;
   onAccount: (what: "account" | "logout") => void;
 }
 
@@ -54,7 +56,7 @@ export function TopBar(p: Props) {
       <span className="max-w-56 truncate text-muted-foreground" title={p.name}>{p.name}</span>
       {p.readOnly ? <Badge variant="secondary" data-testid="view-only">{s.proj.viewOnly}</Badge> : <SaveStatus status={p.status} s={s} onClick={p.onStatusClick} />}
       <div className="flex-1" />
-      {p.onRun && <Button variant="outline" size="sm" onClick={p.onRun} data-testid="run"><Play />{s.run.plan}</Button>}
+      {p.onRun && <Button variant={p.runAlert ? "destructive" : "outline"} size="sm" onClick={p.onRun} data-testid="run" title={p.runAlert ? s.run.rescue.title : undefined}><Play />{s.run.plan}</Button>}
       {p.onShare && <Button variant="outline" size="sm" onClick={p.onShare} data-testid="share"><Share2 />{s.proj.share}</Button>}
       <Button variant="outline" size="sm" onClick={p.onHistory} data-testid="history"><History />{s.proj.history}</Button>
       <Button variant="outline" size="sm" onClick={p.onUndo} disabled={!p.canUndo || p.readOnly} data-testid="undo"><Undo2 />{s.undo}</Button>

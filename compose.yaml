@@ -18,6 +18,8 @@ services:
   app:
     build: .
     restart: unless-stopped
+    # an apply that is running finishes before the platform stops; a shorter wait would kill it half way
+    stop_grace_period: 10m
     depends_on:
       db:
         condition: service_healthy

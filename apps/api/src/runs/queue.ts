@@ -12,6 +12,7 @@ export interface Claimed {
   design_hash: string;
   created_by: string | null;
   connection_id: string | null;
+  plan_run_id: string | null;
   /** the secret the tofu process presents to the state backend; only its hash is stored */
   token: string;
 }
@@ -26,7 +27,7 @@ export async function claim(db: Db): Promise<Claimed | null> {
       .where("id", "=", (eb) => eb.selectFrom("runs as r").select("r.id").where("r.status", "=", "queued")
         .where((e) => e.not(e.exists(e.selectFrom("runs as x").select("x.id").whereRef("x.project_id", "=", "r.project_id").where("x.status", "=", "running"))))
         .orderBy("r.created_at").limit(1).forUpdate().skipLocked())
-      .returning(["id", "project_id", "kind", "design", "design_hash", "created_by", "connection_id"]).executeTakeFirst();
+      .returning(["id", "project_id", "kind", "design", "design_hash", "created_by", "connection_id", "plan_run_id"]).executeTakeFirst();
     return row ? ({ ...row, token } as Claimed) : null;
   });
 }
@@ -37,7 +38,8 @@ export async function claim(db: Db): Promise<Claimed | null> {
  */
 export async function failStale(db: Db): Promise<number> {
   return db.transaction().execute(async (trx) => {
-    const rows = await trx.updateTable("runs").set({ status: "failed", finished_at: sql`now()`, error: "The server restarted while this run was working.", state_token_hash: null })
+    // an apply cut off may have changed AWS without the state following: it is "interrupted", not just failed
+    const rows = await trx.updateTable("runs").set({ status: sql`case when kind = 'apply' then 'interrupted' else 'failed' end`, finished_at: sql`now()`, error: sql`case when kind = 'apply' then 'The server restarted while this apply was working. AWS may have changed without the state following: run a plan to see where things stand.' else 'The server restarted while this run was working.' end`, state_token_hash: null })
       .where("status", "=", "running").returning("project_id").execute();
     if (rows.length) await trx.deleteFrom("state_locks").where("project_id", "in", rows.map((r) => r.project_id)).execute();
     return rows.length;

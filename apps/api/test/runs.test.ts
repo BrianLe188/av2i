@@ -7,7 +7,7 @@ import { hashToken } from "../src/routes/state.ts";
 import { open, seal } from "../src/runs/crypto.ts";
 import { summarizePlan } from "../src/runs/plan.ts";
 import { claim, failStale } from "../src/runs/queue.ts";
-import { execute, sweepRunDirs } from "../src/runs/runner.ts";
+import { execute } from "../src/runs/runner.ts";
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 
@@ -24,19 +24,6 @@ describe("state encryption", () => {
     bad.data[0] = bad.data[0]! ^ 1;
     expect(() => open(key, bad)).toThrow();
     expect(() => open(randomBytes(32), sealed)).toThrow(/key/);
-  });
-});
-
-describe("folders of cut-off runs", () => {
-  it("removes run folders and leaves the provider cache", () => {
-    const root = mkdtempSync(join(tmpdir(), "av2i-sweep-"));
-    mkdirSync(join(root, "run-abc"));
-    writeFileSync(join(root, "run-abc", "plan.bin"), "x");
-    mkdirSync(join(root, "plugin-cache"));
-    expect(sweepRunDirs(root)).toBe(1);
-    expect(existsSync(join(root, "run-abc"))).toBe(false);
-    expect(existsSync(join(root, "plugin-cache"))).toBe(true);
-    expect(sweepRunDirs(join(root, "missing"))).toBe(0);
   });
 });
 
@@ -170,16 +157,24 @@ describe.skipIf(!available)("runs", () => {
 
   describe("state backend", () => {
     let token: string;
+    let planToken: string;
     const url = () => `/api/state/${projectId}`;
     const basic = (secret: string) => ({ authorization: `Basic ${Buffer.from(`run:${secret}`).toString("base64")}` });
-    const state = (serial: number) => ({ version: 4, serial, lineage: "abc", outputs: {}, resources: [] });
+    const state = (serial: number, lineage = "abc", extra: object = {}) => ({ version: 4, serial, lineage, outputs: {}, resources: [], ...extra });
     const call = (method: string, path: string, secret = token, body?: unknown) =>
       t.call(method, path, { csrf: false, headers: basic(secret), ...(body !== undefined ? { body } : {}) });
+    const runRow = (kind: "plan" | "apply", secret: string) =>
+      t.db.insertInto("runs").values({ project_id: projectId, kind, status: "running", design: "{}", design_hash: "x", created_by: null, error: null, plan_data: null, plan_nonce: null, plan_key_id: null, state_serial: null, state_token_hash: hashToken(secret) }).returning("id").executeTakeFirstOrThrow();
 
     beforeAll(async () => {
+      // a project runs one thing at a time, so these two runs stand for two moments
       token = randomBytes(16).toString("hex");
-      await t.db.insertInto("runs").values({ project_id: projectId, kind: "plan", status: "running", design: "{}", design_hash: "x", created_by: null, error: null, plan_data: null, plan_nonce: null, plan_key_id: null, state_serial: null, state_token_hash: hashToken(token) }).execute();
+      planToken = randomBytes(16).toString("hex");
+      await runRow("apply", token);
     });
+
+    const lock = async (id = "L1") => expect((await call("LOCK", url(), token, { ID: id })).status).toBe(200);
+    const unlock = (id = "L1") => call("UNLOCK", url(), token, { ID: id });
 
     it("refuses a call without the secret of a running run", async () => {
       expect((await t.call("GET", url(), { csrf: false })).status).toBe(401);
@@ -187,27 +182,53 @@ describe.skipIf(!available)("runs", () => {
       expect((await t.call("GET", url(), { cookie: admin })).status).toBe(401);
     });
 
-    it("has no state at first, then keeps every version encrypted and returns the newest", async () => {
-      expect((await call("GET", url())).status).toBe(404);
-      expect((await call("POST", url(), token, state(1))).status).toBe(200);
-      expect((await call("POST", url(), token, state(2))).status).toBe(200);
-      expect((await call("GET", url())).body).toMatchObject({ serial: 2, lineage: "abc" });
-      const rows = await t.db.selectFrom("state_versions").select(["serial", "data"]).where("project_id", "=", projectId).orderBy("id").execute();
-      expect(rows.map((r) => r.serial)).toEqual([1, 2]);
-      expect(rows[0]!.data.includes(Buffer.from("lineage"))).toBe(false);
-      expect((await call("POST", url(), token, { nope: true })).status).toBe(400);
+    it("never lets a plan write, even with the lock", async () => {
+      await runRow("plan", planToken);
+      expect((await call("POST", `${url()}?ID=P`, planToken, state(1))).status).toBe(403);
+      await t.db.deleteFrom("runs").where("state_token_hash", "=", hashToken(planToken)).execute();
     });
 
-    it("locks, refuses a second lock and a write without the lock id, and unlocks", async () => {
-      expect((await call("LOCK", url(), token, { ID: "L1", Who: "me" })).status).toBe(200);
-      const second = await call("LOCK", url(), token, { ID: "L2" });
+    it("writes only under the lock of the run that writes", async () => {
+      expect((await call("POST", `${url()}?ID=L1`, token, state(1))).body.error.code).toBe("lock_required");
+      await lock();
+      expect((await call("POST", url(), token, state(1))).status).toBe(423);
+      expect((await call("POST", `${url()}?ID=other`, token, state(1))).status).toBe(423);
+      expect((await call("POST", `${url()}?ID=L1`, token, { nope: true })).status).toBe(400);
+      await unlock();
+    });
+
+    it("has no state at first, then keeps every version encrypted, returns the newest and records the run", async () => {
+      expect((await call("GET", url())).status).toBe(404);
+      await lock();
+      expect((await call("POST", `${url()}?ID=L1`, token, state(1))).status).toBe(200);
+      expect((await call("POST", `${url()}?ID=L1`, token, state(2))).status).toBe(200);
+      await unlock();
+      expect((await call("GET", url())).body).toMatchObject({ serial: 2, lineage: "abc" });
+      const rows = await t.db.selectFrom("state_versions").select(["serial", "data", "run_id"]).where("project_id", "=", projectId).orderBy("id").execute();
+      expect(rows.map((r) => r.serial)).toEqual([1, 2]);
+      expect(rows[0]!.data.includes(Buffer.from("lineage"))).toBe(false);
+      expect(rows.every((r) => r.run_id !== null)).toBe(true);
+    });
+
+    it("refuses another lineage, an older serial and a different state with the same serial; a repeat is accepted and stored once", async () => {
+      await lock();
+      const post = (b: object) => call("POST", `${url()}?ID=L1`, token, b);
+      expect((await post(state(3, "other"))).body.error.code).toBe("lineage_mismatch");
+      expect((await post(state(1))).body.error.code).toBe("serial_regressed");
+      expect((await post(state(2, "abc", { outputs: { changed: true } }))).body.error.code).toBe("serial_conflict");
+      expect((await post(state(2))).status).toBe(200);
+      expect(await t.db.selectFrom("state_versions").select("serial").where("project_id", "=", projectId).execute()).toHaveLength(2);
+      await unlock();
+    });
+
+    it("locks, refuses a second lock, and unlocks", async () => {
+      await lock("L3");
+      const second = await call("LOCK", url(), token, { ID: "L4" });
       expect(second.status).toBe(423);
-      expect(second.body.ID).toBe("L1");
-      expect((await call("POST", url(), token, state(3))).status).toBe(423);
-      expect((await call("POST", `${url()}?ID=L1`, token, state(3))).status).toBe(200);
-      expect((await call("UNLOCK", url(), token, { ID: "L1" })).status).toBe(200);
-      expect((await call("LOCK", url(), token, { ID: "L3" })).status).toBe(200);
-      await call("UNLOCK", url(), token, { ID: "L3" });
+      expect(second.body.ID).toBe("L3");
+      await unlock("L3");
+      await lock("L5");
+      await unlock("L5");
     });
   });
 });

@@ -12,14 +12,18 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { listConnections, setProjectConnection, type ConnectionRow } from "../connections.ts";
 import { connError } from "./connError.ts";
-import { cancelRun, getRun, listRuns, listVariables, preflight, queuePlan, removeVariable, runLogs, setVariable, type Preflight, type RunRow, type VariableRow } from "../projects.ts";
+import { cancelRun, getRun, listRuns, listVariables, preflight, queuePlan, removeVariable, runLogs, setRequireApproval, setVariable, type AppliedSummary, type Preflight, type PlanSummary, type RunDetail, type RunRow, type VariableRow } from "../projects.ts";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useUser } from "../auth.tsx";
+import { ApplyPanel, RescueBanner } from "./ApplyPanel.tsx";
 import { describe } from "./auth/errors.ts";
 
 const LIVE = new Set(["queued", "running"]);
 const fill = (t: string, v: { add: number; change: number; destroy: number; replace: number }) => t.replace(/\{(\w+)\}/g, (_, k: string) => String(v[k as keyof typeof v] ?? 0));
 
 /** Runs OpenTofu plan for the project and follows the run: status, what the plan would do, and the log as it grows. */
-export function RunDialog({ s, projectId, open, onClose, beforeRun, canSetVariables }: { s: Strings; projectId: string; open: boolean; onClose: () => void; beforeRun: () => Promise<unknown>; canSetVariables: boolean }) {
+export function RunDialog({ s, projectId, projectName, open, onClose, beforeRun, canSetVariables, canShare }: { s: Strings; projectId: string; projectName: string; open: boolean; onClose: () => void; beforeRun: () => Promise<unknown>; canSetVariables: boolean; canShare: boolean }) {
+  const me = useUser().username;
   const [runs, setRuns] = useState<RunRow[]>([]);
   const [current, setCurrent] = useState<string | null>(null);
   const [lines, setLines] = useState<string[]>([]);
@@ -28,6 +32,7 @@ export function RunDialog({ s, projectId, open, onClose, beforeRun, canSetVariab
   const [pre, setPre] = useState<Preflight | null>(null);
   const [vars, setVars] = useState<VariableRow[] | null>(null);
   const [conns, setConns] = useState<ConnectionRow[]>([]);
+  const [detail, setDetail] = useState<RunDetail | null>(null);
   const last = useRef(0);
   const end = useRef<HTMLDivElement>(null);
 
@@ -51,12 +56,15 @@ export function RunDialog({ s, projectId, open, onClose, beforeRun, canSetVariab
     if (!open || !current) return;
     last.current = 0;
     setLines([]);
+    setDetail(null);
     let stop = false;
     let timer: ReturnType<typeof setTimeout>;
     const tick = async () => {
       try {
-        const [r, l] = await Promise.all([getRun(current), runLogs(current, last.current)]);
+        const [d, l] = await Promise.all([getRun(current), runLogs(current, last.current)]);
         if (stop) return;
+        const r = d.run;
+        setDetail(d);
         if (l.lines.length) { last.current = l.lines[l.lines.length - 1]!.seq; setLines((x) => [...x, ...l.lines.map((y) => y.line)]); }
         setRuns((x) => x.map((y) => (y.id === r.id ? r : y)));
         if (!l.done || LIVE.has(r.status)) timer = setTimeout(() => void tick(), 1000);
@@ -66,6 +74,13 @@ export function RunDialog({ s, projectId, open, onClose, beforeRun, canSetVariab
     return () => { stop = true; clearTimeout(timer); };
   }, [open, current, fail]);
   useEffect(() => { end.current?.scrollIntoView({ block: "end" }); }, [lines]);
+
+  /** the plan's apply state again (someone approved, the design changed, an apply began) */
+  const reloadDetail = useCallback(async () => {
+    if (!current) return;
+    try { const d = await getRun(current); setDetail(d); setRuns((x) => x.map((y) => (y.id === d.run.id ? d.run : y))); setPre(await preflight(projectId)); } catch (e) { fail(e); }
+  }, [current, projectId, fail]);
+  const applyQueued = async (id: string) => { await refresh(); setCurrent(id); };
 
   const start = async () => {
     setBusy(true);
@@ -81,10 +96,11 @@ export function RunDialog({ s, projectId, open, onClose, beforeRun, canSetVariab
     try { const r = await cancelRun(id); setRuns((x) => x.map((y) => (y.id === id ? r : y))); toast(s.run.status.cancelled); } catch (e) { fail(e); }
   };
 
-  const ready = !!pre && pre.key && pre.tofu.ok && pre.identity.ok && !!vars && vars.every((v) => v.set);
+  const ready = !!pre && pre.key && pre.tofu.ok && pre.identity.ok && !pre.rescuePending && !!vars && vars.every((v) => v.set);
   const run = runs.find((r) => r.id === current) ?? null;
-  const sum = run?.summary ?? null;
-  const tone = (st: RunRow["status"]) => (st === "succeeded" ? "default" : st === "failed" ? "destructive" : "secondary");
+  const sum = run?.kind === "plan" ? (run.summary as PlanSummary | null) : null;
+  const done = run?.kind === "apply" ? (run.summary as AppliedSummary | null) : null;
+  const tone = (st: RunRow["status"]) => (st === "succeeded" ? "default" : st === "failed" || st === "interrupted" ? "destructive" : "secondary");
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -97,7 +113,14 @@ export function RunDialog({ s, projectId, open, onClose, beforeRun, canSetVariab
         <ConnectionRow s={s} pre={pre} conns={conns} onChange={async (id) => {
           try { await setProjectConnection(projectId, id); toast(s.conn.chosen); setPre(null); setPre(await preflight(projectId)); } catch (e) { setError(connError(e, s)); }
         }} />
+        {pre?.rescuePending && <RescueBanner s={s} projectId={projectId} projectName={projectName} fail={fail} onChanged={async () => { setPre(await preflight(projectId)); await reloadDetail(); }} />}
         <Checks s={s} pre={pre} />
+        {canShare && pre && (
+          <label className="flex items-start gap-2 text-xs" data-testid="run-require-approval">
+            <Checkbox checked={pre.requireApproval} onCheckedChange={(v) => void setRequireApproval(projectId, v === true).then(() => preflight(projectId)).then(setPre).then(reloadDetail).catch(fail)} />
+            <span><span className="font-medium">{s.run.twoPeople}</span><span className="block text-muted-foreground">{s.run.twoPeopleHelp}</span></span>
+          </label>
+        )}
         {vars && vars.length > 0 && <Variables s={s} projectId={projectId} vars={vars} can={canSetVariables} onChanged={loadVars} fail={fail} />}
         <div className="flex items-center gap-2">
           <Button size="sm" onClick={() => void start()} disabled={busy || !ready} title={ready ? undefined : s.run.ready} data-testid="run-start">{busy ? <Loader2 className="animate-spin" /> : <Play />}{busy ? s.run.starting : s.run.start}</Button>
@@ -117,6 +140,10 @@ export function RunDialog({ s, projectId, open, onClose, beforeRun, canSetVariab
             )}
           </div>
         )}
+        {done && <p className="rounded-md border p-3 text-sm" data-testid="run-applied">{s.run.appliedSummary.replace("{added}", String(done.added)).replace("{changed}", String(done.changed)).replace("{destroyed}", String(done.destroyed))}</p>}
+        {run && detail && detail.run.id === run.id && run.kind === "plan" && run.status === "succeeded" && (
+          <ApplyPanel s={s} detail={detail} me={me} projectName={projectName} fail={fail} onChanged={reloadDetail} onApplyQueued={(id) => void applyQueued(id)} onReplan={() => void start()} onOpen={setCurrent} />
+        )}
         {run?.error && <p className="text-sm text-destructive">{run.error}</p>}
         <div>
           <p className="mb-1 text-xs font-medium text-muted-foreground">{s.run.logs}</p>
@@ -133,6 +160,7 @@ export function RunDialog({ s, projectId, open, onClose, beforeRun, canSetVariab
                 <li key={r.id}>
                   <button type="button" onClick={() => setCurrent(r.id)} className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left hover:bg-muted ${r.id === current ? "bg-muted" : ""}`}>
                     <Badge variant={tone(r.status)}>{s.run.status[r.status]}</Badge>
+                    <Badge variant="outline">{r.kind === "apply" ? s.run.kindApply : s.run.kindPlan}</Badge>
                     <span>{new Date(r.createdAt).toLocaleString()}</span>
                     {r.createdBy && <span className="text-muted-foreground">{s.run.by} {r.createdBy}</span>}
                   </button>

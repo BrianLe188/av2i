@@ -6,7 +6,8 @@ import { createDb } from "./db.ts";
 import { migrate } from "./migrate.ts";
 import { purgeSessions } from "./auth/sessions.ts";
 import { runsHooks } from "./routes/runs.ts";
-import { execute, sweepRunDirs } from "./runs/runner.ts";
+import { execute } from "./runs/runner.ts";
+import { recoverRunDirs } from "./runs/rescue.ts";
 import { failStale, startWorkers } from "./runs/queue.ts";
 import { mkdirSync } from "node:fs";
 
@@ -21,9 +22,10 @@ await syncBuiltinPolicies(db);
 await ensureAdmin(db, config, { warn: (m) => app.log.warn(m) });
 
 mkdirSync(config.runsDir, { recursive: true });
-const swept = sweepRunDirs(config.runsDir);
-if (swept) app.log.warn(`removed ${swept} folder(s) left by runs cut off by the last restart`);
 const cut = await failStale(db);
+const recovered = await recoverRunDirs(db, config);
+if (recovered.removed) app.log.warn(`removed ${recovered.removed} folder(s) left by runs cut off by the last restart`);
+if (recovered.rescued) app.log.warn(`saved ${recovered.rescued} state(s) that an apply could not write: they wait in the platform for someone to restore or download them`);
 if (cut) app.log.warn(`${cut} run(s) were cut off by the last restart and marked failed`);
 const workers = startWorkers(db, config.runWorkers, (run) => execute(db, config, run, aws), (e) => app.log.error(e));
 runsHooks.wake = workers.wake;

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generate } from "@av2i/generator";
@@ -8,8 +8,9 @@ import { sql } from "kysely";
 import { realGateway, type AwsGateway } from "../aws.ts";
 import type { Config } from "../config.ts";
 import { runIdentity } from "./credentials.ts";
+import { storeRescue } from "./rescue.ts";
 import type { Db } from "../db.ts";
-import { requireKey, seal } from "./crypto.ts";
+import { open, requireKey, seal } from "./crypto.ts";
 import { requiredOf, valuesOf } from "./variables.ts";
 import { summarizePlan } from "./plan.ts";
 import type { Claimed } from "./queue.ts";
@@ -59,7 +60,7 @@ interface Out { code: number; stdout: string; timedOut: boolean }
 /** Milliseconds a stopped process gets to leave (so tofu can release its lock) before it is killed. */
 const GRACE_MS = 10_000;
 
-function run(bin: string, args: string[], opts: { cwd: string; env: NodeJS.ProcessEnv; onLine: (l: string) => void; capture?: boolean; timeoutMs: number }): Promise<Out> {
+function run(bin: string, args: string[], opts: { cwd: string; env: NodeJS.ProcessEnv; onLine: (l: string) => void; capture?: boolean; timeoutMs: number; stopSignal?: NodeJS.Signals; graceMs?: number }): Promise<Out> {
   return new Promise((resolve, reject) => {
     const p = spawn(bin, args, { cwd: opts.cwd, env: opts.env, stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
@@ -67,8 +68,8 @@ function run(bin: string, args: string[], opts: { cwd: string; env: NodeJS.Proce
     let killer: ReturnType<typeof setTimeout> | undefined;
     const timer = setTimeout(() => {
       timedOut = true;
-      p.kill("SIGTERM");
-      killer = setTimeout(() => p.kill("SIGKILL"), GRACE_MS);
+      p.kill(opts.stopSignal ?? "SIGTERM");
+      killer = setTimeout(() => p.kill("SIGKILL"), opts.graceMs ?? GRACE_MS);
     }, Math.max(1, opts.timeoutMs));
     const lines = () => {
       let rest = "";
@@ -98,14 +99,6 @@ function run(bin: string, args: string[], opts: { cwd: string; env: NodeJS.Proce
   });
 }
 
-/** Folders a cut-off run left behind (they hold the plan file in clear): removed at start, when no run can be using one. Returns how many. */
-export function sweepRunDirs(runsDir: string): number {
-  if (!existsSync(runsDir)) return 0;
-  const gone = readdirSync(runsDir).filter((n) => /^run-/.test(n));
-  for (const n of gone) rmSync(join(runsDir, n), { recursive: true, force: true });
-  return gone.length;
-}
-
 /** Whether the OpenTofu binary starts, and which version it is. */
 export async function tofuVersion(bin: string): Promise<{ ok: true; version: string } | { ok: false; message: string }> {
   try {
@@ -132,19 +125,27 @@ export function backendFile(config: Config, projectId: string): string {
 `;
 }
 
-/** Plans a design with OpenTofu in a folder of its own and stores the plan (encrypted) and a summary of it. Apply comes with R2. */
+/**
+ * Runs one claimed run in a folder of its own: a plan stores its (encrypted) plan file and a summary; an apply applies the stored plan
+ * file of its plan, with the configuration that plan was made from. An `errored.tfstate` that an apply leaves is saved before the folder
+ * goes (DD-026).
+ */
 export async function execute(db: Db, config: Config, claimed: Claimed, aws: AwsGateway = realGateway()): Promise<void> {
+  const isApply = claimed.kind === "apply";
   // the values of variables join this list as they are read, so a secret that shows up in tofu's output never reaches the log
   const secrets = [claimed.token];
   const log = logWriter(db, claimed.id, redactor(secrets));
   let dir: string | null = null;
   let error: string | null = null;
-  const deadline = Date.now() + config.runTimeoutMs;
-  const timeoutMessage = `The run took longer than ${Math.round(config.runTimeoutMs / 60_000)} minute(s) and was stopped.`;
+  let applied: { added: number; changed: number; destroyed: number } | null = null;
+  const limit = isApply ? config.applyTimeoutMs : config.runTimeoutMs;
+  const deadline = Date.now() + limit;
+  const timeoutMessage = `The ${claimed.kind} took longer than ${Math.round(limit / 60_000)} minute(s) and was stopped.`;
   try {
     const key = requireKey(config.stateKey);
     mkdirSync(join(config.runsDir, "plugin-cache"), { recursive: true });
-    const work = (dir = mkdtempSync(join(config.runsDir, "run-")));
+    // the folder carries the run's id so that, after a crash, an errored.tfstate in it can be saved instead of deleted
+    const work = (dir = mkdtempSync(join(config.runsDir, `run-${claimed.id}-`)));
     for (const [name, text] of Object.entries(generate(claimed.design as Design))) if (name.endsWith(".tf")) writeFileSync(join(work, name), text);
     writeFileSync(join(work, "backend.tf"), backendFile(config, claimed.project_id));
     const env: NodeJS.ProcessEnv = { HOME: work, TF_IN_AUTOMATION: "1", TF_INPUT: "0", TF_PLUGIN_CACHE_DIR: join(config.runsDir, "plugin-cache"), TF_HTTP_USERNAME: "run", TF_HTTP_PASSWORD: claimed.token };
@@ -154,33 +155,58 @@ export async function execute(db: Db, config: Config, claimed: Claimed, aws: Aws
     secrets.push(...who.secrets);
     log.line(who.summary);
     await db.updateTable("runs").set({ role_arn: who.roleArn, aws_account: who.account }).where("id", "=", claimed.id).execute();
-    const needed = requiredOf(claimed.design as Design).map((v) => v.name);
-    const values = await valuesOf(db, key, claimed.project_id, needed);
-    const absent = needed.filter((n) => !(n in values));
-    if (absent.length) throw new Error(`No value is set for: ${absent.join(", ")}.`);
-    for (const [n, v] of Object.entries(values)) { env[`TF_VAR_${n}`] = v; secrets.push(v); }
+    if (!isApply) {
+      // a saved plan already holds its values, so only a plan needs them
+      const needed = requiredOf(claimed.design as Design).map((v) => v.name);
+      const values = await valuesOf(db, key, claimed.project_id, needed);
+      const absent = needed.filter((n) => !(n in values));
+      if (absent.length) throw new Error(`No value is set for: ${absent.join(", ")}.`);
+      for (const [n, v] of Object.entries(values)) { env[`TF_VAR_${n}`] = v; secrets.push(v); }
+    }
+    const tail: string[] = [];
     const step = async (title: string, args: string[], capture = false) => {
       log.line(`$ tofu ${title}`);
       const left = deadline - Date.now();
       if (left <= 0) throw new Error(timeoutMessage);
-      const r = await run(config.tofuBin, args, { cwd: work, env, onLine: (l) => log.line(l), capture, timeoutMs: left });
+      const r = await run(config.tofuBin, args, {
+        cwd: work, env, capture, timeoutMs: left,
+        // an apply is asked to stop, not killed: it finishes what is in flight and writes its state
+        ...(isApply ? { stopSignal: "SIGINT" as const, graceMs: config.applyGraceMs } : {}),
+        onLine: (l) => { log.line(l); tail.push(l); if (tail.length > 40) tail.shift(); },
+      });
       if (r.timedOut) throw new Error(timeoutMessage);
       if (r.code !== 0) throw new Error(`tofu ${title} exited with code ${r.code}`);
       return r;
     };
     await step("init", ["init", "-input=false", "-no-color"]);
-    await step("plan", ["plan", "-input=false", "-no-color", "-lock=true", "-out=plan.bin"]);
-    const shown = await step("show -json", ["show", "-json", "plan.bin"], true);
-    const summary = summarizePlan(JSON.parse(shown.stdout));
-    log.line(`Plan: ${summary.add} to add, ${summary.change} to change, ${summary.destroy} to destroy, ${summary.replace} to replace.`);
-    const sealed = seal(key, readFileSync(join(work, "plan.bin")));
-    const serial = await db.selectFrom("state_versions").select("serial").where("project_id", "=", claimed.project_id).orderBy("id", "desc").limit(1).executeTakeFirst();
-    await db.updateTable("runs").set({ summary: JSON.stringify(summary), plan_data: sealed.data, plan_nonce: sealed.nonce, plan_key_id: sealed.keyId, state_serial: serial?.serial ?? null })
-      .where("id", "=", claimed.id).execute();
+    if (isApply) {
+      const plan = claimed.plan_run_id ? await db.selectFrom("runs").select(["plan_data", "plan_nonce", "plan_key_id"]).where("id", "=", claimed.plan_run_id).executeTakeFirst() : undefined;
+      if (!plan?.plan_data || !plan.plan_nonce || !plan.plan_key_id) throw new Error("The plan this apply belongs to has no stored plan file.");
+      writeFileSync(join(work, "plan.bin"), open(key, { keyId: plan.plan_key_id, nonce: plan.plan_nonce, data: plan.plan_data }));
+      await step("apply", ["apply", "-input=false", "-no-color", "-lock=true", "plan.bin"]);
+      const m = /Apply complete! Resources: (\d+) added, (\d+) changed, (\d+) destroyed/.exec(tail.join("\n"));
+      applied = m ? { added: Number(m[1]), changed: Number(m[2]), destroyed: Number(m[3]) } : null;
+      if (applied) await db.updateTable("runs").set({ summary: JSON.stringify(applied) }).where("id", "=", claimed.id).execute();
+    } else {
+      await step("plan", ["plan", "-input=false", "-no-color", "-lock=true", "-out=plan.bin"]);
+      const shown = await step("show -json", ["show", "-json", "plan.bin"], true);
+      const summary = summarizePlan(JSON.parse(shown.stdout));
+      log.line(`Plan: ${summary.add} to add, ${summary.change} to change, ${summary.destroy} to destroy, ${summary.replace} to replace.`);
+      const sealed = seal(key, readFileSync(join(work, "plan.bin")));
+      const serial = await db.selectFrom("state_versions").select("serial").where("project_id", "=", claimed.project_id).orderBy("id", "desc").limit(1).executeTakeFirst();
+      await db.updateTable("runs").set({ summary: JSON.stringify(summary), plan_data: sealed.data, plan_nonce: sealed.nonce, plan_key_id: sealed.keyId, state_serial: serial?.serial ?? null })
+        .where("id", "=", claimed.id).execute();
+    }
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
     log.line(`Failed: ${error}`);
   } finally {
+    // OpenTofu leaves errored.tfstate when it created things but could not write the state: it is the only record of them
+    if (isApply && dir && config.stateKey && existsSync(join(dir, "errored.tfstate"))) {
+      const where = await storeRescue(db, config, config.stateKey, { projectId: claimed.project_id, runId: claimed.id, text: readFileSync(join(dir, "errored.tfstate"), "utf8") });
+      error = `${error ? `${error}. ` : ""}Resources were created but the state could not be saved. It was kept ${where === "db" ? "in the platform" : "in a file under the rescue folder of the runs"}; restore or download it before running anything else.`;
+      log.line(`!! ${error}`);
+    }
     await log.close();
     if (dir) rmSync(dir, { recursive: true, force: true });
     // runs of one project never overlap, so a lock still held now belongs to nobody: tofu was stopped before it could unlock

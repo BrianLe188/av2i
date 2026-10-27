@@ -92,6 +92,7 @@ export interface ProjectsTable {
   updated_by: string | null;
   deleted_at: TsNull;
   connection_id: ColumnType<string | null, string | null | undefined, string | null>;
+  require_approval: Generated<boolean>;
 }
 
 export interface ProjectVersionsTable {
@@ -132,7 +133,7 @@ export interface RunsTable {
   id: Generated<string>;
   project_id: string;
   kind: "plan" | "apply";
-  status: Generated<"queued" | "running" | "succeeded" | "failed" | "cancelled">;
+  status: Generated<"queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted">;
   design: ColumnType<unknown, string, string>;
   design_hash: string;
   created_by: string | null;
@@ -150,6 +151,8 @@ export interface RunsTable {
   connection_id: ColumnType<string | null, string | null | undefined, string | null>;
   role_arn: ColumnType<string | null, string | null | undefined, string | null>;
   aws_account: ColumnType<string | null, string | null | undefined, string | null>;
+  plan_run_id: ColumnType<string | null, string | null | undefined, string | null>;
+  files_hash: ColumnType<string | null, string | null | undefined, string | null>;
 }
 
 export interface RunLogsTable {
@@ -175,6 +178,7 @@ export interface StateLocksTable {
   project_id: string;
   lock_id: string;
   info: ColumnType<unknown, string, string>;
+  run_id: ColumnType<string | null, string | null | undefined, string | null>;
   created_at: Ts;
 }
 
@@ -202,6 +206,28 @@ export interface AwsConnectionsTable {
   last_test: ColumnType<unknown, string | null | undefined, string | null>;
 }
 
+export interface RunApprovalsTable {
+  run_id: string;
+  user_id: string | null;
+  username: string;
+  at: Ts;
+}
+
+export interface StateRescuesTable {
+  id: Generated<string>;
+  project_id: string;
+  run_id: string | null;
+  serial: number;
+  lineage: string;
+  key_id: string;
+  nonce: Buffer;
+  data: Buffer;
+  created_at: Ts;
+  resolved_at: TsNull;
+  resolved_by: ColumnType<string | null, string | null | undefined, string | null>;
+  resolution: ColumnType<"restored" | "dismissed" | null, "restored" | "dismissed" | null | undefined, "restored" | "dismissed" | null>;
+}
+
 export interface Database {
   users: UsersTable;
   sessions: SessionsTable;
@@ -221,4 +247,6 @@ export interface Database {
   state_locks: StateLocksTable;
   project_variables: ProjectVariablesTable;
   aws_connections: AwsConnectionsTable;
+  run_approvals: RunApprovalsTable;
+  state_rescues: StateRescuesTable;
 }

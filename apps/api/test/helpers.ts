@@ -78,7 +78,7 @@ export async function testApp(over: Partial<Config> = {}, aws?: AwsGateway): Pro
   const config: Config = {
     port: 0, host: "127.0.0.1", databaseUrl: url.toString(), adminInitialPassword: undefined,
     sessionIdleMinutes: 480, sessionMaxHours: 168, staticDir: undefined, trustProxy: false,
-    stateKey: randomBytes(32), tofuBin: "tofu", runWorkers: 1, runTimeoutMs: 600_000, runWithServerIdentity: false, runsDir: join(tmpdir(), `av2i-test-${name}`), runnerApiUrl: "http://127.0.0.1:0", ...over,
+    stateKey: randomBytes(32), tofuBin: "tofu", runWorkers: 1, runTimeoutMs: 600_000, runWithServerIdentity: false, applyTimeoutMs: 600_000, applyGraceMs: 500, runsDir: join(tmpdir(), `av2i-test-${name}`), runnerApiUrl: "http://127.0.0.1:0", ...over,
   };
   const db = createDb(config.databaseUrl);
   await migrate(db);

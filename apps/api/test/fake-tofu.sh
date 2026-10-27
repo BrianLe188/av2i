@@ -11,5 +11,6 @@ case "$1" in
  {"address":"aws_db_instance.c","type":"aws_db_instance","change":{"actions":["delete","create"]}}]}
 JSON
   ;;
+  apply) echo "Applying"; test -f plan.bin || { echo "no plan file" >&2; exit 3; }; echo "Apply complete! Resources: 2 added, 0 changed, 0 destroyed.";;
   *) echo "unexpected $1" >&2; exit 2;;
 esac

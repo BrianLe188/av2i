@@ -15,6 +15,7 @@ import { connectionRoutes } from "./routes/connections.ts";
 import { groupRoutes } from "./routes/groups.ts";
 import { policyRoutes } from "./routes/policies.ts";
 import { projectRoutes } from "./routes/projects.ts";
+import { rescueRoutes } from "./routes/rescues.ts";
 import { runRoutes } from "./routes/runs.ts";
 import { stateRoutes } from "./routes/state.ts";
 import { tokenRoutes } from "./routes/tokens.ts";
@@ -78,6 +79,7 @@ export function buildApp(deps: { db: Db; config: Config; aws?: AwsGateway; logge
   runRoutes(app, ctx);
   variableRoutes(app, ctx);
   connectionRoutes(app, ctx);
+  rescueRoutes(app, ctx);
 
   app.all("/api/*", { config: { public: true } }, async (_req, reply) => reply.code(404).send({ error: { code: "not_found", message: "Not found." } }));
 

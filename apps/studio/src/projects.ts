@@ -15,7 +15,7 @@ export interface ProjectSummary {
 }
 
 export interface ProjectFull {
-  project: { id: string; name: string; owner: string | null; ownerId: string; rev: number; updatedAt: string; updatedBy: string | null; design: Design };
+  project: { id: string; name: string; owner: string | null; ownerId: string; rev: number; updatedAt: string; updatedBy: string | null; design: Design; requireApproval?: boolean; rescuePending?: boolean };
   can: { write: boolean; delete: boolean; share: boolean; plan: boolean; variables: boolean };
 }
 
@@ -39,13 +39,31 @@ export const removeShare = (id: string, shareId: string) => api("DELETE", `/api/
 
 export interface PlanSummary { add: number; change: number; destroy: number; replace: number; destructive: boolean; resources: { address: string; type: string; actions: string[] }[] }
 export interface RunRow {
-  id: string; projectId: string; kind: "plan" | "apply"; status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
-  createdBy: string | null; createdAt: string; startedAt: string | null; finishedAt: string | null; error: string | null; summary: PlanSummary | null;
+  id: string; projectId: string; kind: "plan" | "apply"; status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted";
+  planRunId: string | null;
+  createdBy: string | null; createdAt: string; startedAt: string | null; finishedAt: string | null; error: string | null; summary: PlanSummary | AppliedSummary | null;
 }
+export interface AppliedSummary { added: number; changed: number; destroyed: number }
 
 export const queuePlan = (id: string) => api<{ run: RunRow }>("POST", `/api/projects/${id}/runs`, { kind: "plan" }).then((r) => r.run);
 export const listRuns = (id: string) => api<{ runs: RunRow[] }>("GET", `/api/projects/${id}/runs`).then((r) => r.runs);
-export const getRun = (id: string) => api<{ run: RunRow }>("GET", `/api/runs/${id}`).then((r) => r.run);
+export interface Blocker { code: string }
+export interface ApplyInfo {
+  blockers: Blocker[]; needsApproval: boolean; destructive: boolean; expiresAt: string | null;
+  approvals: { username: string; at: string }[]; applyRun: { id: string; status: RunRow["status"] } | null;
+}
+export interface RunDetail { run: RunRow; apply?: ApplyInfo; can?: { approve: boolean; apply: boolean; applyDestructive: boolean } }
+export const getRun = (id: string) => api<RunDetail>("GET", `/api/runs/${id}`);
+export const applyRun = (id: string, confirmName?: string) => api<{ run: RunRow }>("POST", `/api/runs/${id}/apply`, confirmName !== undefined ? { confirmName } : {}).then((r) => r.run);
+export const approveRun = (id: string) => api("POST", `/api/runs/${id}/approve`);
+export const withdrawApproval = (id: string) => api("DELETE", `/api/runs/${id}/approve`);
+export const setRequireApproval = (projectId: string, requireApproval: boolean) => api("PUT", `/api/projects/${projectId}/settings`, { requireApproval });
+
+export interface RescueRow { id: string; runId: string | null; serial: number; createdAt: string; resolvedAt: string | null; resolution: "restored" | "dismissed" | null; resolvedBy: string | null }
+export const listRescues = (projectId: string) => api<{ rescues: RescueRow[] }>("GET", `/api/projects/${projectId}/state-rescues`).then((r) => r.rescues);
+export const restoreRescue = (id: string) => api("POST", `/api/state-rescues/${id}/restore`);
+export const dismissRescue = (id: string, confirmName: string) => api("POST", `/api/state-rescues/${id}/dismiss`, { confirmName });
+export const rescueDownloadUrl = (id: string) => `/api/state-rescues/${id}/download`;
 export const runLogs = (id: string, after: number) => api<{ lines: { seq: number; line: string }[]; done: boolean }>("GET", `/api/runs/${id}/logs?after=${after}`);
 export const cancelRun = (id: string) => api<{ run: RunRow }>("POST", `/api/runs/${id}/cancel`).then((r) => r.run);
 
@@ -58,6 +76,8 @@ export interface Preflight {
   identity: PreflightIdentity;
   connection: { id: string; name: string; planOnly: boolean } | null;
   timeoutMinutes: number;
+  rescuePending: boolean;
+  requireApproval: boolean;
 }
 export const preflight = (id: string) => api<Preflight>("GET", `/api/projects/${id}/preflight`);
 

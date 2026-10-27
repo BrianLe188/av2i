@@ -180,6 +180,7 @@ export function App({ prefs, user, project }: { prefs: Prefs; user: User; projec
         onHistory={() => setHistoryOpen(true)}
         onShare={project.can.share ? () => setShareOpen(true) : undefined}
         onRun={project.can.plan ? () => setRunOpen(true) : undefined}
+        runAlert={project.project.rescuePending === true}
         onAccount={(what) => (what === "logout" ? void auth.logout() : void leave("/account"))}
       />
       <Palette lang={lang} s={s} onAdd={(service) => add(service, undefined)} disabled={!writable} />
@@ -208,7 +209,7 @@ export function App({ prefs, user, project }: { prefs: Prefs; user: User; projec
       beforeChange={() => queue.flush()} onRestored={(d, rev) => adopt(d, rev)}
     />
     <ShareDialog s={s} projectId={projectId} open={shareOpen} onClose={() => setShareOpen(false)} />
-    <RunDialog s={s} projectId={projectId} open={runOpen} onClose={() => setRunOpen(false)} beforeRun={() => queue.flush()} canSetVariables={project.can.variables} />
+    <RunDialog s={s} projectId={projectId} projectName={project.project.name} canShare={project.can.share} open={runOpen} onClose={() => setRunOpen(false)} beforeRun={() => queue.flush()} canSetVariables={project.can.variables} />
     <ConflictDialog
       s={s} conflict={conflict} onClose={() => setConflict(null)}
       onReload={() => void reload()} onOverwrite={() => { if (conflict) queue.overwrite(conflict.currentRev); setConflict(null); }} onCopy={() => void copyMine()}
