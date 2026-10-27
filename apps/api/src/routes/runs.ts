@@ -8,7 +8,9 @@ import { audit } from "../audit.ts";
 import type { Ctx } from "../context.ts";
 import { HttpError, notFound } from "../errors.ts";
 import { projectAccess } from "../project-access.ts";
+import { callerIdentity } from "../aws.ts";
 import { requireKey } from "../runs/crypto.ts";
+import { tofuVersion } from "../runs/runner.ts";
 
 const idParams = { type: "object", required: ["id"], properties: { id: { type: "string", format: "uuid" } } } as const;
 /** Waiting runs per project: a person who keeps pressing Plan cannot fill the queue. */
@@ -62,6 +64,14 @@ export function runRoutes(app: FastifyInstance, ctx: Ctx): void {
     runsHooks.wake?.();
     reply.code(201);
     return { run: await view(await runOf(row.id)) };
+  });
+
+  /** What a run would use, so the studio can say what is missing before anyone presses Plan. */
+  app.get("/api/projects/:id/preflight", { schema: { params: idParams } }, async (req) => {
+    const { id } = req.params as { id: string };
+    await authorize(req, await projectOf(id), "run:Plan");
+    const [tofu, identity] = await Promise.all([tofuVersion(config.tofuBin), callerIdentity()]);
+    return { key: !!config.stateKey, tofu, identity, timeoutMinutes: Math.round(config.runTimeoutMs / 60_000) };
   });
 
   app.get("/api/projects/:id/runs", { schema: { params: idParams } }, async (req) => {

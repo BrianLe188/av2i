@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generate } from "@av2i/generator";
 import type { Design } from "@av2i/model";
@@ -49,12 +50,22 @@ export function logWriter(db: Db, runId: string, clean: (l: string) => string) {
   };
 }
 
-interface Out { code: number; stdout: string }
+interface Out { code: number; stdout: string; timedOut: boolean }
 
-function run(bin: string, args: string[], opts: { cwd: string; env: NodeJS.ProcessEnv; onLine: (l: string) => void; capture?: boolean }): Promise<Out> {
+/** Milliseconds a stopped process gets to leave (so tofu can release its lock) before it is killed. */
+const GRACE_MS = 10_000;
+
+function run(bin: string, args: string[], opts: { cwd: string; env: NodeJS.ProcessEnv; onLine: (l: string) => void; capture?: boolean; timeoutMs: number }): Promise<Out> {
   return new Promise((resolve, reject) => {
     const p = spawn(bin, args, { cwd: opts.cwd, env: opts.env, stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
+    let timedOut = false;
+    let killer: ReturnType<typeof setTimeout> | undefined;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      p.kill("SIGTERM");
+      killer = setTimeout(() => p.kill("SIGKILL"), GRACE_MS);
+    }, Math.max(1, opts.timeoutMs));
     const lines = () => {
       let rest = "";
       return {
@@ -72,11 +83,13 @@ function run(bin: string, args: string[], opts: { cwd: string; env: NodeJS.Proce
     // a capturing step keeps stdout whole (it is JSON for the caller) and logs only what goes to stderr
     p.stdout.on("data", (c: Buffer) => (opts.capture ? (stdout += c.toString("utf8")) : out.push(c)));
     p.stderr.on("data", (c: Buffer) => err.push(c));
-    p.on("error", reject);
+    p.on("error", (e) => { clearTimeout(timer); clearTimeout(killer); reject(e); });
     p.on("close", (code) => {
+      clearTimeout(timer);
+      clearTimeout(killer);
       out.end();
       err.end();
-      resolve({ code: code ?? 1, stdout });
+      resolve({ code: code ?? 1, stdout, timedOut });
     });
   });
 }
@@ -87,6 +100,18 @@ export function sweepRunDirs(runsDir: string): number {
   const gone = readdirSync(runsDir).filter((n) => /^run-/.test(n));
   for (const n of gone) rmSync(join(runsDir, n), { recursive: true, force: true });
   return gone.length;
+}
+
+/** Whether the OpenTofu binary starts, and which version it is. */
+export async function tofuVersion(bin: string): Promise<{ ok: true; version: string } | { ok: false; message: string }> {
+  try {
+    const r = await run(bin, ["version", "-json"], { cwd: tmpdir(), env: { PATH: process.env.PATH ?? "" }, onLine: () => {}, capture: true, timeoutMs: 8000 });
+    if (r.timedOut) return { ok: false, message: "tofu did not answer in time." };
+    if (r.code !== 0) return { ok: false, message: `tofu exited with code ${r.code}.` };
+    return { ok: true, version: (JSON.parse(r.stdout) as { terraform_version?: string }).terraform_version ?? "unknown" };
+  } catch (e) {
+    return { ok: false, message: (e as NodeJS.ErrnoException).code === "ENOENT" ? `The program "${bin}" was not found; install OpenTofu or set TOFU_BIN.` : String(e) };
+  }
 }
 
 export function backendFile(config: Config, projectId: string): string {
@@ -108,6 +133,8 @@ export async function execute(db: Db, config: Config, claimed: Claimed): Promise
   const log = logWriter(db, claimed.id, redactor([claimed.token]));
   let dir: string | null = null;
   let error: string | null = null;
+  const deadline = Date.now() + config.runTimeoutMs;
+  const timeoutMessage = `The run took longer than ${Math.round(config.runTimeoutMs / 60_000)} minute(s) and was stopped.`;
   try {
     const key = requireKey(config.stateKey);
     mkdirSync(join(config.runsDir, "plugin-cache"), { recursive: true });
@@ -118,7 +145,10 @@ export async function execute(db: Db, config: Config, claimed: Claimed): Promise
     for (const [k, v] of Object.entries(process.env)) if (v !== undefined && PASS.test(k)) env[k] = v;
     const step = async (title: string, args: string[], capture = false) => {
       log.line(`$ tofu ${title}`);
-      const r = await run(config.tofuBin, args, { cwd: work, env, onLine: (l) => log.line(l), capture });
+      const left = deadline - Date.now();
+      if (left <= 0) throw new Error(timeoutMessage);
+      const r = await run(config.tofuBin, args, { cwd: work, env, onLine: (l) => log.line(l), capture, timeoutMs: left });
+      if (r.timedOut) throw new Error(timeoutMessage);
       if (r.code !== 0) throw new Error(`tofu ${title} exited with code ${r.code}`);
       return r;
     };
@@ -137,6 +167,8 @@ export async function execute(db: Db, config: Config, claimed: Claimed): Promise
   } finally {
     await log.close();
     if (dir) rmSync(dir, { recursive: true, force: true });
+    // runs of one project never overlap, so a lock still held now belongs to nobody: tofu was stopped before it could unlock
+    await db.deleteFrom("state_locks").where("project_id", "=", claimed.project_id).execute();
     await db.updateTable("runs").set({ status: error ? "failed" : "succeeded", finished_at: sql`now()`, error, state_token_hash: null }).where("id", "=", claimed.id).execute();
   }
 }

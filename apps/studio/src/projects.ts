@@ -48,3 +48,11 @@ export const listRuns = (id: string) => api<{ runs: RunRow[] }>("GET", `/api/pro
 export const getRun = (id: string) => api<{ run: RunRow }>("GET", `/api/runs/${id}`).then((r) => r.run);
 export const runLogs = (id: string, after: number) => api<{ lines: { seq: number; line: string }[]; done: boolean }>("GET", `/api/runs/${id}/logs?after=${after}`);
 export const cancelRun = (id: string) => api<{ run: RunRow }>("POST", `/api/runs/${id}/cancel`).then((r) => r.run);
+
+export interface Preflight {
+  key: boolean;
+  tofu: { ok: true; version: string } | { ok: false; message: string };
+  identity: { ok: true; account: string; arn: string } | { ok: false; reason: "none" | "error"; message: string };
+  timeoutMinutes: number;
+}
+export const preflight = (id: string) => api<Preflight>("GET", `/api/projects/${id}/preflight`);

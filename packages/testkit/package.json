@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
     "golden": "node scripts/golden.ts",
-    "tofu-check": "node scripts/tofu-check.ts"
+    "tofu-check": "node scripts/tofu-check.ts",
+    "moto-check": "node scripts/moto-check.ts"
   },
   "dependencies": {
     "@av2i/registry": "workspace:*",

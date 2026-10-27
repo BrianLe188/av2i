@@ -19,6 +19,8 @@ export interface Config {
   tofuBin: string;
   /** how many runs may work at once (each project has at most one) */
   runWorkers: number;
+  /** a run that takes longer is stopped and fails */
+  runTimeoutMs: number;
   /** where runs make their temporary folders and keep the provider cache */
   runsDir: string;
   /** the address the tofu process uses to reach this server's state backend */
@@ -55,6 +57,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     stateKey: key(env.STATE_ENCRYPTION_KEY),
     tofuBin: env.TOFU_BIN || "tofu",
     runWorkers: int(env.RUN_WORKERS, 2, "RUN_WORKERS"),
+    runTimeoutMs: int(env.RUN_TIMEOUT_MINUTES, 30, "RUN_TIMEOUT_MINUTES") * 60_000,
     runsDir: env.RUNS_DIR || join(tmpdir(), "av2i-runs"),
     runnerApiUrl: env.RUNNER_API_URL || `http://127.0.0.1:${port}`,
   };

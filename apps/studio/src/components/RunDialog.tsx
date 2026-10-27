@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, Play } from "lucide-react";
+import { Check, Loader2, Play, X } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ApiError } from "../api.ts";
 import type { Strings } from "../i18n.ts";
-import { cancelRun, getRun, listRuns, queuePlan, runLogs, type RunRow } from "../projects.ts";
+import { cancelRun, getRun, listRuns, preflight, queuePlan, runLogs, type Preflight, type RunRow } from "../projects.ts";
 import { describe } from "./auth/errors.ts";
 
 const LIVE = new Set(["queued", "running"]);
@@ -21,6 +21,7 @@ export function RunDialog({ s, projectId, open, onClose, beforeRun }: { s: Strin
   const [lines, setLines] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pre, setPre] = useState<Preflight | null>(null);
   const last = useRef(0);
   const end = useRef<HTMLDivElement>(null);
 
@@ -33,7 +34,7 @@ export function RunDialog({ s, projectId, open, onClose, beforeRun }: { s: Strin
       setCurrent((c) => c ?? l[0]?.id ?? null);
     } catch (e) { fail(e); }
   }, [projectId, fail]);
-  useEffect(() => { if (open) { setError(null); setCurrent(null); void refresh(); } }, [open, refresh]);
+  useEffect(() => { if (open) { setError(null); setCurrent(null); setPre(null); void refresh(); void preflight(projectId).then(setPre).catch(fail); } }, [open, refresh, projectId, fail]);
 
   // follow the chosen run: new log lines and its status every second while it is waiting or running
   useEffect(() => {
@@ -70,6 +71,7 @@ export function RunDialog({ s, projectId, open, onClose, beforeRun }: { s: Strin
     try { const r = await cancelRun(id); setRuns((x) => x.map((y) => (y.id === id ? r : y))); toast(s.run.status.cancelled); } catch (e) { fail(e); }
   };
 
+  const ready = !!pre && pre.key && pre.tofu.ok && pre.identity.ok;
   const run = runs.find((r) => r.id === current) ?? null;
   const sum = run?.summary ?? null;
   const tone = (st: RunRow["status"]) => (st === "succeeded" ? "default" : st === "failed" ? "destructive" : "secondary");
@@ -82,8 +84,9 @@ export function RunDialog({ s, projectId, open, onClose, beforeRun }: { s: Strin
           <DialogDescription>{s.run.text}</DialogDescription>
         </DialogHeader>
         {error && <Alert variant="destructive"><AlertDescription data-testid="run-error">{error}</AlertDescription></Alert>}
+        <Checks s={s} pre={pre} />
         <div className="flex items-center gap-2">
-          <Button size="sm" onClick={() => void start()} disabled={busy} data-testid="run-start">{busy ? <Loader2 className="animate-spin" /> : <Play />}{busy ? s.run.starting : s.run.start}</Button>
+          <Button size="sm" onClick={() => void start()} disabled={busy || !ready} title={ready ? undefined : s.run.ready} data-testid="run-start">{busy ? <Loader2 className="animate-spin" /> : <Play />}{busy ? s.run.starting : s.run.start}</Button>
           {run && <Badge variant={tone(run.status)} data-testid="run-status">{s.run.status[run.status]}</Badge>}
           {run?.status === "queued" && <Button size="sm" variant="ghost" onClick={() => void cancel(run.id)}>{s.run.cancel}</Button>}
         </div>
@@ -126,5 +129,28 @@ export function RunDialog({ s, projectId, open, onClose, beforeRun }: { s: Strin
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** The conditions a run needs, each with what to do when it is not met. */
+function Checks({ s, pre }: { s: Strings; pre: Preflight | null }) {
+  if (!pre) return <p className="text-xs text-muted-foreground" data-testid="run-checking">{s.run.checking}</p>;
+  const rows: { ok: boolean; text: string; detail?: string }[] = [
+    { ok: pre.key, text: pre.key ? s.run.keyOk : s.run.keyMissing },
+    pre.tofu.ok ? { ok: true, text: s.run.tofuOk.replace("{v}", pre.tofu.version) } : { ok: false, text: s.run.tofuMissing, detail: pre.tofu.message },
+    pre.identity.ok
+      ? { ok: true, text: s.run.idOk.replace("{arn}", pre.identity.arn), detail: `${s.run.account} ${pre.identity.account}` }
+      : { ok: false, text: pre.identity.reason === "none" ? s.run.idNone : s.run.idError, ...(pre.identity.reason === "error" ? { detail: pre.identity.message } : {}) },
+  ];
+  return (
+    <ul className="space-y-1 rounded-md border p-2 text-xs" data-testid="run-checks">
+      {rows.map((r, i) => (
+        <li key={i} className="flex items-start gap-2">
+          {r.ok ? <Check className="mt-0.5 size-3.5 shrink-0 text-emerald-600" /> : <X className="mt-0.5 size-3.5 shrink-0 text-destructive" />}
+          <span className={r.ok ? "" : "text-destructive"}>{r.text}{r.detail && <span className="block break-all text-muted-foreground">{r.detail}</span>}</span>
+        </li>
+      ))}
+      <li className="pl-5 text-muted-foreground">{s.run.limit.replace("{m}", String(pre.timeoutMinutes))}</li>
+    </ul>
   );
 }

@@ -138,6 +138,36 @@ describe.skipIf(!available)("runs", () => {
     expect(await t.db.selectFrom("state_locks").selectAll().where("project_id", "=", projectId).execute()).toEqual([]);
   });
 
+  it("stops a run that takes too long, fails it, and releases a lock tofu left behind", async () => {
+    const slow = { ...t.config, tofuBin: join(import.meta.dirname, "fake-tofu-hang.sh"), runTimeoutMs: 700 };
+    const r = await plan(alice.cookie);
+    const c = await claim(t.db);
+    expect(c?.id).toBe(r.body.run.id);
+    await t.db.insertInto("state_locks").values({ project_id: projectId, lock_id: "stuck", info: "{}" }).execute();
+    await execute(t.db, slow, c!);
+    const run = (await t.call("GET", `/api/runs/${r.body.run.id}`, { cookie: alice.cookie })).body.run;
+    expect(run.status).toBe("failed");
+    expect(run.error).toMatch(/longer than/);
+    expect(await t.db.selectFrom("state_locks").selectAll().where("project_id", "=", projectId).execute()).toEqual([]);
+  });
+
+  it("tells what a run would use before it starts, and only to someone who may plan", async () => {
+    for (const k of ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI", "AWS_CONTAINER_CREDENTIALS_FULL_URI"]) delete process.env[k];
+    expect((await t.call("GET", `/api/projects/${projectId}/preflight`, { cookie: viewer.cookie })).status).toBe(403);
+    const r = await t.call("GET", `/api/projects/${projectId}/preflight`, { cookie: alice.cookie });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ key: true, tofu: { ok: true, version: "1.12.9" }, identity: { ok: false, reason: "none" }, timeoutMinutes: 10 });
+    const missing = testApp({ tofuBin: "/no/such/tofu", stateKey: undefined });
+    const m = await missing;
+    try {
+      const a = await m.admin();
+      const made = await m.call("POST", "/api/projects", { cookie: a, body: { design } });
+      const p = await m.call("GET", `/api/projects/${made.body.project.id}/preflight`, { cookie: a });
+      expect(p.body).toMatchObject({ key: false, tofu: { ok: false } });
+      expect(p.body.tofu.message).toMatch(/not found/);
+    } finally { await m.close(); }
+  });
+
   describe("state backend", () => {
     let token: string;
     const url = () => `/api/state/${projectId}`;

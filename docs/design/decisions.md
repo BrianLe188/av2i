@@ -381,3 +381,11 @@ Customers install the platform on their own servers, so running OpenTofu there i
 - **Four eyes.** Optional per project: when on, whoever made the plan cannot approve it; another person with `run:Approve` must.
 - **Permissions.** `connection:Manage`, `run:Plan`, `run:Approve`, `run:Apply`, `run:ApplyDestructive`, `state:Read`.
 - **Order.** R1: queue, runner, plan, logs, encrypted http state. R2: connections and two roles, approve and apply, permissions, destructive guard, four eyes. R3: S3 state and viewer.
+
+Additions (27 October 2026, after the first real plans):
+
+- **A run has a time limit** (`RUN_TIMEOUT_MINUTES`, 30 by default). At the limit the process is stopped and the run fails. Runs of one project never overlap, so a state lock still held when a run ends is stale by definition and is released then.
+- **Before a run the studio shows what it will use**: the key is set, `tofu` starts, and which AWS account and ARN the server's identity is (`sts:GetCallerIdentity`, with only the sources the tofu process also sees). Planning is not offered while one of them is missing.
+- **State writes are checked by the server as well as by OpenTofu** (R2b): a write is refused when the lineage differs from the stored state or the serial is not greater than the newest one.
+- **`errored.tfstate` is kept** (R2b). When apply created resources but the state could not be written, OpenTofu leaves that file in its folder; the runner stores it encrypted before deleting the folder, marks the run failed with a warning, and lets a person with `state:Read` download it. Apply is not enabled before this exists.
+- **The state is the content of `terraform.tfstate`, held in memory by OpenTofu**; nothing of it stays on disk between runs.

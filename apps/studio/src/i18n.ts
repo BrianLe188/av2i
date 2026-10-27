@@ -23,6 +23,7 @@ const dict = {
     draftRestored: "Đã khôi phục bản nháp.", opened: "Đã mở file.", badFile: "File không đọc được.", exported: "Đã xuất Terraform.",
     cannotExport: "Còn lỗi, chưa xuất được.", dropRefused: "Không thả được", connectRefused: "Không nối được",
     run: {
+      ready: "Điều kiện chạy", checking: "Đang kiểm tra…", keyOk: "Khoá mã hoá state đã đặt", keyMissing: "Chưa đặt STATE_ENCRYPTION_KEY trên máy chủ (openssl rand -base64 32).", tofuOk: "OpenTofu {v}", tofuMissing: "Không chạy được OpenTofu", idOk: "Danh tính AWS: {arn}", idNone: "Chưa có credentials AWS: đặt AWS_ACCESS_KEY_ID và AWS_SECRET_ACCESS_KEY cho máy chủ, hoặc dùng instance role.", idError: "AWS không chấp nhận credentials", limit: "Mỗi lần chạy tối đa {m} phút.", account: "tài khoản",
       plan: "Plan", title: "Chạy plan với OpenTofu", text: "Plan cho biết OpenTofu sẽ tạo, sửa hoặc xoá gì trong AWS. Chưa có gì bị thay đổi.", start: "Chạy plan", starting: "Đang xếp hàng…", history: "Các lần chạy", none: "Chưa có lần chạy nào.", logs: "Nhật ký", noLogs: "Chưa có dòng nhật ký.", cancel: "Huỷ",
       status: { queued: "Đang chờ", running: "Đang chạy", succeeded: "Xong", failed: "Lỗi", cancelled: "Đã huỷ" },
       summary: "{add} thêm, {change} sửa, {destroy} xoá, {replace} thay thế", noChanges: "Hạ tầng đã khớp với thiết kế, không có thay đổi.", destructive: "Plan này xoá hoặc thay thế tài nguyên.", by: "bởi",
@@ -142,6 +143,7 @@ const dict = {
     draftRestored: "Draft restored.", opened: "File opened.", badFile: "The file could not be read.", exported: "Terraform exported.",
     cannotExport: "Errors remain, nothing to export.", dropRefused: "Cannot drop", connectRefused: "Cannot connect",
     run: {
+      ready: "What a run needs", checking: "Checking…", keyOk: "State encryption key is set", keyMissing: "STATE_ENCRYPTION_KEY is not set on the server (openssl rand -base64 32).", tofuOk: "OpenTofu {v}", tofuMissing: "OpenTofu cannot run", idOk: "AWS identity: {arn}", idNone: "No AWS credentials: set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY for the server, or use an instance role.", idError: "AWS did not accept the credentials", limit: "A run takes at most {m} minutes.", account: "account",
       plan: "Plan", title: "Run a plan with OpenTofu", text: "A plan shows what OpenTofu would create, change or delete in AWS. Nothing is changed yet.", start: "Run plan", starting: "Queuing…", history: "Runs", none: "No runs yet.", logs: "Log", noLogs: "No log lines yet.", cancel: "Cancel",
       status: { queued: "Waiting", running: "Running", succeeded: "Done", failed: "Failed", cancelled: "Cancelled" },
       summary: "{add} to add, {change} to change, {destroy} to destroy, {replace} to replace", noChanges: "Infrastructure matches the design; no changes.", destructive: "This plan deletes or replaces resources.", by: "by",

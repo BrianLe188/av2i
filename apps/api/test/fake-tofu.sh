@@ -1,6 +1,7 @@
 #!/bin/sh
 # Stands in for the tofu binary in tests: prints what the runner needs to see and writes a plan file.
 case "$1" in
+  version) echo '{"terraform_version":"1.12.9"}';;
   init) echo "Initializing"; echo "leak-check:${SECRET_TEST_VAR:-none}"; echo "key:${AWS_ACCESS_KEY_ID:-none}"; echo "backend:$(grep -c 'backend "http"' backend.tf)"; echo "token:${TF_HTTP_PASSWORD}";;
   plan) echo "Planning"; echo "plan-bytes" > plan.bin;;
   show) cat <<'JSON'
