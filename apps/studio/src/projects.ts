@@ -15,7 +15,7 @@ export interface ProjectSummary {
 }
 
 export interface ProjectFull {
-  project: { id: string; name: string; owner: string | null; ownerId: string; rev: number; updatedAt: string; updatedBy: string | null; design: Design; requireApproval?: boolean; rescuePending?: boolean };
+  project: { id: string; name: string; owner: string | null; ownerId: string; rev: number; updatedAt: string; updatedBy: string | null; design: Design; rescuePending?: boolean };
   can: { write: boolean; delete: boolean; share: boolean; plan: boolean; variables: boolean; approve: boolean; apply: boolean };
 }
 
@@ -48,16 +48,18 @@ export interface AppliedSummary { added: number; changed: number; destroyed: num
 export const queuePlan = (id: string) => api<{ run: RunRow }>("POST", `/api/projects/${id}/runs`, { kind: "plan" }).then((r) => r.run);
 export const listRuns = (id: string) => api<{ runs: RunRow[] }>("GET", `/api/projects/${id}/runs`).then((r) => r.runs);
 export interface Blocker { code: string }
-export interface ApplyInfo {
-  blockers: Blocker[]; needsApproval: boolean; destructive: boolean; expiresAt: string | null;
-  approvals: { username: string; at: string }[]; applyRun: { id: string; status: RunRow["status"] } | null;
+export interface RequestCan { approve: boolean; approveBlocked: "destructive_forbidden" | null; reject: boolean; withdraw: boolean; replan: boolean; apply: boolean }
+export interface ApplyInfo { blockers: Blocker[]; destructive: boolean; expiresAt: string | null; applyRun: { id: string; status: RunRow["status"] } | null }
+export interface RunDetail {
+  run: RunRow;
+  apply?: ApplyInfo;
+  request?: { id: string; number: number; status: RequestStatus; requester: string; decidedBy: string | null; can: RequestCan } | null;
+  can?: { plan: boolean; approve: boolean; apply: boolean; applyDestructive: boolean; applyNow: boolean; applyBlocked: string | null; request: boolean };
+  replaceable?: { id: string; number: number }[];
 }
-export interface RunDetail { run: RunRow; apply?: ApplyInfo; can?: { approve: boolean; apply: boolean; applyDestructive: boolean } }
+export type RequestStatus = "waiting" | "approved" | "applied" | "closed";
 export const getRun = (id: string) => api<RunDetail>("GET", `/api/runs/${id}`);
 export const applyRun = (id: string, confirmName?: string) => api<{ run: RunRow }>("POST", `/api/runs/${id}/apply`, confirmName !== undefined ? { confirmName } : {}).then((r) => r.run);
-export const approveRun = (id: string) => api("POST", `/api/runs/${id}/approve`);
-export const withdrawApproval = (id: string) => api("DELETE", `/api/runs/${id}/approve`);
-export const setRequireApproval = (projectId: string, requireApproval: boolean) => api("PUT", `/api/projects/${projectId}/settings`, { requireApproval });
 
 export interface RescueRow { id: string; runId: string | null; serial: number; createdAt: string; resolvedAt: string | null; resolution: "restored" | "dismissed" | null; resolvedBy: string | null }
 export const listRescues = (projectId: string) => api<{ rescues: RescueRow[] }>("GET", `/api/projects/${projectId}/state-rescues`).then((r) => r.rescues);
@@ -77,7 +79,6 @@ export interface Preflight {
   connection: { id: string; name: string; planOnly: boolean } | null;
   timeoutMinutes: number;
   rescuePending: boolean;
-  requireApproval: boolean;
 }
 export const preflight = (id: string) => api<Preflight>("GET", `/api/projects/${id}/preflight`);
 

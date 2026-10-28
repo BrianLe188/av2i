@@ -6,7 +6,8 @@ import { runRules } from "@av2i/rules";
 import type { FastifyInstance } from "fastify";
 import { sql } from "kysely";
 import { audit } from "../audit.ts";
-import { applyState, filesHash } from "../runs/apply.ts";
+import { applyPath, applyState, filesHash } from "../runs/apply.ts";
+import { addEvent, liveRequestOf, LIVE, requestCan } from "../requests.ts";
 import type { Ctx } from "../context.ts";
 import { HttpError, notFound } from "../errors.ts";
 import { projectAccess } from "../project-access.ts";
@@ -38,7 +39,7 @@ export function runRoutes(app: FastifyInstance, ctx: Ctx): void {
     evaluate(await authOf(req).statements(), { action: "connection:Use", resource: resource.connection(connectionId) }).allowed;
 
   const projectOf = async (id: string) => {
-    const row = await db.selectFrom("projects").select(["id", "owner_id", "design", "name", "connection_id", "require_approval"]).where("id", "=", id).where("deleted_at", "is", null).executeTakeFirst();
+    const row = await db.selectFrom("projects").select(["id", "owner_id", "design", "name", "connection_id"]).where("id", "=", id).where("deleted_at", "is", null).executeTakeFirst();
     if (!row) throw notFound("No such project.");
     return row;
   };
@@ -116,7 +117,7 @@ export function runRoutes(app: FastifyInstance, ctx: Ctx): void {
     })();
     const tofu = mayPlan ? await tofuVersion(config.tofuBin) : { ok: false as const, message: "" };
     const rescuePending = !!(await db.selectFrom("state_rescues").select("id").where("project_id", "=", id).where("resolved_at", "is", null).executeTakeFirst());
-    return { rescuePending, requireApproval: project.require_approval, key: !!config.stateKey, tofu, identity, connection: connection ? { id: connection.id, name: connection.name, planOnly: !connection.apply_role_arn } : null, timeoutMinutes: Math.round(config.runTimeoutMs / 60_000) };
+    return { rescuePending, key: !!config.stateKey, tofu, identity, connection: connection ? { id: connection.id, name: connection.name, planOnly: !connection.apply_role_arn } : null, timeoutMinutes: Math.round(config.runTimeoutMs / 60_000) };
   });
 
   app.get("/api/projects/:id/runs", { schema: { params: idParams } }, async (req) => {
@@ -136,48 +137,82 @@ export function runRoutes(app: FastifyInstance, ctx: Ctx): void {
     connection_id: run.connection_id, state_serial: run.state_serial, created_by: run.created_by, destructive: !!(run.summary as { destructive?: boolean } | null)?.destructive,
   });
 
+  /** A plan with what stands between it and its apply, the request that covers it, and what the signed-in person may do (DD-027). */
   app.get("/api/runs/:id", { schema: { params: idParams } }, async (req) => {
     const [run, statements] = await loadRun(req, (req.params as { id: string }).id, "project:Read");
     const base = await view(run);
     if (run.kind !== "plan" || run.status !== "succeeded") return { run: base };
     const project = await projectOf(run.project_id);
     const st = await applyState(db, config, facts(run), project);
-    const res = resource.project(run.project_id);
-    const may = (action: "run:Approve" | "run:Apply" | "run:ApplyDestructive") => evaluate(statements, { action, resource: res }).allowed;
+    const me = actor(req);
+    const live = await liveRequestOf(db, run.id);
+    const may = (action: "run:Plan" | "run:Approve" | "run:Apply" | "run:ApplyDestructive") => evaluate(statements, { action, resource: resource.project(run.project_id) }).allowed;
+    const path = applyPath(statements, project.id, me.userId, live ?? null, st.destructive);
+    // the person's own requests that this plan could replace (a newer plan for the same change)
+    const replaceable = may("run:Plan") && !live && run.finished_at
+      ? await db.selectFrom("requests as q").innerJoin("runs as p", "p.id", "q.plan_run_id").select(["q.id", "q.number"]).where("q.project_id", "=", project.id).where("q.requester_id", "=", me.userId).where("q.status", "in", [...LIVE]).where("p.finished_at", "<", run.finished_at).execute()
+      : [];
     const applyRun = await db.selectFrom("runs").select(["id", "status"]).where("plan_run_id", "=", run.id).where("kind", "=", "apply").orderBy("created_at", "desc").limit(1).executeTakeFirst();
     return {
       run: base,
-      apply: { blockers: st.blockers, needsApproval: st.needsApproval, destructive: st.destructive, expiresAt: st.expiresAt, approvals: st.approvals, applyRun: applyRun ?? null },
-      can: { approve: may("run:Approve"), apply: may("run:Apply"), applyDestructive: may("run:ApplyDestructive") },
+      apply: { blockers: st.blockers, destructive: st.destructive, expiresAt: st.expiresAt, applyRun: applyRun ?? null },
+      request: live ? { id: live.id, number: live.number, status: live.status, requester: live.requester, decidedBy: live.decided_by, can: requestCan(statements, project.id, me.userId, live, st.destructive) } : null,
+      can: { plan: may("run:Plan"), approve: may("run:Approve"), apply: may("run:Apply"), applyDestructive: may("run:ApplyDestructive"), applyNow: path.ok, applyBlocked: path.ok ? null : path.code, request: may("run:Plan") && !live && !path.ok },
+      replaceable,
     };
   });
 
-  /** Queues the apply of a plan, once every condition holds (DD-026, section 2). */
-  app.post("/api/runs/:id/apply", {
-    schema: { params: idParams, body: { type: "object", additionalProperties: false, properties: { confirmName: { type: "string", maxLength: 200 } } } },
+  /** Sends a plan for approval: request #n of the project, with an optional note (DD-027). */
+  app.post("/api/runs/:id/request", {
+    schema: { params: idParams, body: { type: "object", additionalProperties: false, properties: { note: { type: "string", maxLength: 5000 } } } },
   }, async (req, reply) => {
-    const [run, statements] = await loadRun(req, (req.params as { id: string }).id, "run:Apply");
+    const [run] = await loadRun(req, (req.params as { id: string }).id, "run:Plan");
     sessionOnly(req);
     const me = actor(req);
     const project = await projectOf(run.project_id);
     const st = await applyState(db, config, facts(run), project);
-    if (st.destructive) {
-      if (!evaluate(statements, { action: "run:ApplyDestructive", resource: resource.project(project.id) }).allowed) throw new HttpError(403, "destructive_forbidden", "This plan deletes or replaces resources; that needs the run:ApplyDestructive permission.");
-      if ((req.body as { confirmName?: string } | null)?.confirmName !== project.name) throw new HttpError(409, "confirm_required", "Type the project name to apply a plan that deletes or replaces resources.");
+    const blocking = st.blockers.filter((b) => b.code !== "rescue_pending");
+    if (blocking.length) throw new HttpError(409, blocking[0]!.code, "This plan cannot be sent for approval.", { blockers: blocking });
+    try {
+      const made = await db.transaction().execute(async (trx) => {
+        const seq = await trx.updateTable("projects").set({ request_seq: sql`request_seq + 1` }).where("id", "=", project.id).returning("request_seq").executeTakeFirstOrThrow();
+        const q = await trx.insertInto("requests").values({ project_id: project.id, number: seq.request_seq, kind: "apply", plan_run_id: run.id, requester_id: me.userId, requester: me.username }).returning(["id", "number"]).executeTakeFirstOrThrow();
+        await addEvent(trx, q.id, me, "requested", (req.body as { note?: string } | null)?.note?.trim() || null, { plan: run.id });
+        return q;
+      });
+      await audit(db, { actor: me, action: "request.created", resource: resource.project(project.id), outcome: "success", ip: req.ip, details: { request: made.id, number: made.number, plan: run.id } });
+      reply.code(201);
+      return { request: { id: made.id, number: made.number } };
+    } catch (e) {
+      if ((e as { code?: string })?.code === "23505") throw new HttpError(409, "request_exists", "This plan is already in a request.");
+      throw e;
     }
+  });
+
+  /** Queues the apply of a plan, once every condition holds (DD-026, section 2) and the person may (DD-027, section 3). */
+  app.post("/api/runs/:id/apply", {
+    schema: { params: idParams, body: { type: "object", additionalProperties: false, properties: { confirmName: { type: "string", maxLength: 200 } } } },
+  }, async (req, reply) => {
+    const [run, statements] = await loadRun(req, (req.params as { id: string }).id, "project:Read");
+    sessionOnly(req);
+    const me = actor(req);
+    const project = await projectOf(run.project_id);
+    const st = await applyState(db, config, facts(run), project);
+    const live = await liveRequestOf(db, run.id);
+    const path = applyPath(statements, project.id, me.userId, live ?? null, st.destructive);
+    if (!path.ok) {
+      const text = { destructive_forbidden: "This plan deletes or replaces resources; applying it needs the run:ApplyDestructive permission.", awaiting_approval: "This plan is waiting for approval.", request_needed: "Send this plan for approval first." }[path.code];
+      throw new HttpError(403, path.code, text);
+    }
+    if (st.destructive && (req.body as { confirmName?: string } | null)?.confirmName !== project.name) throw new HttpError(409, "confirm_required", "Type the project name to apply a plan that deletes or replaces resources.");
     if (st.blockers.length) throw new HttpError(409, st.blockers[0]!.code, "This plan cannot be applied now.", { blockers: st.blockers });
     const full = await db.selectFrom("runs").select(["design", "design_hash"]).where("id", "=", run.id).executeTakeFirstOrThrow();
     try {
-      const row = await db.transaction().execute(async (trx) => {
-        const r = await trx.insertInto("runs").values({
-          project_id: project.id, kind: "apply", design: JSON.stringify(full.design), design_hash: full.design_hash, created_by: me.userId, error: null, plan_data: null, plan_nonce: null, plan_key_id: null,
-          state_serial: run.state_serial, state_token_hash: null, variables_hash: run.variables_hash, connection_id: run.connection_id, files_hash: run.files_hash, plan_run_id: run.id,
-        }).returning("id").executeTakeFirstOrThrow();
-        // one person decides: pressing Apply is the approval, kept for the record
-        if (!project.require_approval) await trx.insertInto("run_approvals").values({ run_id: run.id, user_id: me.userId, username: me.username }).onConflict((oc) => oc.doNothing()).execute();
-        return r;
-      });
-      await audit(db, { actor: me, action: "run.apply_queued", resource: resource.project(project.id), outcome: "success", ip: req.ip, details: { run: row.id, plan: run.id, destructive: st.destructive } });
+      const row = await db.insertInto("runs").values({
+        project_id: project.id, kind: "apply", design: JSON.stringify(full.design), design_hash: full.design_hash, created_by: me.userId, error: null, plan_data: null, plan_nonce: null, plan_key_id: null,
+        state_serial: run.state_serial, state_token_hash: null, variables_hash: run.variables_hash, connection_id: run.connection_id, files_hash: run.files_hash, plan_run_id: run.id,
+      }).returning("id").executeTakeFirstOrThrow();
+      await audit(db, { actor: me, action: "run.apply_queued", resource: resource.project(project.id), outcome: "success", ip: req.ip, details: { run: row.id, plan: run.id, destructive: st.destructive, via: path.via } });
       runsHooks.wake?.();
       reply.code(201);
       return { run: await view(await runOf(row.id)) };
@@ -185,43 +220,6 @@ export function runRoutes(app: FastifyInstance, ctx: Ctx): void {
       if ((e as { code?: string })?.code === "23505") throw new HttpError(409, "already_applied", "This plan is being applied or was applied.");
       throw e;
     }
-  });
-
-  app.post("/api/runs/:id/approve", { schema: { params: idParams } }, async (req) => {
-    const [run] = await loadRun(req, (req.params as { id: string }).id, "run:Approve");
-    sessionOnly(req);
-    const me = actor(req);
-    const project = await projectOf(run.project_id);
-    if (run.kind !== "plan" || run.status !== "succeeded") throw new HttpError(409, "plan_not_ready", "Only a plan that succeeded can be approved.");
-    if (!project.require_approval) throw new HttpError(409, "approval_not_required", "This project does not ask for a second person; whoever applies decides.");
-    if (run.created_by === me.userId) throw new HttpError(403, "self_approval", "Whoever made the plan cannot approve it.");
-    await db.insertInto("run_approvals").values({ run_id: run.id, user_id: me.userId, username: me.username }).onConflict((oc) => oc.doNothing()).execute();
-    await audit(db, { actor: me, action: "run.approved", resource: resource.project(project.id), outcome: "success", ip: req.ip, details: { run: run.id } });
-    return { ok: true };
-  });
-
-  app.delete("/api/runs/:id/approve", { schema: { params: idParams } }, async (req) => {
-    const [run] = await loadRun(req, (req.params as { id: string }).id, "run:Approve");
-    sessionOnly(req);
-    const me = actor(req);
-    const r = await db.deleteFrom("run_approvals").where("run_id", "=", run.id).where("username", "=", me.username).executeTakeFirst();
-    if (Number(r.numDeletedRows) === 0) throw notFound("You have not approved this plan.");
-    await audit(db, { actor: me, action: "run.approval_withdrawn", resource: resource.project(run.project_id), outcome: "success", ip: req.ip, details: { run: run.id } });
-    return { ok: true };
-  });
-
-  /** One setting for now: whether a second person must approve a plan. Turning it off is the same right as turning it on. */
-  app.put("/api/projects/:id/settings", {
-    schema: { params: idParams, body: { type: "object", required: ["requireApproval"], additionalProperties: false, properties: { requireApproval: { type: "boolean" } } } },
-  }, async (req) => {
-    const { id } = req.params as { id: string };
-    const project = await projectOf(id);
-    await authorize(req, project, "project:Share");
-    sessionOnly(req);
-    const value = (req.body as { requireApproval: boolean }).requireApproval;
-    await db.updateTable("projects").set({ require_approval: value }).where("id", "=", id).execute();
-    await audit(db, { actor: actor(req), action: "project.settings_changed", resource: resource.project(id), outcome: "success", ip: req.ip, details: { requireApproval: value } });
-    return { ok: true };
   });
 
   app.get("/api/runs/:id/logs", {

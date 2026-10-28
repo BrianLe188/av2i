@@ -1,5 +1,6 @@
+import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router";
-import { ChevronsUpDown, Cloud, KeyRound, LayoutDashboard, LogOut, Moon, PencilRuler, ScrollText, ShieldCheck, Sun, Users, UsersRound, type LucideIcon } from "lucide-react";
+import { ChevronsUpDown, Cloud, GitPullRequest, KeyRound, LayoutDashboard, LogOut, Moon, PencilRuler, ScrollText, ShieldCheck, Sun, Users, UsersRound, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -7,12 +8,15 @@ import { cn } from "@/lib/utils";
 import { useAuth, useUser } from "../auth.tsx";
 import type { Lang } from "../i18n.ts";
 import { usePrefsContext, useStrings } from "../prefs.ts";
+import { requestSummary } from "../requests.ts";
 
 interface Item {
   to: string;
   label: string;
   icon: LucideIcon;
   show: boolean;
+  /** a red count beside the label */
+  badge?: number;
 }
 
 function Brand({ title }: { title: string }) {
@@ -31,10 +35,20 @@ export function AppLayout() {
   const user = useUser();
   const { can, logout } = useAuth();
   const navigate = useNavigate();
+  // the count of requests waiting for this person: the nearest thing to a notification (DD-027)
+  const [waiting, setWaiting] = useState(0);
+  useEffect(() => {
+    let stop = false;
+    const load = () => void requestSummary().then((r) => { if (!stop) setWaiting(r.awaiting); }).catch(() => {});
+    load();
+    const t = setInterval(load, 60_000);
+    return () => { stop = true; clearInterval(t); };
+  }, []);
 
   const items: Item[] = [
     { to: "/dashboard", label: s.nav.dashboard, icon: LayoutDashboard, show: true },
     { to: "/projects", label: s.nav.designer, icon: PencilRuler, show: true },
+    { to: "/requests", label: s.req.nav, icon: GitPullRequest, show: true, badge: waiting },
     { to: "/users", label: s.nav.users, icon: Users, show: can("user:List") },
     { to: "/groups", label: s.adm.groups, icon: UsersRound, show: can("group:Manage") },
     { to: "/policies", label: s.adm.policiesPage, icon: ShieldCheck, show: can("policy:Manage") },
@@ -47,7 +61,7 @@ export function AppLayout() {
       <aside className="flex w-14 flex-none flex-col border-r bg-card md:w-60" aria-label="Navigation">
         <Brand title={s.app} />
         <nav className="flex flex-1 flex-col gap-1 px-2">
-          {items.filter((i) => i.show).map(({ to, label, icon: Icon }) => (
+          {items.filter((i) => i.show).map(({ to, label, icon: Icon, badge }) => (
             <NavLink
               key={to}
               to={to}
@@ -60,6 +74,7 @@ export function AppLayout() {
             >
               <Icon className="size-4 flex-none" />
               <span className="hidden truncate md:block">{label}</span>
+              {!!badge && <span className="ml-auto hidden min-w-5 rounded-full bg-destructive px-1.5 text-center text-xs font-semibold text-white md:block" data-testid={`badge-${to.slice(1)}`}>{badge}</span>}
             </NavLink>
           ))}
         </nav>

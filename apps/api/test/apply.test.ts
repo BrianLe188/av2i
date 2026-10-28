@@ -79,7 +79,7 @@ describe.skipIf(!available)("apply with approval", () => {
     const pid = await newProject("once");
     const plan = await planned(pid);
     const d = await detail(plan);
-    expect(d.apply).toMatchObject({ blockers: [], needsApproval: false, destructive: false });
+    expect(d.apply).toMatchObject({ blockers: [], destructive: false });
     expect(d.can).toMatchObject({ apply: true });
     const r = await apply(plan);
     expect(r.status).toBe(201);
@@ -130,41 +130,13 @@ describe.skipIf(!available)("apply with approval", () => {
     expect(new Set(codes(await apply(plan)))).toEqual(new Set(["design_changed", "plan_expired", "connection_changed", "state_changed", "rescue_pending"]));
   });
 
-  it("makes a second person approve when the project asks, and not the one who planned", async () => {
-    const pid = await newProject("two-eyes");
-    expect((await t.call("PUT", `/api/projects/${pid}/settings`, { cookie: bob.cookie, body: { requireApproval: true } })).status).toBe(403);
-    expect((await t.call("PUT", `/api/projects/${pid}/settings`, { cookie: alice.cookie, body: { requireApproval: true } })).status).toBe(200);
-    const plan = await planned(pid);
-    const d = await detail(plan);
-    expect(d.apply).toMatchObject({ needsApproval: true, approvals: [] });
-    expect(d.apply.blockers.map((b: { code: string }) => b.code)).toEqual(["not_approved"]);
-    expect(codes(await apply(plan))).toEqual(["not_approved"]);
-    expect((await t.call("POST", `/api/runs/${plan}/approve`, { cookie: alice.cookie })).body.error.code).toBe("self_approval");
-    // the one who only approves (no run:Plan) can open the project, see the run state, and approve
-    const shown = (await t.call("GET", `/api/projects/${pid}`, { cookie: bob.cookie })).body.can;
-    expect(shown).toMatchObject({ plan: false, approve: true, apply: true });
-    const pre = await t.call("GET", `/api/projects/${pid}/preflight`, { cookie: bob.cookie });
-    expect(pre.status).toBe(200);
-    expect(pre.body).toMatchObject({ requireApproval: true, rescuePending: false, identity: { ok: false, reason: "forbidden" } });
-    expect((await t.call("POST", `/api/runs/${plan}/approve`, { cookie: bob.cookie })).status).toBe(200);
-    expect((await detail(plan)).apply).toMatchObject({ blockers: [], approvals: [{ username: "bob" }] });
-    expect((await t.call("DELETE", `/api/runs/${plan}/approve`, { cookie: bob.cookie })).status).toBe(200);
-    expect((await t.call("DELETE", `/api/runs/${plan}/approve`, { cookie: bob.cookie })).status).toBe(404);
-    await t.call("POST", `/api/runs/${plan}/approve`, { cookie: bob.cookie });
-    expect((await apply(plan)).status).toBe(201);
-    const other = await newProject("one-person");
-    const p2 = await planned(other);
-    expect((await t.call("POST", `/api/runs/${p2}/approve`, { cookie: bob.cookie })).body.error.code).toBe("approval_not_required");
-  });
-
-  it("does not let an API token apply, approve or change the setting", async () => {
+  it("does not let an API token apply or send a plan for approval", async () => {
     const pid = await newProject("token");
     const plan = await planned(pid);
     const made = await t.call("POST", "/api/tokens", { cookie: alice.cookie, body: { name: "ci" } });
     const bearer = (method: string, url: string, body?: unknown) => t.call(method, url, { csrf: false, headers: { authorization: `Bearer ${made.body.secret}` }, ...(body !== undefined ? { body } : {}) });
     expect((await bearer("POST", `/api/runs/${plan}/apply`, {})).body.error.code).toBe("session_required");
-    expect((await bearer("POST", `/api/runs/${plan}/approve`)).body.error.code).toBe("session_required");
-    expect((await bearer("PUT", `/api/projects/${pid}/settings`, { requireApproval: true })).body.error.code).toBe("session_required");
+    expect((await bearer("POST", `/api/runs/${plan}/request`, {})).body.error.code).toBe("session_required");
   });
 
   it("saves the state an apply could not write, locks the project, and lets a person restore, download or dismiss it", async () => {

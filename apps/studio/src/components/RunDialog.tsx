@@ -12,18 +12,17 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { listConnections, setProjectConnection, type ConnectionRow } from "../connections.ts";
 import { connError } from "./connError.ts";
-import { cancelRun, getRun, listRuns, listVariables, preflight, queuePlan, removeVariable, runLogs, setRequireApproval, setVariable, type AppliedSummary, type Preflight, type PlanSummary, type RunDetail, type RunRow, type VariableRow } from "../projects.ts";
-import { Checkbox } from "@/components/ui/checkbox";
-import { useUser } from "../auth.tsx";
-import { ApplyPanel, RescueBanner } from "./ApplyPanel.tsx";
+import { cancelRun, getRun, listRuns, listVariables, preflight, queuePlan, removeVariable, runLogs, setVariable, type AppliedSummary, type Preflight, type PlanSummary, type RunDetail, type RunRow, type VariableRow } from "../projects.ts";
+import { ApplyBar, RescueBanner } from "./ApplyPanel.tsx";
+import { PlanSummaryCard } from "./PlanSummaryCard.tsx";
+import { runError } from "./runError.ts";
+import { useNavigate } from "react-router";
 import { describe } from "./auth/errors.ts";
 
 const LIVE = new Set(["queued", "running"]);
-const fill = (t: string, v: { add: number; change: number; destroy: number; replace: number }) => t.replace(/\{(\w+)\}/g, (_, k: string) => String(v[k as keyof typeof v] ?? 0));
-
 /** Runs OpenTofu plan for the project and follows the run: status, what the plan would do, and the log as it grows. */
-export function RunDialog({ s, projectId, projectName, open, onClose, beforeRun, canSetVariables, canShare, canPlan }: { s: Strings; projectId: string; projectName: string; open: boolean; onClose: () => void; beforeRun: () => Promise<unknown>; canSetVariables: boolean; canShare: boolean; canPlan: boolean }) {
-  const me = useUser().username;
+export function RunDialog({ s, projectId, projectName, open, onClose, beforeRun, canSetVariables, canPlan }: { s: Strings; projectId: string; projectName: string; open: boolean; onClose: () => void; beforeRun: () => Promise<unknown>; canSetVariables: boolean; canPlan: boolean }) {
+  const navigate = useNavigate();
   const [runs, setRuns] = useState<RunRow[]>([]);
   const [current, setCurrent] = useState<string | null>(null);
   const [lines, setLines] = useState<string[]>([]);
@@ -36,7 +35,7 @@ export function RunDialog({ s, projectId, projectName, open, onClose, beforeRun,
   const last = useRef(0);
   const end = useRef<HTMLDivElement>(null);
 
-  const fail = useCallback((e: unknown) => setError(e instanceof ApiError && (s.run.errors as Record<string, string>)[e.code] ? (s.run.errors as Record<string, string>)[e.code]! : describe(e, s)), [s]);
+  const fail = useCallback((e: unknown) => setError(runError(e, s)), [s]);
 
   const loadVars = useCallback(async () => {
     try { setVars(await listVariables(projectId)); } catch (e) { fail(e); }
@@ -115,34 +114,21 @@ export function RunDialog({ s, projectId, projectName, open, onClose, beforeRun,
         }} />}
         {pre?.rescuePending && <RescueBanner s={s} projectId={projectId} projectName={projectName} fail={fail} onChanged={async () => { setPre(await preflight(projectId)); await reloadDetail(); }} />}
         {canPlan && <Checks s={s} pre={pre} />}
-        {canShare && pre && (
-          <label className="flex items-start gap-2 text-xs" data-testid="run-require-approval">
-            <Checkbox checked={pre.requireApproval} onCheckedChange={(v) => void setRequireApproval(projectId, v === true).then(() => preflight(projectId)).then(setPre).then(reloadDetail).catch(fail)} />
-            <span><span className="font-medium">{s.run.twoPeople}</span><span className="block text-muted-foreground">{s.run.twoPeopleHelp}</span></span>
-          </label>
-        )}
         {canPlan && vars && vars.length > 0 && <Variables s={s} projectId={projectId} vars={vars} can={canSetVariables} onChanged={loadVars} fail={fail} />}
         <div className="flex items-center gap-2">
           {canPlan && <Button size="sm" onClick={() => void start()} disabled={busy || !ready} title={ready ? undefined : s.run.ready} data-testid="run-start">{busy ? <Loader2 className="animate-spin" /> : <Play />}{busy ? s.run.starting : s.run.start}</Button>}
           {run && <Badge variant={tone(run.status)} data-testid="run-status">{s.run.status[run.status]}</Badge>}
           {run?.status === "queued" && <Button size="sm" variant="ghost" onClick={() => void cancel(run.id)}>{s.run.cancel}</Button>}
         </div>
-        {sum && (
-          <div className="rounded-md border p-3 text-sm" data-testid="run-summary">
-            {sum.resources.length === 0 ? s.run.noChanges : fill(s.run.summary, sum)}
-            {sum.destructive && <p className="mt-1 font-medium text-destructive">{s.run.destructive}</p>}
-            {sum.resources.length > 0 && (
-              <ul className="mt-2 max-h-32 space-y-0.5 overflow-y-auto font-mono text-xs">
-                {sum.resources.map((r) => (
-                  <li key={r.address}><span className={r.actions.includes("delete") ? "text-destructive" : "text-muted-foreground"}>{r.actions.map((a) => (s.run.actions as Record<string, string>)[a] ?? a).join(" + ")}</span> {r.address}</li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
+        {sum && <PlanSummaryCard s={s} summary={sum} />}
         {done && <p className="rounded-md border p-3 text-sm" data-testid="run-applied">{s.run.appliedSummary.replace("{added}", String(done.added)).replace("{changed}", String(done.changed)).replace("{destroyed}", String(done.destroyed))}</p>}
-        {run && detail && detail.run.id === run.id && run.kind === "plan" && run.status === "succeeded" && (
-          <ApplyPanel s={s} detail={detail} me={me} projectName={projectName} fail={fail} onChanged={reloadDetail} onApplyQueued={(id) => void applyQueued(id)} onReplan={() => void start()} onOpen={setCurrent} />
+        {run && detail && detail.run.id === run.id && run.kind === "plan" && run.status === "succeeded" && detail.apply && detail.can && (
+          <ApplyBar
+            s={s} planRunId={run.id} projectName={projectName} destructive={detail.apply.destructive} going={((run.summary as PlanSummary | null)?.resources ?? []).filter((r) => r.actions.includes("delete")).map((r) => r.address)}
+            blockers={detail.apply.blockers.map((b) => b.code)} expiresAt={detail.apply.expiresAt} request={detail.request ?? null} canApplyNow={detail.can.applyNow} canRequest={detail.can.request}
+            replaceable={detail.replaceable ?? []} applyRun={detail.apply.applyRun} fail={fail} onChanged={reloadDetail} onApplyQueued={(id) => void applyQueued(id)} onReplan={() => void start()}
+            onOpenRequest={(id) => navigate(`/requests/${id}`)} onOpenApply={setCurrent}
+          />
         )}
         {run?.error && <p className="text-sm text-destructive">{run.error}</p>}
         <div>

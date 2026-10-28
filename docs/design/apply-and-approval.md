@@ -1,6 +1,7 @@
 # Apply with approval (R2b)
 
-Status: decided (owner, 27 October 2026: all eight questions answered as recommended). Part of DD-023 (see DD-026 in `decisions.md`). Builds on R1 (plans,
+Status: decided (owner, 27 October 2026: all eight questions answered as recommended). The "two people" switch, its approvals (sections 2 and 9) and
+`PUT /api/projects/:id/settings` were replaced on 28 October 2026 by requests (DD-027, [requests.md](requests.md)); the rest stands. Part of DD-023 (see DD-026 in `decisions.md`). Builds on R1 (plans,
 state) and R2a (connections, DD-025).
 
 R1 and R2a can plan. R2b is the first step that **changes AWS**: it applies exactly the plan a person looked at, keeps the state right

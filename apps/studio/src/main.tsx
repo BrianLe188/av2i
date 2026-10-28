@@ -14,6 +14,8 @@ import { GroupsPage } from "./pages/GroupsPage.tsx";
 import { Guard, NotFound } from "./pages/Guard.tsx";
 import { ConnectionPage } from "./pages/ConnectionPage.tsx";
 import { ConnectionsPage } from "./pages/ConnectionsPage.tsx";
+import { RequestPage } from "./pages/RequestPage.tsx";
+import { RequestsPage } from "./pages/RequestsPage.tsx";
 import { PoliciesPage } from "./pages/PoliciesPage.tsx";
 import { PolicyPage } from "./pages/PolicyPage.tsx";
 import { ProjectPage } from "./pages/ProjectPage.tsx";
@@ -39,6 +41,8 @@ function Root() {
                   <Route path="groups/:id" element={<Guard action="group:Manage"><GroupPage /></Guard>} />
                   <Route path="policies" element={<Guard action="policy:Manage"><PoliciesPage /></Guard>} />
                   <Route path="policies/:name" element={<Guard action="policy:Manage"><PolicyPage /></Guard>} />
+                  <Route path="requests" element={<RequestsPage />} />
+                  <Route path="requests/:id" element={<RequestPage />} />
                   <Route path="connections" element={<Guard action="connection:Manage"><ConnectionsPage /></Guard>} />
                   <Route path="connections/:id" element={<Guard action="connection:Manage"><ConnectionPage /></Guard>} />
                   <Route path="audit" element={<Guard action="audit:Read"><AuditPage /></Guard>} />

@@ -5,86 +5,111 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import type { Strings } from "../i18n.ts";
-import { applyRun, approveRun, dismissRescue, listRescues, restoreRescue, rescueDownloadUrl, withdrawApproval, type PlanSummary, type RescueRow, type RunDetail } from "../projects.ts";
+import { applyRun as applyPlan, dismissRescue, listRescues, restoreRescue, rescueDownloadUrl, type RequestCan, type RequestStatus, type RescueRow, type RunRow } from "../projects.ts";
+import { approveRequest, rejectRequest, replanRequest, sendRequest, withdrawRequest } from "../requests.ts";
 
 const fill = (t: string, v: Record<string, string>) => t.replace(/\{(\w+)\}/g, (_, k: string) => v[k] ?? "");
 
-/** What stands between a plan and its apply, who approved it, and the button (with a confirmation, and the typed name when it deletes). */
-export function ApplyPanel({ s, detail, me, projectName, onChanged, onApplyQueued, onReplan, onOpen, fail }: {
-  s: Strings; detail: RunDetail; me: string; projectName: string;
-  onChanged: () => Promise<void>; onApplyQueued: (id: string) => void; onReplan: () => void; onOpen: (runId: string) => void; fail: (e: unknown) => void;
+export interface BarRequest { id: string; number: number; status: RequestStatus; requester: string; decidedBy: string | null; can: RequestCan }
+
+/**
+ * What comes next for a plan: send it for approval, decide a request, apply. The same bar sits in the plan dialog and in a request (DD-027),
+ * so a person sees the same state and the same buttons in both. The server checks every action again.
+ */
+export function ApplyBar({ s, planRunId, projectName, destructive, going, blockers, expiresAt, request, canApplyNow, canRequest, replaceable, applyRun, onChanged, onApplyQueued, onReplan, onOpenRequest, onOpenApply, fail }: {
+  s: Strings; planRunId: string; projectName: string; destructive: boolean; going: string[]; blockers: string[]; expiresAt: string | null;
+  request: BarRequest | null; canApplyNow: boolean; canRequest: boolean; replaceable: { id: string; number: number }[];
+  applyRun: { id: string; status: RunRow["status"] } | null;
+  onChanged: () => Promise<void>; onApplyQueued: (id: string) => void; onReplan?: () => void; onOpenRequest?: (id: string) => void; onOpenApply?: (runId: string) => void; fail: (e: unknown) => void;
 }) {
-  const [asking, setAsking] = useState(false);
+  const [dialog, setDialog] = useState<"apply" | "send" | "reject" | null>(null);
   const [typed, setTyped] = useState("");
+  const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
-  const { apply, can, run } = detail;
-  if (!apply || !can) return null;
-
-  const blockers = apply.blockers.map((b) => b.code);
-  const waiting = blockers.filter((c) => c !== "not_approved");
-  const stale = waiting.some((c) => ["plan_expired", "design_changed", "variables_changed", "connection_changed", "state_changed"].includes(c));
-  const myApproval = apply.approvals.some((a) => a.username === me);
-  const planner = run.createdBy;
-  const summary = run.summary as PlanSummary | null;
-  const going = (summary?.resources ?? []).filter((r) => r.actions.includes("delete"));
-  const destructiveClosed = apply.destructive && !can.applyDestructive;
-  const canPress = can.apply && !destructiveClosed && blockers.length === 0;
-
+  const stale = blockers.some((c) => ["plan_expired", "design_changed", "variables_changed", "connection_changed", "state_changed"].includes(c));
+  const close = () => { setDialog(null); setTyped(""); setText(""); };
   const act = async (job: () => Promise<unknown>, done?: string) => {
     setBusy(true);
-    try { await job(); if (done) toast(done); await onChanged(); } catch (e) { fail(e); } finally { setBusy(false); }
+    try { await job(); if (done) toast(done); close(); await onChanged(); } catch (e) { close(); fail(e); await onChanged(); } finally { setBusy(false); }
   };
   const press = async () => {
     setBusy(true);
-    try { const r = await applyRun(detail.run.id, apply.destructive ? typed : undefined); setAsking(false); setTyped(""); onApplyQueued(r.id); } catch (e) { setAsking(false); fail(e); await onChanged(); } finally { setBusy(false); }
+    try { const r = await applyPlan(planRunId, destructive ? typed : undefined); close(); onApplyQueued(r.id); } catch (e) { close(); fail(e); await onChanged(); } finally { setBusy(false); }
   };
+  const canApply = canApplyNow && blockers.length === 0 && (!request || request.status === "approved" || request.status === "applied" || request.can.apply);
+  const live = request && (request.status === "waiting" || request.status === "approved");
 
   return (
     <div className="space-y-2 rounded-md border p-3 text-sm" data-testid="apply-panel">
       <p className="font-medium">{s.run.applyTitle}</p>
-      {apply.applyRun ? (
+      {applyRun ? (
         <div className="flex items-center gap-2">
-          <span>{apply.applyRun.status === "succeeded" ? s.run.appliedDone : s.run.applyingNow}</span>
-          <Button size="sm" variant="outline" onClick={() => onOpen(apply.applyRun!.id)} data-testid="apply-view">{s.run.viewApply}</Button>
+          <span>{applyRun.status === "succeeded" ? s.run.appliedDone : s.run.applyingNow}</span>
+          {onOpenApply && <Button size="sm" variant="outline" onClick={() => onOpenApply(applyRun.id)} data-testid="apply-view">{s.run.viewApply}</Button>}
         </div>
       ) : (
         <>
-          {apply.expiresAt && <p className="text-xs text-muted-foreground">{fill(s.run.expires, { t: new Date(apply.expiresAt).toLocaleString() })}</p>}
+          {expiresAt && <p className="text-xs text-muted-foreground">{fill(s.run.expires, { t: new Date(expiresAt).toLocaleString() })}</p>}
           {going.length > 0 && (
             <div className="rounded border border-destructive/40 p-2" data-testid="apply-destructive">
               <p className="flex items-center gap-1 text-xs font-medium text-destructive"><AlertTriangle className="size-3.5" />{s.run.destructiveBox}</p>
-              <ul className="mt-1 font-mono text-xs text-destructive">{going.map((r) => <li key={r.address}>{r.address}</li>)}</ul>
+              <ul className="mt-1 font-mono text-xs text-destructive">{going.map((r) => <li key={r}>{r}</li>)}</ul>
             </div>
           )}
-          {apply.needsApproval && (
-            <p className="text-xs" data-testid="apply-approvals">{s.run.needsTwo} {apply.approvals.length ? fill(s.run.approvedBy, { n: apply.approvals.map((a) => a.username).join(", ") }) : s.run.noApproval}</p>
-          )}
-          {waiting.length > 0 && <ul className="list-disc pl-5 text-xs text-destructive" data-testid="apply-blockers">{waiting.map((c) => <li key={c}>{(s.run.blockers as Record<string, string>)[c] ?? c}</li>)}</ul>}
-          {destructiveClosed && <p className="text-xs text-destructive">{s.run.noDestructive}</p>}
-          {!can.apply && <p className="text-xs text-muted-foreground">{s.run.noApplyRight}</p>}
+          {request?.status === "waiting" && <p className="text-xs" data-testid="request-state">{fill(s.req.waitingText, { n: String(request.number), u: request.requester })}</p>}
+          {request?.status === "approved" && <p className="text-xs" data-testid="request-state">{fill(s.req.approvedText, { u: request.decidedBy ?? "" })}</p>}
+          {request?.can.approveBlocked && <p className="text-xs text-destructive">{s.req.approveBlocked}</p>}
+          {blockers.length > 0 && <ul className="list-disc pl-5 text-xs text-destructive" data-testid="apply-blockers">{blockers.map((c) => <li key={c}>{(s.run.blockers as Record<string, string>)[c] ?? c}</li>)}</ul>}
+          {stale && live && <p className="text-xs">{s.req.staleText}</p>}
           <div className="flex flex-wrap items-center gap-2">
-            {apply.needsApproval && can.approve && !myApproval && planner !== me && <Button size="sm" variant="outline" disabled={busy} onClick={() => void act(() => approveRun(run.id))} data-testid="apply-approve">{s.run.approveBtn}</Button>}
-            {myApproval && <Button size="sm" variant="ghost" disabled={busy} onClick={() => void act(() => withdrawApproval(run.id))} data-testid="apply-withdraw">{s.run.withdrawBtn}</Button>}
-            <Button size="sm" variant={apply.destructive ? "destructive" : "default"} disabled={busy || !canPress} onClick={() => setAsking(true)} data-testid="apply-button">
-              {busy && <Loader2 className="animate-spin" />}{apply.needsApproval ? s.run.applyBtn : s.run.approveApplyBtn}
-            </Button>
-            {stale && <Button size="sm" variant="outline" onClick={onReplan} data-testid="apply-replan">{s.run.replanBtn}</Button>}
+            {request?.can.approve && <Button size="sm" disabled={busy} onClick={() => void act(() => approveRequest(request.id), s.req.approvedToast)} data-testid="request-approve">{s.req.approve}</Button>}
+            {request?.can.reject && <Button size="sm" variant="outline" disabled={busy} onClick={() => setDialog("reject")} data-testid="request-reject">{s.req.reject}</Button>}
+            {request?.can.withdraw && <Button size="sm" variant="ghost" disabled={busy} onClick={() => void act(() => withdrawRequest(request.id), s.req.withdrawnToast)} data-testid="request-withdraw">{s.req.withdraw}</Button>}
+            {canApplyNow && <Button size="sm" variant={destructive ? "destructive" : "default"} disabled={busy || !canApply} onClick={() => setDialog("apply")} data-testid="apply-button">{busy && <Loader2 className="animate-spin" />}{s.run.applyBtn}</Button>}
+            {!request && canRequest && <Button size="sm" disabled={busy || blockers.length > 0} onClick={() => setDialog("send")} data-testid="request-send">{s.req.send}</Button>}
+            {replaceable.map((r) => <Button key={r.id} size="sm" variant="outline" disabled={busy} onClick={() => void act(() => replanRequest(r.id, planRunId), s.req.putInDone)} data-testid="request-putin">{fill(s.req.putIn, { n: String(r.number) })}</Button>)}
+            {request && live && onOpenRequest && <Button size="sm" variant="ghost" onClick={() => onOpenRequest(request.id)} data-testid="request-open">{fill(s.req.openRequest, { n: String(request.number) })}</Button>}
+            {stale && onReplan && <Button size="sm" variant="outline" onClick={onReplan} data-testid="apply-replan">{s.run.replanBtn}</Button>}
           </div>
         </>
       )}
-      <Dialog open={asking} onOpenChange={(o) => { if (!o) { setAsking(false); setTyped(""); } }}>
+
+      <Dialog open={dialog === "apply"} onOpenChange={(o) => !o && close()}>
         <DialogContent className="sm:max-w-md" data-testid="apply-confirm">
           <DialogHeader><DialogTitle>{s.run.confirmTitle}</DialogTitle><DialogDescription>{s.run.confirmText}</DialogDescription></DialogHeader>
-          {apply.destructive && (
+          {destructive && (
             <div className="grid gap-1.5">
               <p className="text-xs">{fill(s.run.confirmType, { n: projectName })}</p>
               <Input value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" data-testid="apply-confirm-name" />
             </div>
           )}
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setAsking(false)}>{s.adm.cancel}</Button>
-            <Button variant={apply.destructive ? "destructive" : "default"} disabled={busy || (apply.destructive && typed !== projectName)} onClick={() => void press()} data-testid="apply-confirm-go">{s.run.applyBtn}</Button>
+            <Button variant="ghost" onClick={close}>{s.adm.cancel}</Button>
+            <Button variant={destructive ? "destructive" : "default"} disabled={busy || (destructive && typed !== projectName)} onClick={() => void press()} data-testid="apply-confirm-go">{s.run.applyBtn}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={dialog === "send"} onOpenChange={(o) => !o && close()}>
+        <DialogContent className="sm:max-w-md" data-testid="request-send-dialog">
+          <DialogHeader><DialogTitle>{s.req.sendTitle}</DialogTitle><DialogDescription>{s.req.sendText}</DialogDescription></DialogHeader>
+          <Textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={s.req.note} rows={4} data-testid="request-note" />
+          <DialogFooter>
+            <Button variant="ghost" onClick={close}>{s.adm.cancel}</Button>
+            <Button disabled={busy} onClick={() => void act(() => sendRequest(planRunId, text.trim() || undefined), s.req.sent)} data-testid="request-send-go">{s.req.sendGo}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={dialog === "reject"} onOpenChange={(o) => !o && close()}>
+        <DialogContent className="sm:max-w-md" data-testid="request-reject-dialog">
+          <DialogHeader><DialogTitle>{s.req.rejectTitle}</DialogTitle><DialogDescription>{s.req.rejectText}</DialogDescription></DialogHeader>
+          <Textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={s.req.reason} rows={4} data-testid="request-reason" />
+          <DialogFooter>
+            <Button variant="ghost" onClick={close}>{s.adm.cancel}</Button>
+            <Button variant="destructive" disabled={busy || !text.trim()} onClick={() => request && void act(() => rejectRequest(request.id, text.trim()), s.req.rejectedToast)} data-testid="request-reject-go">{s.req.reject}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -92,7 +92,7 @@ export interface ProjectsTable {
   updated_by: string | null;
   deleted_at: TsNull;
   connection_id: ColumnType<string | null, string | null | undefined, string | null>;
-  require_approval: Generated<boolean>;
+  request_seq: Generated<number>;
 }
 
 export interface ProjectVersionsTable {
@@ -206,11 +206,32 @@ export interface AwsConnectionsTable {
   last_test: ColumnType<unknown, string | null | undefined, string | null>;
 }
 
-export interface RunApprovalsTable {
-  run_id: string;
-  user_id: string | null;
-  username: string;
+export interface RequestsTable {
+  id: Generated<string>;
+  project_id: string;
+  number: number;
+  kind: "apply";
+  plan_run_id: ColumnType<string | null, string | null | undefined, string | null>;
+  status: Generated<"waiting" | "approved" | "applied" | "closed">;
+  close_reason: ColumnType<"rejected" | "withdrawn" | null, "rejected" | "withdrawn" | null | undefined, "rejected" | "withdrawn" | null>;
+  requester_id: string | null;
+  requester: string;
+  decided_by_id: ColumnType<string | null, string | null | undefined, string | null>;
+  decided_by: ColumnType<string | null, string | null | undefined, string | null>;
+  decided_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
+  created_at: Ts;
+  updated_at: Ts;
+}
+
+export interface RequestEventsTable {
+  id: Generated<number>;
+  request_id: string;
   at: Ts;
+  actor_id: string | null;
+  actor: string;
+  kind: "requested" | "comment" | "approved" | "rejected" | "withdrawn" | "replanned" | "applied" | "apply_failed";
+  body: ColumnType<string | null, string | null | undefined, string | null>;
+  data: ColumnType<Record<string, unknown>, string | undefined, string>;
 }
 
 export interface StateRescuesTable {
@@ -247,6 +268,7 @@ export interface Database {
   state_locks: StateLocksTable;
   project_variables: ProjectVariablesTable;
   aws_connections: AwsConnectionsTable;
-  run_approvals: RunApprovalsTable;
+  requests: RequestsTable;
+  request_events: RequestEventsTable;
   state_rescues: StateRescuesTable;
 }

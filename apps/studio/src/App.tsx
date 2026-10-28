@@ -209,7 +209,7 @@ export function App({ prefs, user, project }: { prefs: Prefs; user: User; projec
       beforeChange={() => queue.flush()} onRestored={(d, rev) => adopt(d, rev)}
     />
     <ShareDialog s={s} projectId={projectId} open={shareOpen} onClose={() => setShareOpen(false)} />
-    <RunDialog s={s} projectId={projectId} projectName={project.project.name} canShare={project.can.share} canPlan={project.can.plan} open={runOpen} onClose={() => setRunOpen(false)} beforeRun={() => queue.flush()} canSetVariables={project.can.variables} />
+    <RunDialog s={s} projectId={projectId} projectName={project.project.name} canPlan={project.can.plan} open={runOpen} onClose={() => setRunOpen(false)} beforeRun={() => queue.flush()} canSetVariables={project.can.variables} />
     <ConflictDialog
       s={s} conflict={conflict} onClose={() => setConflict(null)}
       onReload={() => void reload()} onOverwrite={() => { if (conflict) queue.overwrite(conflict.currentRev); setConflict(null); }} onCopy={() => void copyMine()}

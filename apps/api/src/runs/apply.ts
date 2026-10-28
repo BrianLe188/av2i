@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { evaluate, resource, type Statement } from "@av2i/authz";
 import { generate } from "@av2i/generator";
 import { upgradeDesign, type Design } from "@av2i/model";
 import type { Config } from "../config.ts";
@@ -19,7 +20,7 @@ export function filesHash(design: Design): string {
 }
 
 export interface Blocker {
-  code: "plan_not_ready" | "already_applied" | "plan_expired" | "design_changed" | "variables_changed" | "connection_changed" | "no_apply_role" | "state_changed" | "rescue_pending" | "not_approved";
+  code: "plan_not_ready" | "already_applied" | "plan_expired" | "design_changed" | "variables_changed" | "connection_changed" | "no_apply_role" | "state_changed" | "rescue_pending";
   detail?: string;
 }
 
@@ -42,23 +43,19 @@ export interface ProjectFacts {
   name: string;
   design: unknown;
   connection_id: string | null;
-  require_approval: boolean;
 }
 
 export interface ApplyState {
   blockers: Blocker[];
-  needsApproval: boolean;
   destructive: boolean;
   expiresAt: Date | null;
-  approvals: { username: string; at: Date }[];
 }
 
 /** Everything that stands between a plan and its apply, as the studio shows it and the server enforces it (DD-026, section 2). */
 export async function applyState(db: Db, config: Config, plan: PlanFacts, project: ProjectFacts, now = new Date()): Promise<ApplyState> {
   const blockers: Blocker[] = [];
-  const approvals = (await db.selectFrom("run_approvals").select(["username", "at"]).where("run_id", "=", plan.id).orderBy("at").execute());
   const expiresAt = plan.finished_at ? new Date(plan.finished_at.getTime() + PLAN_TTL_MS) : null;
-  const state: ApplyState = { blockers, needsApproval: project.require_approval, destructive: plan.destructive, expiresAt, approvals };
+  const state: ApplyState = { blockers, destructive: plan.destructive, expiresAt };
   if (plan.kind !== "plan" || plan.status !== "succeeded" || !plan.hasPlan) {
     blockers.push({ code: "plan_not_ready" });
     return state;
@@ -78,9 +75,29 @@ export async function applyState(db: Db, config: Config, plan: PlanFacts, projec
   if ((latest?.serial ?? null) !== plan.state_serial) blockers.push({ code: "state_changed" });
   const rescue = await db.selectFrom("state_rescues").select("id").where("project_id", "=", project.id).where("resolved_at", "is", null).executeTakeFirst();
   if (rescue) blockers.push({ code: "rescue_pending" });
-  if (project.require_approval) {
-    const planner = plan.created_by ? (await db.selectFrom("users").select("username").where("id", "=", plan.created_by).executeTakeFirst())?.username : undefined;
-    if (!approvals.some((a) => a.username !== planner)) blockers.push({ code: "not_approved" });
-  }
   return state;
+}
+
+export interface RequestFacts {
+  id: string;
+  status: string;
+  requester_id: string | null;
+  decided_by_id: string | null;
+}
+
+export type ApplyPath = { ok: true; via: "self" | "request" } | { ok: false; code: "destructive_forbidden" | "awaiting_approval" | "request_needed" };
+
+/**
+ * Whether this person may press Apply on a plan (DD-027). Someone who may both apply and approve decides for themselves; otherwise the plan needs
+ * an approved request, and then the requester, the approver or anyone with run:Apply may apply it. An approved plan that deletes was approved by
+ * someone with run:ApplyDestructive, so the one who applies it does not need that right too.
+ */
+export function applyPath(statements: Statement[], projectId: string, userId: string, request: RequestFacts | null, destructive: boolean): ApplyPath {
+  const res = resource.project(projectId);
+  const may = (a: "run:Apply" | "run:Approve" | "run:ApplyDestructive") => evaluate(statements, { action: a, resource: res }).allowed;
+  const self = may("run:Apply") && may("run:Approve");
+  if (self && (!destructive || may("run:ApplyDestructive"))) return { ok: true, via: "self" };
+  if (request?.status === "approved" && (request.requester_id === userId || request.decided_by_id === userId || may("run:Apply"))) return { ok: true, via: "request" };
+  if (self) return { ok: false, code: "destructive_forbidden" };
+  return { ok: false, code: request?.status === "waiting" ? "awaiting_approval" : "request_needed" };
 }

@@ -9,6 +9,7 @@ import { realGateway, type AwsGateway } from "../aws.ts";
 import type { Config } from "../config.ts";
 import { runIdentity } from "./credentials.ts";
 import { storeRescue } from "./rescue.ts";
+import { closeAfterApply } from "../requests.ts";
 import type { Db } from "../db.ts";
 import { open, requireKey, seal } from "./crypto.ts";
 import { requiredOf, valuesOf } from "./variables.ts";
@@ -212,5 +213,10 @@ export async function execute(db: Db, config: Config, claimed: Claimed, aws: Aws
     // runs of one project never overlap, so a lock still held now belongs to nobody: tofu was stopped before it could unlock
     await db.deleteFrom("state_locks").where("project_id", "=", claimed.project_id).execute();
     await db.updateTable("runs").set({ status: error ? "failed" : "succeeded", finished_at: sql`now()`, error, state_token_hash: null }).where("id", "=", claimed.id).execute();
+    if (isApply) {
+      // the request that covers the plan learns how its apply ended
+      const who = claimed.created_by ? (await db.selectFrom("users").select("username").where("id", "=", claimed.created_by).executeTakeFirst())?.username : undefined;
+      await closeAfterApply(db, claimed.plan_run_id, claimed.id, !error, error, { userId: claimed.created_by, username: who ?? "platform" }).catch(() => {});
+    }
   }
 }
