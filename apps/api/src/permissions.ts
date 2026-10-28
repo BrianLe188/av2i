@@ -1,4 +1,5 @@
-import { ACTIONS, ACTION_GROUPS, evaluate, matchesAction, parseDocument, type Action, type Statement } from "@av2i/authz";
+import { ACTIONS, ACTION_GROUPS, evaluate, matchesAction, parseDocument, selectionOf, type Action, type Statement } from "@av2i/authz";
+import type { Db } from "./db.ts";
 
 /** Where a set of statements came from: a policy (by name, maybe through a group), or permissions given straight to a user or a group. */
 export interface Source {
@@ -42,4 +43,18 @@ export function effectivePermissions(sources: Source[]): EffectiveRow[] {
     }
     return { action, allowed: decision.allowed, denied: decision.reason === "explicit-deny", sources: found };
   });
+}
+
+/** For a list of users or groups: whether each was given all permissions directly, and how many (DD-030). */
+export async function directSummaries(db: Db, kind: "user" | "group", ids: string[]): Promise<Map<string, { all: boolean; count: number }>> {
+  const out = new Map<string, { all: boolean; count: number }>();
+  if (ids.length === 0) return out;
+  const column = kind === "user" ? "user_id" : "group_id";
+  const rows = await db.selectFrom("direct_permissions").select([column, "document"]).where(column, "in", ids).execute();
+  for (const r of rows) {
+    const p = parseDocument(r.document);
+    const sel = p.ok ? selectionOf(p.statements) : null;
+    out.set((r as Record<string, string>)[column]!, sel && sel.ok ? { all: sel.all, count: sel.actions.length } : { all: false, count: 0 });
+  }
+  return out;
 }

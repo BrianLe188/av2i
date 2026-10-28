@@ -1,6 +1,7 @@
 import { ACTIONS, documentOf, parseDocument, resource, selectionOf, type Action } from "@av2i/authz";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { audit } from "../audit.ts";
+import { keepingAnAdministrator } from "../access.ts";
 import { authOf, need, sessionOnly, type Ctx } from "../context.ts";
 import { notFound } from "../errors.ts";
 import { effectivePermissions, sourceFrom, type Source } from "../permissions.ts";
@@ -62,15 +63,19 @@ export function permissionRoutes(app: FastifyInstance, ctx: Ctx): void {
     const body = req.body as { all: boolean; actions: Action[] };
     const actions = [...new Set(body.actions)];
     const me = actor(req);
-    const q = db.deleteFrom("direct_permissions");
-    if (!body.all && actions.length === 0) {
-      await ("user" in owner ? q.where("user_id", "=", owner.user) : q.where("group_id", "=", owner.group)).execute();
-    } else {
+    const column = "user" in owner ? "user_id" : "group_id";
+    const ownerId = "user" in owner ? owner.user : owner.group;
+    // undone if it would leave nobody who can manage users and policies
+    await keepingAnAdministrator(db, async (trx) => {
+      if (!body.all && actions.length === 0) {
+        await trx.deleteFrom("direct_permissions").where(column, "=", ownerId).execute();
+        return;
+      }
       const document = JSON.stringify(documentOf(actions, body.all));
-      const existing = await db.selectFrom("direct_permissions").select("id").where(("user" in owner ? "user_id" : "group_id") as "user_id", "=", "user" in owner ? owner.user : owner.group).executeTakeFirst();
-      if (existing) await db.updateTable("direct_permissions").set({ document, updated_by: me.userId, updated_at: new Date() }).where("id", "=", existing.id).execute();
-      else await db.insertInto("direct_permissions").values({ user_id: "user" in owner ? owner.user : null, group_id: "group" in owner ? owner.group : null, document, updated_by: me.userId }).execute();
-    }
+      const existing = await trx.selectFrom("direct_permissions").select("id").where(column, "=", ownerId).executeTakeFirst();
+      if (existing) await trx.updateTable("direct_permissions").set({ document, updated_by: me.userId, updated_at: new Date() }).where("id", "=", existing.id).execute();
+      else await trx.insertInto("direct_permissions").values({ user_id: column === "user_id" ? ownerId : null, group_id: column === "group_id" ? ownerId : null, document, updated_by: me.userId }).execute();
+    });
     await audit(db, { actor: me, action: `${kind}.direct_permissions_set`, resource: kind === "user" ? resource.user("user" in owner ? owner.user : "") : resource.group("group" in owner ? owner.group : ""), outcome: "success", ip: req.ip, details: { name, all: body.all, actions } });
   };
 

@@ -13,6 +13,23 @@ export const ACTION_GROUPS: readonly { id: "projects" | "runs" | "state" | "conn
   { id: "audit", actions: ["audit:Read"] },
 ];
 
+/** The permissions of the system, granted to a user or a group (DD-031): they belong to no particular project. */
+export const SYSTEM_GROUPS: readonly { id: "projects" | "connections" | "users" | "groups" | "policies" | "audit"; actions: readonly Action[] }[] = [
+  { id: "projects", actions: ["project:Create"] },
+  { id: "connections", actions: ["connection:Manage", "connection:Use"] },
+  { id: "users", actions: ["user:Create", "user:List", "user:Read", "user:Update", "user:Disable", "user:ResetPassword"] },
+  { id: "groups", actions: ["group:Manage"] },
+  { id: "policies", actions: ["policy:Manage"] },
+  { id: "audit", actions: ["audit:Read"] },
+];
+
+/** The permissions of one project, granted to a member in that project (DD-031). */
+export const PROJECT_GROUPS: readonly { id: "project" | "runs" | "state"; actions: readonly Action[] }[] = [
+  { id: "project", actions: ["project:Read", "project:Write", "project:Delete", "project:Share"] },
+  { id: "runs", actions: ["run:Plan", "run:Approve", "run:Apply", "run:ApplyDestructive"] },
+  { id: "state", actions: ["state:Read", "state:Write", "variable:Write"] },
+];
+
 /** Permissions to hand out with care: they delete, change infrastructure, state or who may do what. */
 export const SENSITIVE: ReadonlySet<Action> = new Set<Action>([
   "project:Delete", "run:ApplyDestructive", "state:Write", "user:Disable", "user:ResetPassword", "group:Manage", "policy:Manage", "connection:Manage",

@@ -1,7 +1,8 @@
 import { ADMINISTRATOR, resource } from "@av2i/authz";
 import type { FastifyInstance } from "fastify";
 import { sql } from "kysely";
-import { requireAnotherAdministrator } from "../access.ts";
+import { keepingAnAdministrator, requireAnotherAdministrator } from "../access.ts";
+import { directSummaries } from "../permissions.ts";
 import { audit } from "../audit.ts";
 import { checkNewPassword, hashPassword, temporaryPassword } from "../auth/password.ts";
 import { revokeUserSessions } from "../auth/sessions.ts";
@@ -49,7 +50,8 @@ export function userRoutes(app: FastifyInstance, ctx: Ctx): void {
     const users = await db.selectFrom("users").selectAll().orderBy("username").execute();
     const pol = await policiesOf(users.map((u) => u.id));
     const grp = await groupsOf(users.map((u) => u.id));
-    return { users: users.map((u) => view(u, pol.get(u.id) ?? [], grp.get(u.id) ?? [])) };
+    const direct = await directSummaries(db, "user", users.map((u) => u.id));
+    return { users: users.map((u) => ({ ...view(u, pol.get(u.id) ?? [], grp.get(u.id) ?? []), direct: direct.get(u.id) ?? { all: false, count: 0 } })) };
   });
 
   app.get("/api/users/:id", { schema: { params: idParams } }, async (req) => {
@@ -140,8 +142,8 @@ export function userRoutes(app: FastifyInstance, ctx: Ctx): void {
     const added = next.filter((n) => !current.includes(n));
     const removed = current.filter((n) => !next.includes(n));
     for (const name of [...added, ...removed]) await need(ctx, req, "policy:Manage", resource.policy(name));
-    if (removed.includes(ADMINISTRATOR) && !user.disabled) await requireAnotherAdministrator(db, id);
-    await db.transaction().execute(async (trx) => {
+    // undone if it would leave nobody who can manage users and policies
+    await keepingAnAdministrator(db, async (trx) => {
       await sql`delete from policy_attachments where user_id = ${id}::uuid`.execute(trx);
       for (const c of chosen) await trx.insertInto("policy_attachments").values({ policy_id: c!.id, user_id: id, group_id: null }).execute();
     });

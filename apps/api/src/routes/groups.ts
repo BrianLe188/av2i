@@ -2,6 +2,7 @@ import { ADMINISTRATOR, resource } from "@av2i/authz";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { sql } from "kysely";
 import { keepingAnAdministrator } from "../access.ts";
+import { directSummaries } from "../permissions.ts";
 import { audit } from "../audit.ts";
 import { authOf, need, type Ctx } from "../context.ts";
 import { badRequest, conflict, notFound } from "../errors.ts";
@@ -34,7 +35,8 @@ export function groupRoutes(app: FastifyInstance, ctx: Ctx): void {
     const groups = await db.selectFrom("groups").selectAll().orderBy("name").execute();
     const counts = await db.selectFrom("group_members").select(["group_id", sql<number>`count(*)`.as("n")]).groupBy("group_id").execute();
     const pol = await policiesOf(groups.map((g) => g.id));
-    return { groups: groups.map((g) => ({ id: g.id, name: g.name, description: g.description, createdAt: g.created_at, members: Number(counts.find((c) => c.group_id === g.id)?.n ?? 0), policies: pol.get(g.id) ?? [] })) };
+    const direct = await directSummaries(db, "group", groups.map((g) => g.id));
+    return { groups: groups.map((g) => ({ id: g.id, name: g.name, description: g.description, createdAt: g.created_at, members: Number(counts.find((c) => c.group_id === g.id)?.n ?? 0), policies: pol.get(g.id) ?? [], direct: direct.get(g.id) ?? { all: false, count: 0 } })) };
   });
 
   app.post("/api/groups", {

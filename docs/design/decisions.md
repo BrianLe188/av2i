@@ -35,6 +35,7 @@ Numbered `DD-nnn` to keep them apart from the specification's `D-nnn` ([../spec/
 | DD-028 | decided | A project page, and members with project permissions granted in the project |
 | DD-029 | decided | Built-in policies can have their permissions chosen, with a picker |
 | DD-030 | decided | Permissions given directly to a user or a group, and the table of effective permissions |
+| DD-031 | decided | System permissions on users and groups, project permissions in the project, both as tickboxes |
 
 ## DD-001 Language and runtime
 
@@ -471,3 +472,16 @@ group, removed with its owner) and evaluated like an attached policy, for the us
 **effective permissions**: for each of the 24 permissions, whether it is allowed everywhere, which policy, group or direct grant says so, whether an explicit Deny stops it,
 and whether a source allows it only on some resources. A project's own permissions (its members, DD-028) are not in that table. Not done: a user page of its own (the
 dialog carries it), and the effective table for a single project.
+
+## DD-031 System permissions on users and groups, project permissions in the project, both as tickboxes
+
+Status: decided (owner, 28 October 2026; refines DD-028 to DD-030).
+
+The 24 permissions fall in two kinds. **System** (12): `project:Create`, `connection:Manage`, `connection:Use`, the six `user:*`, `group:Manage`, `policy:Manage`, `audit:Read`; they are granted to a
+user or a group in **one dialog of tickboxes**, with no tabs. **Project** (11): `project:Read/Write/Delete/Share`, `run:Plan/Approve/Apply/ApplyDestructive`, `state:Read/Write`, `variable:Write`; they are
+granted **only in the project**, to a member, in the same kind of dialog; there are no roles (viewer, editor...): a member is the set of permissions ticked for them, shown as chips. A member always
+reads, and whoever shares can tick only what they hold. `project:List` is in neither (it only means something with read access to every project) and stays in `*` and in JSON.
+
+The user and group dialogs no longer attach policies; policies attached before keep working and are listed in the dialog with **Detach** and **Turn into ticks**. The policy page picker shows the system
+permissions and keeps project permissions it finds in the document. An **administrator** is now whoever's effective permissions (policies, groups, direct) include what manages users and policies, and
+every change of policies or direct permissions is undone if it would leave none. The table of effective permissions is not in the dialogs (the API keeps it).

@@ -232,19 +232,21 @@ export function projectRoutes(app: FastifyInstance, ctx: Ctx): void {
   app.put("/api/projects/:id/shares", {
     schema: {
       params: idParams,
-      body: { type: "object", required: ["role"], additionalProperties: false, properties: {
+      body: { type: "object", additionalProperties: false, properties: {
         user: { type: "string", maxLength: 64 }, group: { type: "string", maxLength: 64 }, role: { type: "string", enum: [...Object.keys(PROJECT_ROLES), "custom"] },
         actions: { type: "array", items: { type: "string", enum: [...PROJECT_ACTIONS] }, maxItems: PROJECT_ACTIONS.length },
       } },
     },
   }, async (req) => {
     const { id } = req.params as { id: string };
-    const body = req.body as { user?: string; group?: string; role: keyof typeof PROJECT_ROLES | "custom"; actions?: string[] };
+    const body = req.body as { user?: string; group?: string; role?: keyof typeof PROJECT_ROLES | "custom"; actions?: string[] };
     const row = await load(id);
     const statements = await authorize(req, row, "project:Share");
     if (Boolean(body.user) === Boolean(body.group)) throw badRequest("invalid_share", "Name either a user or a group.");
-    // a role is its set of permissions; a custom member gets the ones ticked, and always the right to read
-    const actions: string[] = body.role === "custom" ? [...new Set(["project:Read", ...(body.actions ?? [])])] : [...PROJECT_ROLES[body.role]];
+    // a member holds the permissions ticked for them, and always the right to read; a role name is only a shortcut for a set (DD-031)
+    if (!body.role && !body.actions) throw badRequest("invalid_share", "Give the permissions of the member.");
+    const role = body.role && body.role !== "custom" ? body.role : "custom";
+    const actions: string[] = role === "custom" ? [...new Set(["project:Read", ...(body.actions ?? [])])] : [...PROJECT_ROLES[role]];
     // nobody can give more than they hold in the project
     const res = resource.project(id);
     const beyond = actions.filter((a) => !evaluate(statements, { action: a as Action, resource: res }).allowed);
@@ -263,9 +265,9 @@ export function projectRoutes(app: FastifyInstance, ctx: Ctx): void {
     }
     const existing = await db.selectFrom("project_shares").select("id").where("project_id", "=", id).where(target.column, "=", target.id).executeTakeFirst();
     const share = existing
-      ? await db.updateTable("project_shares").set({ role: body.role, actions, granted_by: me.userId }).where("id", "=", existing.id).returning("id").executeTakeFirstOrThrow()
-      : await db.insertInto("project_shares").values({ project_id: id, [target.column]: target.id, role: body.role, actions, granted_by: me.userId }).returning("id").executeTakeFirstOrThrow();
-    await audit(db, { actor: me, action: "project.shared", resource: resource.project(id), outcome: "success", ip: req.ip, details: { with: target.name, kind: body.user ? "user" : "group", role: body.role, actions } });
+      ? await db.updateTable("project_shares").set({ role, actions, granted_by: me.userId }).where("id", "=", existing.id).returning("id").executeTakeFirstOrThrow()
+      : await db.insertInto("project_shares").values({ project_id: id, [target.column]: target.id, role, actions, granted_by: me.userId }).returning("id").executeTakeFirstOrThrow();
+    await audit(db, { actor: me, action: "project.shared", resource: resource.project(id), outcome: "success", ip: req.ip, details: { with: target.name, kind: body.user ? "user" : "group", role, actions } });
     return { id: share.id };
   });
 

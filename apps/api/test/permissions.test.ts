@@ -90,4 +90,18 @@ describe.skipIf(!available)("direct permissions and the table of effective permi
     await t.db.deleteFrom("users").where("id", "=", gone.id).execute();
     expect(await t.db.selectFrom("direct_permissions").select("id").where("user_id", "=", gone.id).execute()).toHaveLength(0);
   });
+
+  it("counts as administrator whoever may manage users and policies, however it was given, and keeps at least one (DD-031)", async () => {
+    const boss = await addMember(t, admin, "boss");
+    await giveUser(boss.id, { all: true, actions: [] });
+    const adminId = (await t.call("GET", "/api/users", { cookie: admin })).body.users.find((u: any) => u.username === "admin").id;
+    // admin may lose the Administrator policy now: boss can still put things right
+    expect((await t.call("PUT", `/api/users/${adminId}/policies`, { cookie: boss.cookie, body: { policies: [] } })).status).toBe(200);
+    // boss is the last one: taking away its permissions is refused
+    const refused = await giveUser(boss.id, { all: false, actions: [] }, boss.cookie);
+    expect(refused.status).toBe(409);
+    expect(refused.body.error.code).toBe("last_administrator");
+    expect((await t.call("PUT", `/api/users/${adminId}/policies`, { cookie: boss.cookie, body: { policies: ["Administrator"] } })).status).toBe(200);
+    expect((await giveUser(boss.id, { all: false, actions: [] })).status).toBe(200);
+  });
 });

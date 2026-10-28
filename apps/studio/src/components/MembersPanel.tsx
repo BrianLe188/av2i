@@ -1,78 +1,76 @@
 import { useCallback, useEffect, useState } from "react";
-import { Pencil, Trash2, UserRound, Users } from "lucide-react";
+import { PROJECT_GROUPS, type Action } from "@av2i/authz";
+import { Pencil, Plus, Trash2, UserRound, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ApiError } from "../api.ts";
 import type { Strings } from "../i18n.ts";
-import { listShares, putShare, removeShare, shareTargets, type MemberRole, type Members, type ShareRow } from "../projects.ts";
+import { listShares, putShare, removeShare, shareTargets, type Members, type ShareRow } from "../projects.ts";
 import { describe } from "./auth/errors.ts";
+import { PermissionPicker, type Pick } from "./PermissionPicker.tsx";
 
-const fill = (t: string, n: number) => t.replace("{n}", String(n));
-const ROLES: MemberRole[] = ["viewer", "editor", "runner", "approver", "maintainer", "custom"];
+const fill = (t: string, v: Record<string, string | number>) => t.replace(/\{(\w+)\}/g, (_, k: string) => String(v[k] ?? ""));
+const READ: Action = "project:Read";
+const SHOWN = 4;
 
-/** The tickboxes of the project permissions; what the person does not hold themselves is shown but cannot be ticked. */
-function PermissionGrid({ s, all, mine, value, onChange }: { s: Strings; all: string[]; mine: string[]; value: string[]; onChange: (v: string[]) => void }) {
+/** What a member may do in the project, as a few chips: the permissions themselves, not a role name (DD-031). */
+function Chips({ s, actions }: { s: Strings; actions: string[] }) {
+  const label = (a: string) => (s.perm.actions as Record<string, string>)[a] ?? a;
   return (
-    <div className="grid gap-1.5 sm:grid-cols-2" data-testid="permission-grid">
-      {all.map((a) => {
-        const locked = a === "project:Read";
-        const held = mine.includes(a);
-        return (
-          <label key={a} className={`flex items-center gap-2 text-sm ${held || locked ? "" : "opacity-50"}`} title={held ? undefined : s.pd.cantGrant}>
-            <Checkbox checked={value.includes(a) || locked} disabled={locked || !held} onCheckedChange={(c) => onChange(c === true ? [...value, a] : value.filter((x) => x !== a))} data-testid={`perm-${a}`} />
-            <span>{(s.pd.actions as Record<string, string>)[a] ?? a}</span>
-          </label>
-        );
-      })}
-    </div>
+    <span className="flex flex-wrap items-center gap-1" title={actions.map(label).join(", ")} data-testid="member-chips">
+      {actions.slice(0, SHOWN).map((a) => <Badge key={a} variant="secondary" className="font-normal">{label(a)}</Badge>)}
+      {actions.length > SHOWN && <Badge variant="outline" className="font-normal">+{actions.length - SHOWN}</Badge>}
+    </span>
   );
 }
 
-function roleSelect(s: Strings, value: MemberRole, onChange: (r: MemberRole) => void, testid: string) {
-  return (
-    <Select value={value} onValueChange={(v) => onChange(v as MemberRole)}>
-      <SelectTrigger className="w-36" data-testid={testid}><SelectValue /></SelectTrigger>
-      <SelectContent>
-        {ROLES.map((r) => <SelectItem key={r} value={r} title={s.pd.roleHelp[r]}>{s.pd.roles[r]}</SelectItem>)}
-      </SelectContent>
-    </Select>
-  );
-}
-
-/** The members of a project and what each may do in it (DD-028): added, changed and removed here by whoever may manage members. */
+/** The members of a project and what each may do in it: added and edited in a dialog of tickboxes, by whoever may manage members. */
 export function MembersPanel({ s, projectId }: { s: Strings; projectId: string }) {
   const [m, setM] = useState<Members | null>(null);
   const [targets, setTargets] = useState<{ users: string[]; groups: string[] }>({ users: [], groups: [] });
-  const [pick, setPick] = useState("");
-  const [role, setRole] = useState<MemberRole>("viewer");
-  const [custom, setCustom] = useState<string[]>(["project:Read"]);
-  const [editing, setEditing] = useState<{ id: string; actions: string[] } | null>(null);
+  const [dialog, setDialog] = useState<{ mode: "add" } | { mode: "edit"; member: ShareRow } | null>(null);
+  const [pick, setPick] = useState<Pick>({ all: false, actions: [READ] });
+  const [who, setWho] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [dialogError, setDialogError] = useState<string | null>(null);
 
-  const fail = useCallback((e: unknown) => setError(e instanceof ApiError && (s.pd.errors as Record<string, string>)[e.code] ? (s.pd.errors as Record<string, string>)[e.code]! : describe(e, s)), [s]);
+  const fail = useCallback((e: unknown, to: (m: string) => void) => to(e instanceof ApiError && (s.pd.errors as Record<string, string>)[e.code] ? (s.pd.errors as Record<string, string>)[e.code]! : describe(e, s)), [s]);
   const load = useCallback(async () => {
     try {
       const r = await listShares(projectId);
       setM(r);
       if (r.canManage) setTargets(await shareTargets(projectId));
-    } catch (e) { fail(e); }
+    } catch (e) { fail(e, setError); }
   }, [projectId, fail]);
   useEffect(() => { void load(); }, [load]);
 
-  const run = async (job: () => Promise<unknown>, done: string) => {
-    setError(null);
-    try { await job(); toast(done); await load(); } catch (e) { fail(e); }
+  const open = (d: NonNullable<typeof dialog>) => {
+    setDialogError(null);
+    setWho("");
+    setPick({ all: false, actions: d.mode === "edit" ? (d.member.actions as Action[]) : [READ] });
+    setDialog(d);
   };
-  const who = (x: Pick<ShareRow, "kind" | "name">) => (x.kind === "user" ? { user: x.name } : { group: x.name });
-  const add = () => {
-    const [kind, ...rest] = pick.split(":");
-    const name = rest.join(":");
-    if (!name) return;
-    void run(() => putShare(projectId, kind === "user" ? { user: name } : { group: name }, role, custom), s.pd.saved).then(() => { setPick(""); setCustom(["project:Read"]); });
+  const target = (x: { kind: "user" | "group"; name: string }) => (x.kind === "user" ? { user: x.name } : { group: x.name });
+  const save = async () => {
+    if (!dialog) return;
+    setDialogError(null);
+    try {
+      let to: { user: string } | { group: string };
+      if (dialog.mode === "edit") to = target(dialog.member);
+      else { const [kind, ...rest] = who.split(":"); to = kind === "user" ? { user: rest.join(":") } : { group: rest.join(":") }; }
+      await putShare(projectId, to, "custom", [...new Set([READ, ...pick.actions])]);
+      toast(s.pd.saved);
+      setDialog(null);
+      await load();
+    } catch (e) { fail(e, setDialogError); }
+  };
+  const remove = async (x: ShareRow) => {
+    setError(null);
+    try { await removeShare(projectId, x.id); toast(s.pd.removed); await load(); } catch (e) { fail(e, setError); }
   };
 
   if (!m) return error ? <Alert variant="destructive" role="alert"><AlertDescription>{error}</AlertDescription></Alert> : null;
@@ -82,66 +80,58 @@ export function MembersPanel({ s, projectId }: { s: Strings; projectId: string }
 
   return (
     <div className="grid gap-4" data-testid="members">
-      <p className="text-sm text-muted-foreground">{s.pd.membersText}</p>
+      <div className="flex flex-wrap items-start gap-3">
+        <p className="min-w-0 flex-1 text-sm text-muted-foreground">{s.pd.membersText}</p>
+        {m.canManage && <Button onClick={() => open({ mode: "add" })} data-testid="member-add"><Plus />{s.pd.addButton}</Button>}
+      </div>
       {error && <Alert variant="destructive" role="alert"><AlertDescription data-testid="members-error">{error}</AlertDescription></Alert>}
-
-      {m.canManage ? (
-        <div className="grid gap-3 rounded-md border p-3">
-          <p className="text-sm font-medium">{s.pd.addTitle}</p>
-          <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); add(); }}>
-            <Select value={pick} onValueChange={setPick}>
-              <SelectTrigger className="w-56" data-testid="member-pick"><SelectValue placeholder={s.pd.pick} /></SelectTrigger>
-              <SelectContent>
-                {users.length > 0 && <SelectGroup><SelectLabel>{s.pd.user}</SelectLabel>{users.map((u) => <SelectItem key={u} value={`user:${u}`}>{u}</SelectItem>)}</SelectGroup>}
-                {groups.length > 0 && <SelectGroup><SelectLabel>{s.pd.group}</SelectLabel>{groups.map((g) => <SelectItem key={g} value={`group:${g}`}>{g}</SelectItem>)}</SelectGroup>}
-              </SelectContent>
-            </Select>
-            {roleSelect(s, role, setRole, "member-role")}
-            <Button type="submit" disabled={!pick} data-testid="member-add">{s.pd.add}</Button>
-          </form>
-          {role === "custom" && (
-            <div className="grid gap-2"><p className="text-xs text-muted-foreground">{s.pd.customHelp}</p><PermissionGrid s={s} all={m.actions} mine={m.mine} value={custom} onChange={setCustom} /></div>
-          )}
-        </div>
-      ) : <p className="text-xs text-muted-foreground">{s.pd.readOnlyNote}</p>}
+      {!m.canManage && <p className="text-xs text-muted-foreground">{s.pd.readOnlyNote}</p>}
 
       <ul className="grid gap-2" data-testid="member-list">
         <li className="flex items-center gap-3 rounded-md border bg-muted/40 px-3 py-2 text-sm" data-testid="member-owner">
           <UserRound className="size-4 text-muted-foreground" />
           <span className="flex-1 font-medium">{m.owner}</span>
           <Badge>{s.pd.ownerRow}</Badge>
-          <span className="w-40 text-xs text-muted-foreground">{s.pd.allPerms}</span>
+          <span className="w-44 text-xs text-muted-foreground">{s.pd.allPerms}</span>
         </li>
         {m.shares.length === 0 && <li className="px-1 text-sm text-muted-foreground">{s.pd.none}</li>}
         {m.shares.map((x) => (
-          <li key={x.id} className="grid gap-2 rounded-md border px-3 py-2 text-sm" data-testid={`member-${x.kind}-${x.name}`}>
-            <div className="flex items-center gap-3">
-              {x.kind === "user" ? <UserRound className="size-4 text-muted-foreground" /> : <Users className="size-4 text-muted-foreground" />}
-              <div className="min-w-0 flex-1">
-                <div className="truncate font-medium">{x.name}</div>
-                {x.grantedBy && <div className="text-xs text-muted-foreground">{s.pd.by} {x.grantedBy}</div>}
-              </div>
-              {m.canManage ? roleSelect(s, x.role, (r) => {
-                if (r === "custom") setEditing({ id: x.id, actions: x.actions });
-                else void run(() => putShare(projectId, who(x), r), s.pd.saved);
-              }, "member-row-role") : <Badge variant="outline">{s.pd.roles[x.role]}</Badge>}
-              <span className="w-24 text-xs text-muted-foreground" title={x.actions.map((a) => (s.pd.actions as Record<string, string>)[a] ?? a).join(", ")}>{fill(s.pd.permsCount, x.actions.length)}</span>
-              {m.canManage && x.role === "custom" && <Button size="icon" variant="ghost" title={s.pd.editPerms} onClick={() => setEditing({ id: x.id, actions: x.actions })} data-testid="member-edit"><Pencil /></Button>}
-              {m.canManage && <Button size="icon" variant="ghost" title={s.pd.remove} onClick={() => void run(() => removeShare(projectId, x.id), s.pd.removed)} data-testid="member-remove"><Trash2 /></Button>}
+          <li key={x.id} className="flex items-center gap-3 rounded-md border px-3 py-2 text-sm" data-testid={`member-${x.kind}-${x.name}`}>
+            {x.kind === "user" ? <UserRound className="size-4 text-muted-foreground" /> : <Users className="size-4 text-muted-foreground" />}
+            <div className="min-w-0 flex-1">
+              <div className="truncate font-medium">{x.name}</div>
+              {x.grantedBy && <div className="text-xs text-muted-foreground">{s.pd.by} {x.grantedBy}</div>}
             </div>
-            {editing?.id === x.id && (
-              <div className="grid gap-2 border-t pt-2">
-                <p className="text-xs text-muted-foreground">{s.pd.customHelp}</p>
-                <PermissionGrid s={s} all={m.actions} mine={m.mine} value={editing.actions} onChange={(v) => setEditing({ id: x.id, actions: v })} />
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={() => void run(() => putShare(projectId, who(x), "custom", editing.actions), s.pd.saved).then(() => setEditing(null))} data-testid="member-save-perms">{s.pd.savePerms}</Button>
-                  <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>{s.adm.cancel}</Button>
-                </div>
-              </div>
-            )}
+            <div className="max-w-[55%]"><Chips s={s} actions={x.actions} /></div>
+            {m.canManage && <Button size="icon" variant="ghost" title={s.pd.editPerms} onClick={() => open({ mode: "edit", member: x })} data-testid="member-edit"><Pencil /></Button>}
+            {m.canManage && <Button size="icon" variant="ghost" title={s.pd.remove} onClick={() => void remove(x)} data-testid="member-remove"><Trash2 /></Button>}
           </li>
         ))}
       </ul>
+
+      <Dialog open={dialog !== null} onOpenChange={(o) => !o && setDialog(null)}>
+        <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-xl" data-testid="member-dialog">
+          <DialogHeader>
+            <DialogTitle>{dialog?.mode === "edit" ? fill(s.pd.editTitle, { n: dialog.member.name }) : s.pd.addTitle}</DialogTitle>
+            <DialogDescription>{s.pd.dialogText}</DialogDescription>
+          </DialogHeader>
+          {dialogError && <Alert variant="destructive" role="alert"><AlertDescription data-testid="member-dialog-error">{dialogError}</AlertDescription></Alert>}
+          {dialog?.mode === "add" && (
+            <Select value={who} onValueChange={setWho}>
+              <SelectTrigger data-testid="member-pick"><SelectValue placeholder={s.pd.pick} /></SelectTrigger>
+              <SelectContent>
+                {users.length > 0 && <SelectGroup><SelectLabel>{s.pd.user}</SelectLabel>{users.map((u) => <SelectItem key={u} value={`user:${u}`}>{u}</SelectItem>)}</SelectGroup>}
+                {groups.length > 0 && <SelectGroup><SelectLabel>{s.pd.group}</SelectLabel>{groups.map((g) => <SelectItem key={g} value={`group:${g}`}>{g}</SelectItem>)}</SelectGroup>}
+              </SelectContent>
+            </Select>
+          )}
+          <PermissionPicker s={s} groups={PROJECT_GROUPS} value={pick} onChange={setPick} holdable={m.mine} fixed={[READ]} />
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDialog(null)}>{s.adm.cancel}</Button>
+            <Button disabled={dialog?.mode === "add" && !who} onClick={() => void save()} data-testid="member-save">{s.pd.save}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

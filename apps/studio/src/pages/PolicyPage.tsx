@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { ArrowLeft, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { ACTIONS, documentOf, parseDocument, selectionOf, type Action } from "@av2i/authz";
+import { ACTIONS, PROJECT_ACTIONS, SYSTEM_GROUPS, documentOf, parseDocument, selectionOf, type Action } from "@av2i/authz";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -151,7 +151,14 @@ export function PolicyPage() {
               </Alert>
             )}
             {tab === "picker" && (selection
-              ? <PermissionPicker s={s} value={{ all: selection.all, actions: selection.actions }} onChange={(v) => setText(pretty(documentOf(v.actions, v.all)))} />
+              ? (
+                <>
+                  <PermissionPicker s={s} groups={SYSTEM_GROUPS} allToggle value={{ all: selection.all, actions: selection.actions }} onChange={(v) => setText(pretty(documentOf(v.actions, v.all)))} />
+                  {!selection.all && selection.actions.some((a) => (PROJECT_ACTIONS as readonly string[]).includes(a)) && (
+                    <p className="text-xs text-muted-foreground" data-testid="policy-hidden-project">{fill(s.acc.hiddenProject, { n: selection.actions.filter((a) => (PROJECT_ACTIONS as readonly string[]).includes(a)).length })}</p>
+                  )}
+                </>
+              )
               : <Alert data-testid="policy-json-only"><AlertDescription>{s.perm.jsonOnly}</AlertDescription></Alert>)}
             {tab === "json" && (
               <>

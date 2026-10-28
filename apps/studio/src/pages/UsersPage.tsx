@@ -9,8 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DirectPermissions, EffectivePermissions, usePermissions } from "../components/AccessPanels.tsx";
+import { PermissionSummary, SystemPermissionsDialog } from "../components/SystemPermissionsDialog.tsx";
 import { api } from "../api.ts";
 import { useAuth, useUser } from "../auth.tsx";
 import { describe } from "../components/auth/errors.ts";
@@ -27,6 +26,7 @@ interface UserRow {
   lastLoginAt: string | null;
   policies: string[];
   groups: string[];
+  direct?: { all: boolean; count: number };
 }
 interface PolicyRow { name: string; description: string; builtin: boolean }
 
@@ -49,89 +49,6 @@ function Secret({ s, who, password, onClose }: { s: Strings; who: string; passwo
   );
 }
 
-/** The direct permissions and the table of effective permissions of one user. */
-function UserAccess({ s, id, tab }: { s: Strings; id: string; tab: "direct" | "effective" }) {
-  const { data, error, reload } = usePermissions("user", id, s);
-  if (!data) return error ? <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert> : <p className="text-sm text-muted-foreground">{s.acc.loading}</p>;
-  return tab === "direct" ? <DirectPermissions s={s} kind="user" id={id} data={data} reload={reload} /> : <EffectivePermissions s={s} data={data} />;
-}
-
-function PoliciesEditor({ s, user, onClose, onSaved }: { s: Strings; user: UserRow | null; onClose: () => void; onSaved: () => void }) {
-  const { can } = useAuth();
-  const [all, setAll] = useState<PolicyRow[]>([]);
-  const [chosen, setChosen] = useState<Set<string>>(new Set());
-  const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"policies" | "direct" | "effective">("policies");
-  const editable = can("policy:Manage");
-
-  useEffect(() => {
-    if (!user) return;
-    setChosen(new Set(user.policies));
-    setTab("policies");
-    setError(null);
-    if (editable) api<{ policies: PolicyRow[] }>("GET", "/api/policies").then((r) => setAll(r.policies)).catch((e) => setError(describe(e, s)));
-    else setAll(user.policies.map((name) => ({ name, description: "", builtin: true })));
-  }, [user, editable, s]);
-
-  const save = async () => {
-    if (!user) return;
-    try {
-      await api("PUT", `/api/users/${user.id}/policies`, { policies: [...chosen] });
-      toast(s.acct.policiesSaved);
-      onSaved();
-      onClose();
-    } catch (e) {
-      setError(describe(e, s));
-    }
-  };
-
-  return (
-    <Dialog open={user !== null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-3xl" data-testid="policies-dialog">
-        <DialogHeader>
-          <DialogTitle>{s.acct.editPolicies}: {user?.username}</DialogTitle>
-          <DialogDescription>{editable ? s.acct.noPolicies : s.acct.readOnlyPolicies}</DialogDescription>
-        </DialogHeader>
-        {editable && user && (
-          <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
-            <TabsList>
-              <TabsTrigger value="policies" data-testid="user-tab-policies">{s.acc.tabPolicies}</TabsTrigger>
-              <TabsTrigger value="direct" data-testid="user-tab-direct">{s.acc.tabDirect}</TabsTrigger>
-              <TabsTrigger value="effective" data-testid="user-tab-effective">{s.acc.tabEffective}</TabsTrigger>
-            </TabsList>
-          </Tabs>
-        )}
-        {editable && user && tab !== "policies" && <UserAccess s={s} id={user.id} tab={tab} />}
-        <ul className={`grid gap-2 ${editable && tab !== "policies" ? "hidden" : ""}`}>
-          {all.map((p) => (
-            <li key={p.name}>
-              <label className="flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="mt-1"
-                  checked={chosen.has(p.name)}
-                  disabled={!editable}
-                  data-testid={`policy-${p.name}`}
-                  onChange={(e) => setChosen((c) => { const n = new Set(c); if (e.target.checked) n.add(p.name); else n.delete(p.name); return n; })}
-                />
-                <span>
-                  <span className="font-medium">{p.name}</span>{p.builtin && <Badge variant="outline" className="ml-1.5">{s.acct.builtin}</Badge>}
-                  {p.description && <span className="block text-xs text-muted-foreground">{p.description}</span>}
-                </span>
-              </label>
-            </li>
-          ))}
-        </ul>
-        {error && <Alert variant="destructive" role="alert"><AlertDescription>{error}</AlertDescription></Alert>}
-        <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>{s.acct.cancel}</Button>
-          {editable && tab === "policies" && <Button onClick={() => void save()} data-testid="policies-save">{s.acct.save}</Button>}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 export function UsersPage() {
   const s = useStrings();
   const { can } = useAuth();
@@ -139,7 +56,8 @@ export function UsersPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [secret, setSecret] = useState<{ who: string; password: string } | null>(null);
-  const [editing, setEditing] = useState<UserRow | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const editing = users.find((u) => u.id === editingId) ?? null;
   const [form, setForm] = useState({ username: "", displayName: "", password: "" });
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -208,7 +126,7 @@ export function UsersPage() {
         <Card className="py-0">
           <Table>
             <TableHeader>
-              <TableRow><TableHead>{s.acct.username}</TableHead><TableHead>{s.acct.status}</TableHead><TableHead>{s.adm.groupsOf}</TableHead><TableHead>{s.acct.policies}</TableHead><TableHead>{s.acct.lastLogin}</TableHead><TableHead /></TableRow>
+              <TableRow><TableHead>{s.acct.username}</TableHead><TableHead>{s.acct.status}</TableHead><TableHead>{s.adm.groupsOf}</TableHead><TableHead>{s.acc.summary}</TableHead><TableHead>{s.acct.lastLogin}</TableHead><TableHead /></TableRow>
             </TableHeader>
             <TableBody>
               {shown.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">{s.nav.noMatch}</TableCell></TableRow>}
@@ -220,10 +138,10 @@ export function UsersPage() {
                     {u.mustChangePassword && <Badge variant="outline">{s.acct.mustChange}</Badge>}
                   </TableCell>
                   <TableCell className="space-x-1">{u.groups.length ? u.groups.map((g) => <Badge key={g} variant="secondary">{g}</Badge>) : <span className="text-xs text-muted-foreground">—</span>}</TableCell>
-                  <TableCell className="space-x-1">{u.policies.length ? u.policies.map((p) => <Badge key={p} variant="outline">{p}</Badge>) : <span className="text-xs text-muted-foreground">—</span>}</TableCell>
+                  <TableCell className="space-x-1"><PermissionSummary s={s} direct={u.direct} />{u.policies.map((p) => <Badge key={p} variant="outline">{p}</Badge>)}</TableCell>
                   <TableCell className="whitespace-nowrap text-xs">{when(u.lastLoginAt, s.acct.never)}</TableCell>
                   <TableCell className="whitespace-nowrap text-right">
-                    {can("user:Update") && <Button size="sm" variant="ghost" onClick={() => setEditing(u)} data-testid="edit-policies"><ShieldCheck />{s.acct.editPolicies}</Button>}
+                    {can("policy:Manage") && <Button size="sm" variant="ghost" onClick={() => setEditingId(u.id)} data-testid="edit-policies"><ShieldCheck />{s.acc.systemPerms}</Button>}
                     {can("user:ResetPassword") && (
                       <Button size="sm" variant="ghost" data-testid="reset-password" onClick={() => void run(async () => {
                         const r = await api<{ temporaryPassword?: string }>("POST", `/api/users/${u.id}/reset-password`, {});
@@ -242,7 +160,7 @@ export function UsersPage() {
           </Table>
         </Card>
       </div>
-      <PoliciesEditor s={s} user={editing} onClose={() => setEditing(null)} onSaved={() => void load()} />
+      {editing && <SystemPermissionsDialog s={s} kind="user" id={editing.id} name={editing.username} policies={editing.policies} open onClose={() => setEditingId(null)} onChanged={() => void load()} />}
     </Page>
   );
 }

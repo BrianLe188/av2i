@@ -1,6 +1,6 @@
 import { api } from "./api.ts";
 
-export interface GroupRow { id: string; name: string; description: string; members: number; policies: string[]; createdAt: string }
+export interface GroupRow { id: string; name: string; description: string; members: number; policies: string[]; createdAt: string; direct?: { all: boolean; count: number } }
 export interface GroupDetail {
   group: { id: string; name: string; description: string; createdAt: string };
   members: { id: string; username: string; displayName: string; disabled: boolean }[];

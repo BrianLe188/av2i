@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { createGroup, listGroups, type GroupRow } from "../admin.ts";
+import { PermissionSummary } from "../components/SystemPermissionsDialog.tsx";
 import { describe } from "../components/auth/errors.ts";
 import { useStrings } from "../prefs.ts";
 import { Page } from "./Page.tsx";
@@ -46,14 +47,14 @@ export function GroupsPage() {
         {error && <Alert variant="destructive" role="alert"><AlertDescription>{error}</AlertDescription></Alert>}
         <Card className="py-0">
           <Table>
-            <TableHeader><TableRow><TableHead>{s.adm.groupName}</TableHead><TableHead>{s.adm.members}</TableHead><TableHead>{s.adm.policies}</TableHead><TableHead>{s.adm.description}</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead>{s.adm.groupName}</TableHead><TableHead>{s.adm.members}</TableHead><TableHead>{s.acc.summary}</TableHead><TableHead>{s.adm.description}</TableHead></TableRow></TableHeader>
             <TableBody>
               {groups !== null && groups.length === 0 && <TableRow><TableCell colSpan={4} className="py-8 text-center text-muted-foreground" data-testid="no-groups">{s.adm.noGroups}</TableCell></TableRow>}
               {(groups ?? []).map((g) => (
                 <TableRow key={g.id} data-testid={`group-${g.name}`}>
                   <TableCell className="font-medium"><Link to={`/groups/${g.id}`} className="inline-flex items-center gap-2 hover:underline"><UsersRound className="size-4 text-muted-foreground" />{g.name}</Link></TableCell>
                   <TableCell>{g.members}</TableCell>
-                  <TableCell className="space-x-1">{g.policies.length ? g.policies.map((p) => <Badge key={p} variant="outline">{p}</Badge>) : <span className="text-xs text-muted-foreground">—</span>}</TableCell>
+                  <TableCell className="space-x-1"><PermissionSummary s={s} direct={g.direct} />{g.policies.map((p) => <Badge key={p} variant="outline">{p}</Badge>)}</TableCell>
                   <TableCell className="max-w-72 truncate text-sm text-muted-foreground">{g.description}</TableCell>
                 </TableRow>
               ))}

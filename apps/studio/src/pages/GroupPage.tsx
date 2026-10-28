@@ -9,9 +9,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { api, ApiError } from "../api.ts";
-import { deleteGroup, getGroup, listPolicies, setGroupPolicies, setMembers, updateGroup, type GroupDetail, type PolicyRow } from "../admin.ts";
+import { deleteGroup, getGroup, getPermissions, setMembers, updateGroup, type GroupDetail } from "../admin.ts";
 import { useAuth } from "../auth.tsx";
-import { DirectPermissions, EffectivePermissions, usePermissions } from "../components/AccessPanels.tsx";
+import { PermissionSummary, SystemPermissionsDialog } from "../components/SystemPermissionsDialog.tsx";
 import { describe } from "../components/auth/errors.ts";
 import { useStrings } from "../prefs.ts";
 import { Page } from "./Page.tsx";
@@ -25,31 +25,33 @@ export function GroupPage() {
   const navigate = useNavigate();
   const [detail, setDetail] = useState<GroupDetail | null | "missing">(null);
   const [users, setUsers] = useState<UserLite[]>([]);
-  const [allPolicies, setAllPolicies] = useState<PolicyRow[]>([]);
-  const [chosen, setChosen] = useState<Set<string>>(new Set());
   const [description, setDescription] = useState("");
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const access = usePermissions("group", id, s);
+  const [permsOpen, setPermsOpen] = useState(false);
+  const [summary, setSummary] = useState<{ all: boolean; count: number } | undefined>();
+  const loadSummary = useCallback(async () => {
+    if (!can("policy:Manage")) return;
+    try { const p = await getPermissions("group", id); setSummary({ all: p.direct.all, count: p.direct.actions.length }); } catch { setSummary(undefined); }
+  }, [id, can]);
+  useEffect(() => { void loadSummary(); }, [loadSummary]);
 
   const load = useCallback(async () => {
     try {
       const d = await getGroup(id);
       setDetail(d);
-      setChosen(new Set(d.policies));
       setDescription(d.group.description);
     } catch (e) { if (e instanceof ApiError && e.status === 404) setDetail("missing"); else setError(describe(e, s)); }
   }, [id, s]);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
     if (can("user:List")) api<{ users: UserLite[] }>("GET", "/api/users").then((r) => setUsers(r.users)).catch(() => setUsers([]));
-    if (can("policy:Manage")) listPolicies().then(setAllPolicies).catch(() => setAllPolicies([]));
   }, [can]);
 
   const run = async (f: () => Promise<unknown>, done?: string) => {
     setError(null);
-    try { await f(); if (done) toast(done); await load(); await access.reload(); } catch (e) { setError(describe(e, s)); }
+    try { await f(); if (done) toast(done); await load(); } catch (e) { setError(describe(e, s)); }
   };
 
   const memberIds = useMemo(() => (detail && detail !== "missing" ? detail.members.map((m) => m.id) : []), [detail]);
@@ -62,7 +64,6 @@ export function GroupPage() {
   if (detail === null) return <Page title={s.acct.loading}>{error ? <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert> : null}</Page>;
 
   const { group, members } = detail;
-  const policiesChanged = chosen.size !== detail.policies.length || detail.policies.some((p) => !chosen.has(p));
   const editablePolicies = can("policy:Manage");
 
   return (
@@ -114,45 +115,20 @@ export function GroupPage() {
           </CardContent>
         </Card>
 
-        <Card data-testid="group-policies-card">
+        <Card data-testid="group-permissions-card">
           <CardHeader>
-            <CardTitle className="text-base">{s.adm.policies}</CardTitle>
-            <CardDescription>{!editablePolicies ? s.acct.readOnlyPolicies : detail.policies.length === 0 ? s.adm.noGroupPolicies : null}</CardDescription>
+            <CardTitle className="text-base">{s.acc.systemPerms}</CardTitle>
+            <CardDescription>{s.acc.systemGroup}</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-3">
-            <ul className="grid gap-2">
-              {(editablePolicies ? allPolicies : detail.policies.map((name) => ({ name, description: "", builtin: true }) as PolicyRow)).map((p) => (
-                <li key={p.name}>
-                  <label className="flex items-start gap-2 text-sm">
-                    <input
-                      type="checkbox" className="mt-1" checked={chosen.has(p.name)} disabled={!editablePolicies} data-testid={`group-policy-${p.name}`}
-                      onChange={(e) => setChosen((c) => { const n = new Set(c); if (e.target.checked) n.add(p.name); else n.delete(p.name); return n; })}
-                    />
-                    <span>
-                      <span className="font-medium">{p.name}</span>{p.builtin && <Badge variant="outline" className="ml-1.5">{s.adm.builtin}</Badge>}
-                      {p.description && <span className="block text-xs text-muted-foreground">{p.description}</span>}
-                    </span>
-                  </label>
-                </li>
-              ))}
-            </ul>
-            {editablePolicies && <Button className="w-fit" disabled={!policiesChanged} onClick={() => void run(() => setGroupPolicies(id, [...chosen]), s.acct.policiesSaved)} data-testid="group-policies-save">{s.adm.save}</Button>}
+          <CardContent className="flex flex-wrap items-center gap-3">
+            <PermissionSummary s={s} direct={summary} />
+            {detail.policies.map((p) => <Badge key={p} variant="outline">{p}</Badge>)}
+            {editablePolicies && <Button variant="outline" onClick={() => setPermsOpen(true)} data-testid="group-permissions-open">{s.acc.systemPerms}</Button>}
           </CardContent>
         </Card>
-
-        {editablePolicies && (
-          <>
-            <Card data-testid="group-direct-card">
-              <CardHeader><CardTitle className="text-base">{s.acc.directTitle}</CardTitle></CardHeader>
-              <CardContent>{access.data ? <DirectPermissions s={s} kind="group" id={id} data={access.data} reload={access.reload} /> : <p className="text-sm text-muted-foreground">{s.acc.loading}</p>}</CardContent>
-            </Card>
-            <Card data-testid="group-effective-card">
-              <CardHeader><CardTitle className="text-base">{s.acc.effectiveTitle}</CardTitle></CardHeader>
-              <CardContent>{access.data ? <EffectivePermissions s={s} data={access.data} /> : <p className="text-sm text-muted-foreground">{s.acc.loading}</p>}</CardContent>
-            </Card>
-          </>
-        )}
       </div>
+
+      {editablePolicies && <SystemPermissionsDialog s={s} kind="group" id={id} name={group.name} policies={detail.policies} open={permsOpen} onClose={() => setPermsOpen(false)} onChanged={() => { void load(); void loadSummary(); }} />}
 
       <Dialog open={deleting} onOpenChange={(o) => !o && setDeleting(false)}>
         <DialogContent className="sm:max-w-sm" data-testid="delete-group-dialog">

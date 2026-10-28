@@ -142,6 +142,14 @@ describe.skipIf(!available)("project shares", () => {
       expect((await put(alice.cookie, { user: "gina", role: "custom", actions: ["run:ApplyDestructive", "project:Delete"] }, proj)).status).toBe(200);
     });
 
+    it("takes the permissions of a member alone, with no role", async () => {
+      expect((await put(alice.cookie, { user: "gina", actions: ["run:Plan", "variable:Write"] }, proj)).status).toBe(200);
+      const g = (await list(alice.cookie, proj)).body.shares.find((x: any) => x.name === "gina");
+      expect(g.role).toBe("custom");
+      expect(g.actions.sort()).toEqual(["project:Read", "run:Plan", "variable:Write"]);
+      expect((await put(alice.cookie, { user: "gina" }, proj)).status).toBe(400);
+    });
+
     it("lets a member read who else is in the project, but not change it", async () => {
       const seen = await list(eve.cookie, proj);
       expect(seen.status).toBe(200);
