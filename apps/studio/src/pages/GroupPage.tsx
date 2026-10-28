@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { api, ApiError } from "../api.ts";
 import { deleteGroup, getGroup, listPolicies, setGroupPolicies, setMembers, updateGroup, type GroupDetail, type PolicyRow } from "../admin.ts";
 import { useAuth } from "../auth.tsx";
+import { DirectPermissions, EffectivePermissions, usePermissions } from "../components/AccessPanels.tsx";
 import { describe } from "../components/auth/errors.ts";
 import { useStrings } from "../prefs.ts";
 import { Page } from "./Page.tsx";
@@ -30,6 +31,7 @@ export function GroupPage() {
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const access = usePermissions("group", id, s);
 
   const load = useCallback(async () => {
     try {
@@ -47,7 +49,7 @@ export function GroupPage() {
 
   const run = async (f: () => Promise<unknown>, done?: string) => {
     setError(null);
-    try { await f(); if (done) toast(done); await load(); } catch (e) { setError(describe(e, s)); }
+    try { await f(); if (done) toast(done); await load(); await access.reload(); } catch (e) { setError(describe(e, s)); }
   };
 
   const memberIds = useMemo(() => (detail && detail !== "missing" ? detail.members.map((m) => m.id) : []), [detail]);
@@ -137,6 +139,19 @@ export function GroupPage() {
             {editablePolicies && <Button className="w-fit" disabled={!policiesChanged} onClick={() => void run(() => setGroupPolicies(id, [...chosen]), s.acct.policiesSaved)} data-testid="group-policies-save">{s.adm.save}</Button>}
           </CardContent>
         </Card>
+
+        {editablePolicies && (
+          <>
+            <Card data-testid="group-direct-card">
+              <CardHeader><CardTitle className="text-base">{s.acc.directTitle}</CardTitle></CardHeader>
+              <CardContent>{access.data ? <DirectPermissions s={s} kind="group" id={id} data={access.data} reload={access.reload} /> : <p className="text-sm text-muted-foreground">{s.acc.loading}</p>}</CardContent>
+            </Card>
+            <Card data-testid="group-effective-card">
+              <CardHeader><CardTitle className="text-base">{s.acc.effectiveTitle}</CardTitle></CardHeader>
+              <CardContent>{access.data ? <EffectivePermissions s={s} data={access.data} /> : <p className="text-sm text-muted-foreground">{s.acc.loading}</p>}</CardContent>
+            </Card>
+          </>
+        )}
       </div>
 
       <Dialog open={deleting} onOpenChange={(o) => !o && setDeleting(false)}>

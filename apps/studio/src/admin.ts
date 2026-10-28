@@ -31,3 +31,8 @@ export const updatePolicy = (name: string, body: { description?: string; documen
 export const deletePolicy = (name: string, force: boolean) => api("DELETE", `/api/policies/${encodeURIComponent(name)}${force ? "?force=true" : ""}`);
 export const simulate = (userId: string, action: string, resource: string) => api<Simulation>("POST", "/api/policies/simulate", { userId, action, resource });
 export const restorePolicyDefault = (name: string) => api("POST", `/api/policies/${encodeURIComponent(name)}/restore-default`);
+
+export interface EffectiveRow { action: string; allowed: boolean; denied: boolean; sources: { kind: "policy" | "direct"; name: string; group?: string; scoped: boolean }[] }
+export interface Permissions { direct: { all: boolean; actions: string[] }; effective: EffectiveRow[] }
+export const getPermissions = (kind: "user" | "group", id: string) => api<Permissions>("GET", `/api/${kind}s/${id}/permissions`);
+export const setDirectPermissions = (kind: "user" | "group", id: string, choice: { all: boolean; actions: string[] }) => api("PUT", `/api/${kind}s/${id}/direct-permissions`, choice);

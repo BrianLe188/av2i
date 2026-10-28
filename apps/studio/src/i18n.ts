@@ -79,6 +79,13 @@ const dict = {
       },
       errors: { administrator_locked_out: "Administrator phải giữ quyền quản lý người dùng và chính sách ({actions}); nếu không sẽ không ai sửa lại được." },
     },
+    acc: {
+      tabPolicies: "Chính sách", tabDirect: "Quyền riêng", tabEffective: "Quyền hiệu lực",
+      directTitle: "Quyền cấp thẳng", directUser: "Quyền cấp thẳng cho người này, không qua chính sách nào. Cộng với quyền từ chính sách và nhóm.", directGroup: "Quyền cấp thẳng cho nhóm này; mọi thành viên đều có. Cộng với quyền từ chính sách của nhóm.", saveDirect: "Lưu quyền", directSaved: "Đã lưu quyền.", directNone: "Chưa cấp quyền riêng nào.",
+      effectiveTitle: "Quyền hiệu lực", effectiveText: "Mỗi quyền của hệ thống: có được phép không, và do đâu. Quyền theo từng dự án (thành viên dự án) không nằm ở đây.",
+      allowed: "Được phép", notAllowed: "Không", denied: "Bị chặn (Deny)", scoped: "chỉ một số tài nguyên", viaPolicy: "chính sách {n}", viaPolicyGroup: "chính sách {n} (qua nhóm {g})", viaDirect: "quyền riêng", viaDirectGroup: "quyền riêng của nhóm {g}", noSource: "—",
+      loading: "Đang tải…",
+    },
     run: {
       kindPlan: "Plan", kindApply: "Apply", appliedSummary: "{added} thêm, {changed} sửa, {destroyed} xoá",       applyTitle: "Áp dụng lên AWS", applyBtn: "Apply", replanBtn: "Chạy plan lại", viewApply: "Xem lần apply", applyingNow: "Đang áp dụng plan này.", appliedDone: "Plan này đã được áp dụng.",
       expires: "Plan có hiệu lực đến {t}.", destructiveBox: "Plan này sẽ xoá hoặc thay thế:",
@@ -262,6 +269,13 @@ const dict = {
         "group:Manage": "Manage groups", "policy:Manage": "Manage policies", "audit:Read": "See the audit log",
       },
       errors: { administrator_locked_out: "Administrator must keep what manages users and policies ({actions}); otherwise nobody could put it right." },
+    },
+    acc: {
+      tabPolicies: "Policies", tabDirect: "Direct permissions", tabEffective: "Effective permissions",
+      directTitle: "Permissions given directly", directUser: "Permissions given straight to this person, through no policy. Added to what policies and groups give.", directGroup: "Permissions given straight to this group; every member has them. Added to what the group's policies give.", saveDirect: "Save permissions", directSaved: "Permissions saved.", directNone: "No direct permissions yet.",
+      effectiveTitle: "Effective permissions", effectiveText: "Each permission of the system: whether it is allowed, and why. A project's own permissions (its members) are not here.",
+      allowed: "Allowed", notAllowed: "No", denied: "Blocked (Deny)", scoped: "only some resources", viaPolicy: "policy {n}", viaPolicyGroup: "policy {n} (through group {g})", viaDirect: "direct permissions", viaDirectGroup: "direct permissions of group {g}", noSource: "—",
+      loading: "Loading…",
     },
     run: {
       kindPlan: "Plan", kindApply: "Apply", appliedSummary: "{added} added, {changed} changed, {destroyed} destroyed",       applyTitle: "Apply to AWS", applyBtn: "Apply", replanBtn: "Run plan again", viewApply: "See the apply", applyingNow: "This plan is being applied.", appliedDone: "This plan was applied.",

@@ -34,6 +34,7 @@ Numbered `DD-nnn` to keep them apart from the specification's `D-nnn` ([../spec/
 | DD-027 | decided | Requests: asking for an apply to be approved, with a talk like a pull request |
 | DD-028 | decided | A project page, and members with project permissions granted in the project |
 | DD-029 | decided | Built-in policies can have their permissions chosen, with a picker |
+| DD-030 | decided | Permissions given directly to a user or a group, and the table of effective permissions |
 
 ## DD-001 Language and runtime
 
@@ -459,3 +460,14 @@ write the choice). The four built-in policies can be changed, but not renamed or
 **Administrator** can be narrowed but must keep `policy:Manage`, `user:List`, `user:Read` and `user:Update` (`administrator_locked_out`), and "all permissions" is saved
 as `*` so that future permissions are included. The permissions here apply to every project; a project's own are granted in the project (DD-028). Not done: direct
 permissions on a user or a group and the table of effective permissions (step C).
+
+## DD-030 Permissions given directly to a user or a group, and the table of effective permissions
+
+Status: decided (owner, 28 October 2026; step C after DD-028 and DD-029).
+
+A user or a group can be given permissions **straight**, with the same picker as a policy, without naming a policy: they are kept in `direct_permissions` (one document per user or
+group, removed with its owner) and evaluated like an attached policy, for the user and for every member of the group. Giving them is the authority of editing policies
+(`policy:Manage`) and needs a person's session, not an API token; it is audited with the permissions given. The user dialog and the group page get a table of
+**effective permissions**: for each of the 24 permissions, whether it is allowed everywhere, which policy, group or direct grant says so, whether an explicit Deny stops it,
+and whether a source allows it only on some resources. A project's own permissions (its members, DD-028) are not in that table. Not done: a user page of its own (the
+dialog carries it), and the effective table for a single project.

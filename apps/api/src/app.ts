@@ -13,6 +13,7 @@ import { forbidden, HttpError, unauthorized } from "./errors.ts";
 import { authRoutes } from "./routes/auth.ts";
 import { connectionRoutes } from "./routes/connections.ts";
 import { groupRoutes } from "./routes/groups.ts";
+import { permissionRoutes } from "./routes/permissions.ts";
 import { policyRoutes } from "./routes/policies.ts";
 import { projectRoutes } from "./routes/projects.ts";
 import { requestRoutes } from "./routes/requests.ts";
@@ -74,6 +75,7 @@ export function buildApp(deps: { db: Db; config: Config; aws?: AwsGateway; logge
   userRoutes(app, ctx);
   groupRoutes(app, ctx);
   policyRoutes(app, ctx);
+  permissionRoutes(app, ctx);
   projectRoutes(app, ctx);
   tokenRoutes(app, ctx);
   stateRoutes(app, ctx);

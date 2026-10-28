@@ -252,6 +252,15 @@ export interface StateRescuesTable {
   resolution: ColumnType<"restored" | "dismissed" | null, "restored" | "dismissed" | null | undefined, "restored" | "dismissed" | null>;
 }
 
+export interface DirectPermissionsTable {
+  id: Generated<string>;
+  user_id: string | null;
+  group_id: string | null;
+  document: ColumnType<unknown, string, string>;
+  updated_by: string | null;
+  updated_at: Ts;
+}
+
 export interface Database {
   users: UsersTable;
   sessions: SessionsTable;
@@ -274,4 +283,5 @@ export interface Database {
   requests: RequestsTable;
   request_events: RequestEventsTable;
   state_rescues: StateRescuesTable;
+  direct_permissions: DirectPermissionsTable;
 }

@@ -9,6 +9,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DirectPermissions, EffectivePermissions, usePermissions } from "../components/AccessPanels.tsx";
 import { api } from "../api.ts";
 import { useAuth, useUser } from "../auth.tsx";
 import { describe } from "../components/auth/errors.ts";
@@ -47,16 +49,25 @@ function Secret({ s, who, password, onClose }: { s: Strings; who: string; passwo
   );
 }
 
+/** The direct permissions and the table of effective permissions of one user. */
+function UserAccess({ s, id, tab }: { s: Strings; id: string; tab: "direct" | "effective" }) {
+  const { data, error, reload } = usePermissions("user", id, s);
+  if (!data) return error ? <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert> : <p className="text-sm text-muted-foreground">{s.acc.loading}</p>;
+  return tab === "direct" ? <DirectPermissions s={s} kind="user" id={id} data={data} reload={reload} /> : <EffectivePermissions s={s} data={data} />;
+}
+
 function PoliciesEditor({ s, user, onClose, onSaved }: { s: Strings; user: UserRow | null; onClose: () => void; onSaved: () => void }) {
   const { can } = useAuth();
   const [all, setAll] = useState<PolicyRow[]>([]);
   const [chosen, setChosen] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<"policies" | "direct" | "effective">("policies");
   const editable = can("policy:Manage");
 
   useEffect(() => {
     if (!user) return;
     setChosen(new Set(user.policies));
+    setTab("policies");
     setError(null);
     if (editable) api<{ policies: PolicyRow[] }>("GET", "/api/policies").then((r) => setAll(r.policies)).catch((e) => setError(describe(e, s)));
     else setAll(user.policies.map((name) => ({ name, description: "", builtin: true })));
@@ -76,12 +87,22 @@ function PoliciesEditor({ s, user, onClose, onSaved }: { s: Strings; user: UserR
 
   return (
     <Dialog open={user !== null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-md" data-testid="policies-dialog">
+      <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-3xl" data-testid="policies-dialog">
         <DialogHeader>
           <DialogTitle>{s.acct.editPolicies}: {user?.username}</DialogTitle>
           <DialogDescription>{editable ? s.acct.noPolicies : s.acct.readOnlyPolicies}</DialogDescription>
         </DialogHeader>
-        <ul className="grid gap-2">
+        {editable && user && (
+          <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
+            <TabsList>
+              <TabsTrigger value="policies" data-testid="user-tab-policies">{s.acc.tabPolicies}</TabsTrigger>
+              <TabsTrigger value="direct" data-testid="user-tab-direct">{s.acc.tabDirect}</TabsTrigger>
+              <TabsTrigger value="effective" data-testid="user-tab-effective">{s.acc.tabEffective}</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        )}
+        {editable && user && tab !== "policies" && <UserAccess s={s} id={user.id} tab={tab} />}
+        <ul className={`grid gap-2 ${editable && tab !== "policies" ? "hidden" : ""}`}>
           {all.map((p) => (
             <li key={p.name}>
               <label className="flex items-start gap-2 text-sm">
@@ -104,7 +125,7 @@ function PoliciesEditor({ s, user, onClose, onSaved }: { s: Strings; user: UserR
         {error && <Alert variant="destructive" role="alert"><AlertDescription>{error}</AlertDescription></Alert>}
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>{s.acct.cancel}</Button>
-          {editable && <Button onClick={() => void save()} data-testid="policies-save">{s.acct.save}</Button>}
+          {editable && tab === "policies" && <Button onClick={() => void save()} data-testid="policies-save">{s.acct.save}</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>

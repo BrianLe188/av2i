@@ -15,8 +15,13 @@ export async function statementsFor(db: Db, userId: string): Promise<Statement[]
       eb("pa.group_id", "in", eb.selectFrom("group_members").select("group_id").where("user_id", "=", userId)),
     ]))
     .execute();
+  // what was given to the person or to a group of theirs without a policy (DD-030)
+  const direct = await db.selectFrom("direct_permissions").select("document").where((eb) => eb.or([
+    eb("user_id", "=", userId),
+    eb("group_id", "in", eb.selectFrom("group_members").select("group_id").where("user_id", "=", userId)),
+  ])).execute();
   const out: Statement[] = [];
-  for (const r of rows) {
+  for (const r of [...rows, ...direct]) {
     const parsed = parseDocument(r.document);
     if (parsed.ok) out.push(...parsed.statements);
   }
