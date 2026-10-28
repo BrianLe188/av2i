@@ -22,7 +22,7 @@ const LIVE = new Set(["queued", "running"]);
 const fill = (t: string, v: { add: number; change: number; destroy: number; replace: number }) => t.replace(/\{(\w+)\}/g, (_, k: string) => String(v[k as keyof typeof v] ?? 0));
 
 /** Runs OpenTofu plan for the project and follows the run: status, what the plan would do, and the log as it grows. */
-export function RunDialog({ s, projectId, projectName, open, onClose, beforeRun, canSetVariables, canShare }: { s: Strings; projectId: string; projectName: string; open: boolean; onClose: () => void; beforeRun: () => Promise<unknown>; canSetVariables: boolean; canShare: boolean }) {
+export function RunDialog({ s, projectId, projectName, open, onClose, beforeRun, canSetVariables, canShare, canPlan }: { s: Strings; projectId: string; projectName: string; open: boolean; onClose: () => void; beforeRun: () => Promise<unknown>; canSetVariables: boolean; canShare: boolean; canPlan: boolean }) {
   const me = useUser().username;
   const [runs, setRuns] = useState<RunRow[]>([]);
   const [current, setCurrent] = useState<string | null>(null);
@@ -49,7 +49,7 @@ export function RunDialog({ s, projectId, projectName, open, onClose, beforeRun,
       setCurrent((c) => c ?? l[0]?.id ?? null);
     } catch (e) { fail(e); }
   }, [projectId, fail]);
-  useEffect(() => { if (open) { setError(null); setCurrent(null); setPre(null); void refresh(); void preflight(projectId).then(setPre).catch(fail); void listConnections().then(setConns).catch(() => setConns([])); void loadVars(); } }, [open, refresh, projectId, fail, loadVars]);
+  useEffect(() => { if (open) { setError(null); setCurrent(null); setPre(null); void refresh(); void preflight(projectId).then(setPre).catch(fail); if (canPlan) { void listConnections().then(setConns).catch(() => setConns([])); void loadVars(); } } }, [open, refresh, projectId, fail, loadVars, canPlan]);
 
   // follow the chosen run: new log lines and its status every second while it is waiting or running
   useEffect(() => {
@@ -110,20 +110,20 @@ export function RunDialog({ s, projectId, projectName, open, onClose, beforeRun,
           <DialogDescription>{s.run.text}</DialogDescription>
         </DialogHeader>
         {error && <Alert variant="destructive"><AlertDescription data-testid="run-error">{error}</AlertDescription></Alert>}
-        <ConnectionRow s={s} pre={pre} conns={conns} onChange={async (id) => {
+        {canPlan && <ConnectionRow s={s} pre={pre} conns={conns} onChange={async (id) => {
           try { await setProjectConnection(projectId, id); toast(s.conn.chosen); setPre(null); setPre(await preflight(projectId)); } catch (e) { setError(connError(e, s)); }
-        }} />
+        }} />}
         {pre?.rescuePending && <RescueBanner s={s} projectId={projectId} projectName={projectName} fail={fail} onChanged={async () => { setPre(await preflight(projectId)); await reloadDetail(); }} />}
-        <Checks s={s} pre={pre} />
+        {canPlan && <Checks s={s} pre={pre} />}
         {canShare && pre && (
           <label className="flex items-start gap-2 text-xs" data-testid="run-require-approval">
             <Checkbox checked={pre.requireApproval} onCheckedChange={(v) => void setRequireApproval(projectId, v === true).then(() => preflight(projectId)).then(setPre).then(reloadDetail).catch(fail)} />
             <span><span className="font-medium">{s.run.twoPeople}</span><span className="block text-muted-foreground">{s.run.twoPeopleHelp}</span></span>
           </label>
         )}
-        {vars && vars.length > 0 && <Variables s={s} projectId={projectId} vars={vars} can={canSetVariables} onChanged={loadVars} fail={fail} />}
+        {canPlan && vars && vars.length > 0 && <Variables s={s} projectId={projectId} vars={vars} can={canSetVariables} onChanged={loadVars} fail={fail} />}
         <div className="flex items-center gap-2">
-          <Button size="sm" onClick={() => void start()} disabled={busy || !ready} title={ready ? undefined : s.run.ready} data-testid="run-start">{busy ? <Loader2 className="animate-spin" /> : <Play />}{busy ? s.run.starting : s.run.start}</Button>
+          {canPlan && <Button size="sm" onClick={() => void start()} disabled={busy || !ready} title={ready ? undefined : s.run.ready} data-testid="run-start">{busy ? <Loader2 className="animate-spin" /> : <Play />}{busy ? s.run.starting : s.run.start}</Button>}
           {run && <Badge variant={tone(run.status)} data-testid="run-status">{s.run.status[run.status]}</Badge>}
           {run?.status === "queued" && <Button size="sm" variant="ghost" onClick={() => void cancel(run.id)}>{s.run.cancel}</Button>}
         </div>

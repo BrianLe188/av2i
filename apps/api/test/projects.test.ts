@@ -129,11 +129,11 @@ describe.skipIf(!available)("projects", () => {
     it("answers 403 when the person may read but not change, and reports what they can do", async () => {
       expect((await save(viewer.cookie, id, blankDesign("Private"), 1)).status).toBe(403);
       const v = await t.call("GET", `/api/projects/${id}`, { cookie: viewer.cookie });
-      expect(v.body.can).toEqual({ write: false, delete: false, share: false, plan: false, variables: false });
+      expect(v.body.can).toEqual({ write: false, delete: false, share: false, plan: false, variables: false, approve: false, apply: false });
       const o = await t.call("GET", `/api/projects/${id}`, { cookie: alice.cookie });
-      expect(o.body.can).toEqual({ write: true, delete: true, share: true, plan: true, variables: true });
+      expect(o.body.can).toEqual({ write: true, delete: true, share: true, plan: true, variables: true, approve: true, apply: true });
       const e = await t.call("GET", `/api/projects/${id}`, { cookie: bob.cookie });
-      expect(e.body.can).toEqual({ write: true, delete: false, share: false, plan: false, variables: false });
+      expect(e.body.can).toEqual({ write: true, delete: false, share: false, plan: false, variables: false, approve: false, apply: false });
     });
 
     it("lets a share open a project to a person with no policy, as viewer or editor, directly or through a group", async () => {

@@ -140,6 +140,12 @@ describe.skipIf(!available)("apply with approval", () => {
     expect(d.apply.blockers.map((b: { code: string }) => b.code)).toEqual(["not_approved"]);
     expect(codes(await apply(plan))).toEqual(["not_approved"]);
     expect((await t.call("POST", `/api/runs/${plan}/approve`, { cookie: alice.cookie })).body.error.code).toBe("self_approval");
+    // the one who only approves (no run:Plan) can open the project, see the run state, and approve
+    const shown = (await t.call("GET", `/api/projects/${pid}`, { cookie: bob.cookie })).body.can;
+    expect(shown).toMatchObject({ plan: false, approve: true, apply: true });
+    const pre = await t.call("GET", `/api/projects/${pid}/preflight`, { cookie: bob.cookie });
+    expect(pre.status).toBe(200);
+    expect(pre.body).toMatchObject({ requireApproval: true, rescuePending: false, identity: { ok: false, reason: "forbidden" } });
     expect((await t.call("POST", `/api/runs/${plan}/approve`, { cookie: bob.cookie })).status).toBe(200);
     expect((await detail(plan)).apply).toMatchObject({ blockers: [], approvals: [{ username: "bob" }] });
     expect((await t.call("DELETE", `/api/runs/${plan}/approve`, { cookie: bob.cookie })).status).toBe(200);

@@ -92,11 +92,14 @@ export function runRoutes(app: FastifyInstance, ctx: Ctx): void {
   app.get("/api/projects/:id/preflight", { schema: { params: idParams } }, async (req) => {
     const { id } = req.params as { id: string };
     const project = await projectOf(id);
-    await authorize(req, project, "run:Plan");
+    // anyone who can read the project may see the state of its runs; only who may plan sees what a plan would use
+    const statements = await authorize(req, project, "project:Read");
+    const mayPlan = evaluate(statements, { action: "run:Plan", resource: resource.project(id) }).allowed;
     const connection = project.connection_id
       ? await db.selectFrom("aws_connections").select(["id", "name", "plan_role_arn", "apply_role_arn", "external_id", "updated_at"]).where("id", "=", project.connection_id).executeTakeFirst()
       : undefined;
     const identity = await (async () => {
+      if (!mayPlan) return { ok: false as const, reason: "forbidden" as const, message: "You may not plan this project." };
       if (!connection) {
         if (!config.runWithServerIdentity) return { ok: false as const, reason: "no_connection" as const, message: "No connection." };
         const r = await aws.identity();
@@ -111,7 +114,7 @@ export function runRoutes(app: FastifyInstance, ctx: Ctx): void {
       PREFLIGHT.set(connection.id, { at: Date.now(), stamp: `${connection.updated_at.getTime()}`, result });
       return result;
     })();
-    const tofu = await tofuVersion(config.tofuBin);
+    const tofu = mayPlan ? await tofuVersion(config.tofuBin) : { ok: false as const, message: "" };
     const rescuePending = !!(await db.selectFrom("state_rescues").select("id").where("project_id", "=", id).where("resolved_at", "is", null).executeTakeFirst());
     return { rescuePending, requireApproval: project.require_approval, key: !!config.stateKey, tofu, identity, connection: connection ? { id: connection.id, name: connection.name, planOnly: !connection.apply_role_arn } : null, timeoutMinutes: Math.round(config.runTimeoutMs / 60_000) };
   });

@@ -49,6 +49,7 @@ describe.skipIf(!available)("runs", () => {
   let admin: string;
   let alice: { id: string; cookie: string };
   let viewer: { id: string; cookie: string };
+  let nobody: { id: string; cookie: string };
   let projectId: string;
 
   beforeAll(async () => {
@@ -56,6 +57,7 @@ describe.skipIf(!available)("runs", () => {
     admin = await t.admin();
     alice = await addMember(t, admin, "alice", ["ProjectEditor"]);
     viewer = await addMember(t, admin, "vera", ["ProjectViewer"]);
+    nobody = await addMember(t, admin, "nina");
     const made = await t.call("POST", "/api/projects", { cookie: alice.cookie, body: { design } });
     projectId = made.body.project.id;
   });
@@ -140,7 +142,12 @@ describe.skipIf(!available)("runs", () => {
 
   it("tells what a run would use before it starts, and only to someone who may plan", async () => {
     for (const k of ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI", "AWS_CONTAINER_CREDENTIALS_FULL_URI"]) delete process.env[k];
-    expect((await t.call("GET", `/api/projects/${projectId}/preflight`, { cookie: viewer.cookie })).status).toBe(403);
+    // a reader sees the state of the runs, but not what a plan would use
+    const seen = await t.call("GET", `/api/projects/${projectId}/preflight`, { cookie: viewer.cookie });
+    expect(seen.status).toBe(200);
+    expect(seen.body.identity).toMatchObject({ ok: false, reason: "forbidden" });
+    expect(seen.body.tofu.ok).toBe(false);
+    expect((await t.call("GET", `/api/projects/${projectId}/preflight`, { cookie: nobody.cookie })).status).toBe(404);
     const r = await t.call("GET", `/api/projects/${projectId}/preflight`, { cookie: alice.cookie });
     expect(r.status).toBe(200);
     expect(r.body).toMatchObject({ key: true, tofu: { ok: true, version: "1.12.9" }, identity: { ok: false, reason: "none" }, timeoutMinutes: 10 });

@@ -16,7 +16,7 @@ export interface ProjectSummary {
 
 export interface ProjectFull {
   project: { id: string; name: string; owner: string | null; ownerId: string; rev: number; updatedAt: string; updatedBy: string | null; design: Design; requireApproval?: boolean; rescuePending?: boolean };
-  can: { write: boolean; delete: boolean; share: boolean; plan: boolean; variables: boolean };
+  can: { write: boolean; delete: boolean; share: boolean; plan: boolean; variables: boolean; approve: boolean; apply: boolean };
 }
 
 export interface VersionRow { version: number; note: string; auto: boolean; createdAt: string; by: string | null; nodes: number }
