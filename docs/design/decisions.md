@@ -31,6 +31,7 @@ Numbered `DD-nnn` to keep them apart from the specification's `D-nnn` ([../spec/
 | DD-024 | decided | Values a design asks for are set per project, encrypted, write-only |
 | DD-025 | decided | AWS connections: a project's runs assume a role, the platform keeps no AWS secret |
 | DD-026 | decided | Apply the approved plan; keep the state right when an apply goes wrong |
+| DD-027 | decided | Requests: asking for an apply to be approved, with a talk like a pull request |
 
 ## DD-001 Language and runtime
 
@@ -427,3 +428,12 @@ the generated files, the variables, the connection and the state are those the p
 apply holding the lock, the lineage must match, the serial must grow), and an `errored.tfstate` left by OpenTofu is stored sealed before its folder
 is deleted, with the project locked against new runs until a person restores, downloads or dismisses it. Apply, approve and restore need a
 person's session, not an API token.
+
+## DD-027 Requests: asking for an apply to be approved, with a talk like a pull request
+
+Status: decided (owner, 28 October 2026); the design is in [requests.md](requests.md). Replaces the "two people" switch of DD-026.
+
+A member who may plan **sends a plan for approval**; the people who may approve decide in a **Requests** page or in the plan dialog, and talk in the request.
+An approval covers that plan only and lets the requester or the approver apply it; a person who may both apply and approve applies at once. A plan that
+deletes or replaces needs an approver who holds `run:ApplyDestructive`. A request that went out of date takes a newer plan (the approval is cleared, the
+talk stays). Four states (waiting, approved, applied, closed); a generic table with a `kind` column, one kind for now. No email yet.
