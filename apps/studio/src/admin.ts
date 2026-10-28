@@ -6,9 +6,11 @@ export interface GroupDetail {
   members: { id: string; username: string; displayName: string; disabled: boolean }[];
   policies: string[];
 }
-export interface PolicyRow { name: string; description: string; builtin: boolean; updatedAt: string; users: number; groups: number }
+export interface PolicyRow { name: string; description: string; builtin: boolean; customized?: boolean; updatedAt: string; users: number; groups: number }
 export interface PolicyDetail {
-  policy: { name: string; description: string; builtin: boolean; document: unknown; updatedAt: string };
+  policy: { name: string; description: string; builtin: boolean; customized: boolean; document: unknown; defaultDocument?: unknown; updatedAt: string };
+  /** permissions added by a later version since this built-in policy was changed */
+  newActions: string[];
   users: { id: string; username: string }[];
   groups: { id: string; name: string }[];
 }
@@ -28,3 +30,4 @@ export const createPolicy = (name: string, description: string, document: unknow
 export const updatePolicy = (name: string, body: { description?: string; document?: unknown }) => api("PUT", `/api/policies/${encodeURIComponent(name)}`, body);
 export const deletePolicy = (name: string, force: boolean) => api("DELETE", `/api/policies/${encodeURIComponent(name)}${force ? "?force=true" : ""}`);
 export const simulate = (userId: string, action: string, resource: string) => api<Simulation>("POST", "/api/policies/simulate", { userId, action, resource });
+export const restorePolicyDefault = (name: string) => api("POST", `/api/policies/${encodeURIComponent(name)}/restore-default`);

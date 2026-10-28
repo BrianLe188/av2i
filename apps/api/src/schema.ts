@@ -58,6 +58,8 @@ export interface PoliciesTable {
   description: Generated<string>;
   document: ColumnType<unknown, string, string>;
   builtin: Generated<boolean>;
+  customized: Generated<boolean>;
+  seen_actions: Generated<string[]>;
   created_at: Ts;
   updated_at: Ts;
 }

@@ -114,7 +114,7 @@ export function PoliciesPage() {
             <TableBody>
               {(policies ?? []).map((p) => (
                 <TableRow key={p.name} data-testid={`policy-row-${p.name}`}>
-                  <TableCell className="font-medium"><Link to={`/policies/${encodeURIComponent(p.name)}`} className="hover:underline">{p.name}</Link>{p.builtin && <Badge variant="outline" className="ml-2">{s.adm.builtin}</Badge>}</TableCell>
+                  <TableCell className="font-medium"><Link to={`/policies/${encodeURIComponent(p.name)}`} className="hover:underline">{p.name}</Link>{p.builtin && <Badge variant="outline" className="ml-2">{s.adm.builtin}</Badge>}{p.builtin && p.customized && <Badge className="ml-1">{s.perm.customized}</Badge>}</TableCell>
                   <TableCell className="max-w-96 truncate text-sm text-muted-foreground">{p.description}</TableCell>
                   <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{fill(s.adm.usersN, { n: p.users })} · {fill(s.adm.groupsN, { n: p.groups })}</TableCell>
                 </TableRow>

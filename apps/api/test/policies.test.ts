@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { syncBuiltinPolicies } from "../src/bootstrap.ts";
 import { addMember, postgresAvailable, testApp, type TestApp } from "./helpers.ts";
 
 const available = await postgresAvailable();
@@ -62,12 +63,83 @@ describe.skipIf(!available)("policies", () => {
     expect((await t.call("GET", "/api/audit", { cookie: u.cookie })).status).toBe(403);
   });
 
-  it("does not let a built-in policy be changed or deleted", async () => {
+  it("does not let a built-in policy be renamed, deleted or given another description", async () => {
     const put = await t.call("PUT", "/api/policies/Administrator", { cookie: admin, body: { description: "x" } });
     expect(put.status).toBe(409);
     expect(put.body.error.code).toBe("builtin_policy");
     expect((await t.call("DELETE", "/api/policies/ProjectViewer", { cookie: admin })).body.error.code).toBe("builtin_policy");
     expect((await t.call("GET", "/api/policies/Nope", { cookie: admin })).status).toBe(404);
+  });
+
+  describe("built-in policies can have their permissions chosen (DD-029)", () => {
+    const viewerDoc = (extra: string[] = []) => ({ Statement: [{ Sid: "projects", Effect: "Allow", Action: ["project:List", "project:Read", ...extra], Resource: ["av2i:project/*"] }] });
+    const get = async (name: string) => (await t.call("GET", `/api/policies/${name}`, { cookie: admin })).body;
+
+    it("marks a changed built-in as customized, and unmarks it when it is back to what the code ships", async () => {
+      expect((await get("ProjectViewer")).policy).toMatchObject({ builtin: true, customized: false });
+      const changed = await t.call("PUT", "/api/policies/ProjectViewer", { cookie: admin, body: { document: viewerDoc(["run:Plan"]) } });
+      expect(changed.status).toBe(200);
+      const g = await get("ProjectViewer");
+      expect(g.policy).toMatchObject({ customized: true });
+      expect(g.policy.defaultDocument.Statement[0].Action).toEqual(["project:List", "project:Read"]);
+      expect(g.newActions).toEqual([]);
+      const listed = (await t.call("GET", "/api/policies", { cookie: admin })).body.policies.find((p: any) => p.name === "ProjectViewer");
+      expect(listed.customized).toBe(true);
+      // the same choice written differently is still the default
+      const back = await t.call("PUT", "/api/policies/ProjectViewer", { cookie: admin, body: { document: { Statement: [{ Effect: "Allow", Action: ["project:Read", "project:List"], Resource: ["av2i:project/*"] }] } } });
+      expect(back.status).toBe(200);
+      expect((await get("ProjectViewer")).policy.customized).toBe(false);
+    });
+
+    it("gives the people who hold it the permissions it now names, and goes back to the default on request", async () => {
+      const u = await addMember(t, admin, "viewerwhoplans", ["ProjectViewer"]);
+      const asks = (action: string) => t.call("POST", "/api/policies/simulate", { cookie: admin, body: { userId: u.id, action, resource: "av2i:project/x" } });
+      expect((await asks("run:Plan")).body.allowed).toBe(false);
+      await t.call("PUT", "/api/policies/ProjectViewer", { cookie: admin, body: { document: viewerDoc(["run:Plan"]) } });
+      expect((await asks("run:Plan")).body.allowed).toBe(true);
+      expect((await t.call("POST", "/api/policies/ProjectViewer/restore-default", { cookie: admin })).status).toBe(200);
+      expect((await asks("run:Plan")).body.allowed).toBe(false);
+      expect((await get("ProjectViewer")).policy).toMatchObject({ customized: false });
+      expect((await t.call("POST", "/api/policies/LogViewer/restore-default", { cookie: admin })).body.error.code).toBe("not_builtin");
+    });
+
+    it("leaves a customized built-in alone when the platform starts, and brings an untouched one up to date", async () => {
+      await t.call("PUT", "/api/policies/ProjectViewer", { cookie: admin, body: { document: viewerDoc(["run:Plan"]) } });
+      await t.db.updateTable("policies").set({ document: JSON.stringify({ Statement: [{ Effect: "Allow", Action: ["project:Read"], Resource: ["av2i:project/*"] }] }) }).where("name", "=", "ProjectEditor").execute();
+      await syncBuiltinPolicies(t.db);
+      expect((await get("ProjectViewer")).policy.document.Statement[0].Action).toContain("run:Plan");
+      expect((await get("ProjectEditor")).policy.document.Statement[0].Action).toContain("project:Write");
+      await t.call("POST", "/api/policies/ProjectViewer/restore-default", { cookie: admin });
+    });
+
+    it("points out the permissions added since a customized built-in was saved", async () => {
+      await t.call("PUT", "/api/policies/ProjectViewer", { cookie: admin, body: { document: viewerDoc(["run:Plan"]) } });
+      await t.db.updateTable("policies").set({ seen_actions: Object.keys({ "project:Read": 1 }) }).where("name", "=", "ProjectViewer").execute();
+      const g = await get("ProjectViewer");
+      expect(g.newActions).toContain("run:Plan");
+      expect(g.newActions).not.toContain("project:Read");
+      await t.call("POST", "/api/policies/ProjectViewer/restore-default", { cookie: admin });
+    });
+
+    it("keeps Administrator able to put things right: it may be narrowed, but never below what manages users and policies", async () => {
+      const lock = await t.call("PUT", "/api/policies/Administrator", { cookie: admin, body: { document: viewerDoc() } });
+      expect(lock.status).toBe(409);
+      expect(lock.body.error).toMatchObject({ code: "administrator_locked_out" });
+      expect(lock.body.error.actions).toEqual(expect.arrayContaining(["policy:Manage", "user:Update"]));
+      const denied = await t.call("PUT", "/api/policies/Administrator", { cookie: admin, body: { document: { Statement: [{ Effect: "Allow", Action: ["*"], Resource: ["*"] }, { Effect: "Deny", Action: ["policy:Manage"], Resource: ["*"] }] } } });
+      expect(denied.body.error.code).toBe("administrator_locked_out");
+      const narrow = { Statement: [
+        { Sid: "people", Effect: "Allow", Action: ["user:List", "user:Read", "user:Update"], Resource: ["av2i:user/*"] },
+        { Sid: "policies", Effect: "Allow", Action: ["policy:Manage"], Resource: ["av2i:policy/*"] },
+      ] };
+      expect((await t.call("PUT", "/api/policies/Administrator", { cookie: admin, body: { document: narrow } })).status).toBe(200);
+      expect((await get("Administrator")).policy.customized).toBe(true);
+      // what is left still works for the account that holds it, and the rest is gone
+      expect((await t.call("GET", "/api/policies", { cookie: admin })).status).toBe(200);
+      expect((await t.call("GET", "/api/audit", { cookie: admin })).status).toBe(403);
+      expect((await t.call("POST", "/api/policies/Administrator/restore-default", { cookie: admin })).status).toBe(200);
+      expect((await t.call("GET", "/api/audit", { cookie: admin })).status).toBe(200);
+    });
   });
 
   it("asks for force to delete a policy that is attached, and detaches it when forced", async () => {

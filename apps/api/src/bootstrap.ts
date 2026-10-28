@@ -4,12 +4,16 @@ import { checkNewPassword, hashPassword } from "./auth/password.ts";
 import type { Config } from "./config.ts";
 import type { Db } from "./db.ts";
 
-/** Inserts the built-in policies and brings their documents up to date on every start. */
+/** Inserts the built-in policies and brings the ones nobody changed up to date on every start; one that was customized is left as it is. */
 export async function syncBuiltinPolicies(db: Db): Promise<void> {
   for (const p of BUILTIN_POLICIES) {
     await sql`
       insert into policies (name, description, document, builtin) values (${p.name}, ${p.description}, ${JSON.stringify(p.document)}::jsonb, true)
-      on conflict (name) do update set description = excluded.description, document = excluded.document, builtin = true, updated_at = now()
+      on conflict (name) do update set
+        builtin = true,
+        description = case when policies.customized then policies.description else excluded.description end,
+        document = case when policies.customized then policies.document else excluded.document end,
+        updated_at = case when policies.customized then policies.updated_at else now() end
     `.execute(db);
   }
 }

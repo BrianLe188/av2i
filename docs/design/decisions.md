@@ -33,6 +33,7 @@ Numbered `DD-nnn` to keep them apart from the specification's `D-nnn` ([../spec/
 | DD-026 | decided | Apply the approved plan; keep the state right when an apply goes wrong |
 | DD-027 | decided | Requests: asking for an apply to be approved, with a talk like a pull request |
 | DD-028 | decided | A project page, and members with project permissions granted in the project |
+| DD-029 | decided | Built-in policies can have their permissions chosen, with a picker |
 
 ## DD-001 Language and runtime
 
@@ -446,3 +447,15 @@ Status: decided (owner, 28 October 2026); the design is in [project-members.md](
 System permissions stay on users and groups; permissions of one project are granted in it. A project opens on a **project page** (overview, members, requests);
 the canvas is `/projects/:id/design`. A member has a role (viewer, editor, runner, approver, maintainer) or a custom set of the 11 project permissions, and
 whoever shares can grant only what they hold. The owner holds all 11. `connection:Use` is needed to choose a project's connection, not to plan against it.
+
+## DD-029 Built-in policies can have their permissions chosen, with a picker
+
+Status: decided (owner, 28 October 2026; step B of the permissions work after DD-028).
+
+A policy page offers the 24 permissions of the platform as tickboxes in eight groups, each with what it lets a person do and a mark on the sensitive ones; the JSON stays
+as a second tab, and a policy with a Deny or a statement limited to some resources opens on the JSON only (`selectionOf` and `documentOf` in `@av2i/authz` read and
+write the choice). The four built-in policies can be changed, but not renamed or deleted: a changed one is **customized**, the start-up sync leaves it alone, and
+**Restore the default** puts it back as the code ships it; when a later version adds a permission, a customized built-in lists the new ones (`seen_actions`).
+**Administrator** can be narrowed but must keep `policy:Manage`, `user:List`, `user:Read` and `user:Update` (`administrator_locked_out`), and "all permissions" is saved
+as `*` so that future permissions are included. The permissions here apply to every project; a project's own are granted in the project (DD-028). Not done: direct
+permissions on a user or a group and the table of effective permissions (step C).

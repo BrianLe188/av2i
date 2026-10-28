@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { ArrowLeft, Trash2 } from "lucide-react";
+import { ArrowLeft, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { ACTIONS, parseDocument } from "@av2i/authz";
+import { ACTIONS, documentOf, parseDocument, selectionOf, type Action } from "@av2i/authz";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "../api.ts";
-import { deletePolicy, getPolicy, updatePolicy, type PolicyDetail } from "../admin.ts";
+import { deletePolicy, getPolicy, restorePolicyDefault, updatePolicy, type PolicyDetail } from "../admin.ts";
+import { PermissionPicker } from "../components/PermissionPicker.tsx";
 import { describe } from "../components/auth/errors.ts";
 import { useStrings } from "../prefs.ts";
 import type { Strings } from "../i18n.ts";
@@ -39,6 +41,8 @@ export function PolicyPage() {
   const [error, setError] = useState<string | null>(null);
   const [serverProblems, setServerProblems] = useState<string[]>([]);
   const [deleting, setDeleting] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [tab, setTab] = useState<"picker" | "json">("picker");
 
   const load = useCallback(async () => {
     try {
@@ -46,6 +50,9 @@ export function PolicyPage() {
       setDetail(d);
       setText(pretty(d.policy.document));
       setDescription(d.policy.description);
+      // a document that is a choice of permissions opens on the picker; one with a Deny or a scope opens on the JSON
+      const p = parseDocument(d.policy.document);
+      setTab(p.ok && selectionOf(p.statements).ok ? "picker" : "json");
     } catch (e) { if (e instanceof ApiError && e.status === 404) setDetail("missing"); else setError(describe(e, s)); }
   }, [name, s]);
   useEffect(() => { void load(); }, [load]);
@@ -58,24 +65,38 @@ export function PolicyPage() {
     return r.ok ? { ok: true as const, statements: r.statements.length, value: parsed } : { ok: false as const, problems: r.errors };
   }, [text, s]);
 
+  /** The document as a choice of permissions, when it is one. */
+  const selection = useMemo(() => {
+    if (!check.ok) return null;
+    const r = parseDocument(check.value);
+    if (!r.ok) return null;
+    const sel = selectionOf(r.statements);
+    return sel.ok ? sel : null;
+  }, [check]);
+
   if (detail === "missing") return <Page title={s.nav.notFound} text={s.nav.notFoundText}><Button asChild variant="outline"><Link to="/policies">{s.adm.policiesPage}</Link></Button></Page>;
   if (detail === null) return <Page title={s.acct.loading}>{error ? <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert> : null}</Page>;
 
   const { policy, users, groups } = detail;
-  const readOnly = policy.builtin;
-  const changed = text !== pretty(policy.document) || description.trim() !== policy.description;
+  const builtin = policy.builtin;
+  const changed = text !== pretty(policy.document) || (!builtin && description.trim() !== policy.description);
 
   const save = async () => {
     setError(null);
     setServerProblems([]);
     try {
-      await updatePolicy(name, { description: description.trim(), ...(check.ok ? { document: check.value } : {}) });
+      await updatePolicy(name, { ...(builtin ? {} : { description: description.trim() }), ...(check.ok ? { document: check.value } : {}) });
       toast(s.adm.saved);
       await load();
     } catch (e) {
       if (e instanceof ApiError && Array.isArray(e.extra.problems)) setServerProblems(e.extra.problems as string[]);
-      setError(describe(e, s));
+      setError(e instanceof ApiError && e.code === "administrator_locked_out" ? fill(s.perm.errors.administrator_locked_out, { actions: ((e.extra.actions as string[] | undefined) ?? []).join(", ") }) : describe(e, s));
     }
+  };
+
+  const restore = async () => {
+    setRestoring(false);
+    try { await restorePolicyDefault(name); toast(s.perm.restored); await load(); } catch (e) { setError(describe(e, s)); }
   };
 
   const append = (statement: object) => {
@@ -93,11 +114,12 @@ export function PolicyPage() {
   return (
     <Page
       title={policy.name}
-      text={readOnly ? s.adm.builtinReadOnly : s.adm.policiesText}
+      text={builtin ? s.perm.builtinText : s.adm.policiesText}
       actions={
         <div className="flex gap-2">
           <Button asChild variant="outline"><Link to="/policies"><ArrowLeft />{s.adm.policiesPage}</Link></Button>
-          {!readOnly && <Button variant="destructive" onClick={() => setDeleting(true)} data-testid="delete-policy"><Trash2 />{s.adm.deletePolicy}</Button>}
+          {builtin && policy.customized && <Button variant="outline" onClick={() => setRestoring(true)} data-testid="restore-default"><RotateCcw />{s.perm.restore}</Button>}
+          {!builtin && <Button variant="destructive" onClick={() => setDeleting(true)} data-testid="delete-policy"><Trash2 />{s.adm.deletePolicy}</Button>}
         </div>
       }
     >
@@ -105,20 +127,44 @@ export function PolicyPage() {
         {error && <Alert variant="destructive" role="alert" data-testid="policy-error"><AlertDescription>{error}</AlertDescription></Alert>}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">{s.adm.document}</CardTitle>
-            {!readOnly && (
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                <span className="text-xs text-muted-foreground">{s.adm.addStatement}:</span>
-                {snippets(s).map((x) => <Button key={x.id} size="xs" variant="outline" onClick={() => append(x.statement)} data-testid={`snippet-${x.id}`}>{x.label}</Button>)}
-              </div>
-            )}
+            <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+              {s.adm.document}
+              {builtin && <Badge variant="outline">{s.perm.builtin}</Badge>}
+              {builtin && policy.customized && <Badge data-testid="policy-customized">{s.perm.customized}</Badge>}
+            </CardTitle>
+            <Tabs value={tab} onValueChange={(v) => setTab(v as "picker" | "json")}>
+              <TabsList>
+                <TabsTrigger value="picker" data-testid="tab-picker">{s.perm.tabPermissions}</TabsTrigger>
+                <TabsTrigger value="json" data-testid="tab-json">{s.perm.tabJson}</TabsTrigger>
+              </TabsList>
+            </Tabs>
           </CardHeader>
           <CardContent className="grid gap-3">
-            {!readOnly && <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder={s.adm.description} maxLength={300} aria-label={s.adm.description} data-testid="policy-description" />}
-            <Textarea
-              value={text} onChange={(e) => setText(e.target.value)} readOnly={readOnly} spellCheck={false}
-              className="min-h-72 font-mono text-xs leading-relaxed" aria-label={s.adm.document} data-testid="policy-text"
-            />
+            {!builtin && <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder={s.adm.description} maxLength={300} aria-label={s.adm.description} data-testid="policy-description" />}
+            {detail.newActions.length > 0 && selection && (
+              <Alert data-testid="policy-new-actions">
+                <AlertTitle>{s.perm.newTitle}</AlertTitle>
+                <AlertDescription className="flex flex-wrap items-center gap-2">
+                  <span>{fill(s.perm.newText, { list: detail.newActions.map((a) => (s.perm.actions as Record<string, string>)[a] ?? a).join(", ") })}</span>
+                  <Button size="xs" variant="outline" onClick={() => setText(pretty(documentOf([...selection.actions, ...(detail.newActions as Action[])], selection.all)))} data-testid="policy-add-new">{s.perm.addNew}</Button>
+                </AlertDescription>
+              </Alert>
+            )}
+            {tab === "picker" && (selection
+              ? <PermissionPicker s={s} value={{ all: selection.all, actions: selection.actions }} onChange={(v) => setText(pretty(documentOf(v.actions, v.all)))} />
+              : <Alert data-testid="policy-json-only"><AlertDescription>{s.perm.jsonOnly}</AlertDescription></Alert>)}
+            {tab === "json" && (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-muted-foreground">{s.adm.addStatement}:</span>
+                  {snippets(s).map((x) => <Button key={x.id} size="xs" variant="outline" onClick={() => append(x.statement)} data-testid={`snippet-${x.id}`}>{x.label}</Button>)}
+                </div>
+                <Textarea
+                  value={text} onChange={(e) => setText(e.target.value)} spellCheck={false}
+                  className="min-h-72 font-mono text-xs leading-relaxed" aria-label={s.adm.document} data-testid="policy-text"
+                />
+              </>
+            )}
             {check.ok
               ? <p className="text-xs text-muted-foreground" data-testid="policy-valid">{fill(s.adm.valid, { n: check.statements })}</p>
               : (
@@ -127,7 +173,7 @@ export function PolicyPage() {
                   <AlertDescription><ul className="list-disc pl-4">{[...check.problems, ...serverProblems.filter((p) => !check.problems.includes(p))].map((p) => <li key={p}>{p}</li>)}</ul></AlertDescription>
                 </Alert>
               )}
-            {!readOnly && <Button className="w-fit" disabled={!changed || !check.ok} onClick={() => void save()} data-testid="policy-save">{s.adm.save}</Button>}
+            <Button className="w-fit" disabled={!changed || !check.ok} onClick={() => void save()} data-testid="policy-save">{s.adm.save}</Button>
           </CardContent>
         </Card>
 
@@ -149,6 +195,16 @@ export function PolicyPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={restoring} onOpenChange={(o) => !o && setRestoring(false)}>
+        <DialogContent className="sm:max-w-sm" data-testid="restore-dialog">
+          <DialogHeader><DialogTitle>{s.perm.restoreTitle}</DialogTitle><DialogDescription>{policy.name}. {s.perm.restoreText}</DialogDescription></DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setRestoring(false)}>{s.adm.cancel}</Button>
+            <Button onClick={() => void restore()} data-testid="restore-confirm">{s.perm.restore}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={deleting} onOpenChange={(o) => !o && setDeleting(false)}>
         <DialogContent className="sm:max-w-sm" data-testid="delete-policy-dialog">

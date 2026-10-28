@@ -1,4 +1,4 @@
-import { ACTIONS, evaluate, parseDocument, resource } from "@av2i/authz";
+import { ACTIONS, ADMINISTRATOR, ADMINISTRATOR_MUST_KEEP, defaultOf, evaluate, parseDocument, resource, sameDocument, type Action } from "@av2i/authz";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { sql } from "kysely";
 import { statementsFor } from "../access.ts";
@@ -34,13 +34,13 @@ export function policyRoutes(app: FastifyInstance, ctx: Ctx): void {
 
   app.get("/api/policies", async (req) => {
     await need(ctx, req, "policy:Manage", resource.policy("*"));
-    const rows = await db.selectFrom("policies").select(["id", "name", "description", "builtin", "updated_at"]).orderBy("builtin", "desc").orderBy("name").execute();
+    const rows = await db.selectFrom("policies").select(["id", "name", "description", "builtin", "customized", "updated_at"]).orderBy("builtin", "desc").orderBy("name").execute();
     const counts = await sql<{ policy_id: string; users: string; groups: string }>`
       select policy_id, count(user_id) as users, count(group_id) as groups from policy_attachments group by policy_id`.execute(db);
     return {
       policies: rows.map((p) => {
         const c = counts.rows.find((r) => r.policy_id === p.id);
-        return { name: p.name, description: p.description, builtin: p.builtin, updatedAt: p.updated_at, users: Number(c?.users ?? 0), groups: Number(c?.groups ?? 0) };
+        return { name: p.name, description: p.description, builtin: p.builtin, customized: p.customized, updatedAt: p.updated_at, users: Number(c?.users ?? 0), groups: Number(c?.groups ?? 0) };
       }),
     };
   });
@@ -49,7 +49,14 @@ export function policyRoutes(app: FastifyInstance, ctx: Ctx): void {
     const { name } = req.params as { name: string };
     await need(ctx, req, "policy:Manage", resource.policy(name));
     const p = await find(name);
-    return { policy: { name: p.name, description: p.description, builtin: p.builtin, document: p.document, updatedAt: p.updated_at }, ...(await attachedTo(p.id)) };
+    // for a built-in that was changed: what the code ships, and the permissions added since it was saved
+    const shipped = p.builtin ? defaultOf(p.name) : undefined;
+    const newActions = p.builtin && p.customized ? (Object.keys(ACTIONS) as Action[]).filter((a) => !p.seen_actions.includes(a)) : [];
+    return {
+      policy: { name: p.name, description: p.description, builtin: p.builtin, customized: p.customized, document: p.document, updatedAt: p.updated_at, ...(shipped ? { defaultDocument: shipped.document } : {}) },
+      newActions,
+      ...(await attachedTo(p.id)),
+    };
   });
 
   app.post("/api/policies", {
@@ -73,15 +80,41 @@ export function policyRoutes(app: FastifyInstance, ctx: Ctx): void {
     const { name } = req.params as { name: string };
     await need(ctx, req, "policy:Manage", resource.policy(name));
     const p = await find(name);
-    if (p.builtin) throw conflict("builtin_policy", "A built-in policy cannot be changed.");
     const body = req.body as { description?: string; document?: unknown };
-    if (body.document !== undefined) checked(body.document);
+    // a built-in policy keeps its name and description; its permissions can be chosen (DD-029)
+    if (p.builtin && body.description !== undefined && body.description.trim() !== p.description) throw conflict("builtin_policy", "The description of a built-in policy cannot be changed.");
+    let customized = p.customized;
+    if (body.document !== undefined) {
+      checked(body.document);
+      if (p.builtin) {
+        const parsed = parseDocument(body.document);
+        // the Administrator policy must always keep what is needed to put things right, or everyone could be locked out
+        if (name === ADMINISTRATOR && parsed.ok) {
+          const lacking = ADMINISTRATOR_MUST_KEEP.filter((a) => !evaluate(parsed.statements, { action: a, resource: ACTIONS[a] }).allowed);
+          if (lacking.length) throw new HttpError(409, "administrator_locked_out", `Administrator must keep ${lacking.join(", ")}, or nobody could manage users and policies.`, { actions: lacking });
+        }
+        customized = !sameDocument(body.document, defaultOf(name)?.document, (d) => parseDocument(d));
+      }
+    }
     await db.updateTable("policies").set({
-      ...(body.description !== undefined ? { description: body.description.trim() } : {}),
+      ...(body.description !== undefined && !p.builtin ? { description: body.description.trim() } : {}),
       ...(body.document !== undefined ? { document: JSON.stringify(body.document) } : {}),
+      ...(p.builtin && body.document !== undefined ? { customized, seen_actions: Object.keys(ACTIONS) } : {}),
       updated_at: new Date(),
     }).where("id", "=", p.id).execute();
-    await audit(db, { actor: actor(req), action: "policy.updated", resource: resource.policy(name), outcome: "success", ip: req.ip, details: { document: body.document !== undefined } });
+    await audit(db, { actor: actor(req), action: "policy.updated", resource: resource.policy(name), outcome: "success", ip: req.ip, details: { document: body.document !== undefined, customized } });
+    return { ok: true };
+  });
+
+  /** Puts a built-in policy back as the code ships it. */
+  app.post("/api/policies/:name/restore-default", { schema: { params: nameParams } }, async (req) => {
+    const { name } = req.params as { name: string };
+    await need(ctx, req, "policy:Manage", resource.policy(name));
+    const p = await find(name);
+    const shipped = p.builtin ? defaultOf(name) : undefined;
+    if (!shipped) throw conflict("not_builtin", "Only a built-in policy has a default to go back to.");
+    await db.updateTable("policies").set({ document: JSON.stringify(shipped.document), description: shipped.description, customized: false, seen_actions: [], updated_at: new Date() }).where("id", "=", p.id).execute();
+    await audit(db, { actor: actor(req), action: "policy.restored", resource: resource.policy(name), outcome: "success", ip: req.ip });
     return { ok: true };
   });
 

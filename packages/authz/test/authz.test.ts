@@ -126,3 +126,35 @@ describe("restrictToActions", () => {
     expect(ask(narrowed, "project:Read")).toBe(true);
   });
 });
+
+describe("the permission picker", () => {
+  it("reads a document as a choice, expanding patterns, and writes one statement for each kind of resource", async () => {
+    const { selectionOf, documentOf, ACTION_GROUPS, ADMINISTRATOR_MUST_KEEP } = await import("../src/picker.ts");
+    const admin = parseDocument(BUILTIN_POLICIES.find((p) => p.name === ADMINISTRATOR)!.document);
+    expect(admin.ok && selectionOf(admin.statements)).toMatchObject({ ok: true, all: true });
+    const users = parseDocument(BUILTIN_POLICIES.find((p) => p.name === "UserManager")!.document);
+    const sel = users.ok && selectionOf(users.statements);
+    expect(sel).toMatchObject({ ok: true, all: false });
+    expect(sel && sel.ok && sel.actions).toEqual(["user:Create", "user:List", "user:Read", "user:Update", "user:Disable", "user:ResetPassword", "group:Manage"].sort((a, b) => Object.keys(ACTIONS).indexOf(a) - Object.keys(ACTIONS).indexOf(b)));
+    const doc = documentOf(["project:Read", "project:List", "audit:Read"], false);
+    expect(doc.Statement.map((s) => s.Resource[0])).toEqual(["av2i:project/*", "av2i:audit/*"]);
+    expect(documentOf([], true).Statement[0]).toMatchObject({ Action: ["*"], Resource: ["*"] });
+    // a Deny, or a statement limited to some resources, is not a choice of permissions
+    const deny = parseDocument({ Statement: [{ Effect: "Deny", Action: ["project:Delete"], Resource: ["av2i:project/*"] }] });
+    expect(deny.ok && selectionOf(deny.statements)).toEqual({ ok: false, reason: "deny" });
+    const scoped = parseDocument({ Statement: [{ Effect: "Allow", Action: ["project:Read"], Resource: ["av2i:project/abc"] }] });
+    expect(scoped.ok && selectionOf(scoped.statements)).toEqual({ ok: false, reason: "scoped" });
+    // every action is in exactly one group, and the Administrator guard names real actions
+    const grouped = ACTION_GROUPS.flatMap((g) => [...g.actions]);
+    expect([...grouped].sort()).toEqual(Object.keys(ACTIONS).sort());
+    expect(ADMINISTRATOR_MUST_KEEP.every((a) => a in ACTIONS)).toBe(true);
+  });
+
+  it("round-trips: a choice written as a document reads back as the same choice", async () => {
+    const { selectionOf, documentOf } = await import("../src/picker.ts");
+    const choice = ["project:Read", "run:Plan", "state:Read", "user:List"] as const;
+    const parsed = parseDocument(documentOf([...choice], false));
+    const back = parsed.ok && selectionOf(parsed.statements);
+    expect(back && back.ok && back.actions).toEqual(["project:Read", "run:Plan", "state:Read", "user:List"]);
+  });
+});
