@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { claim } from "../src/runs/queue.ts";
 import { execute } from "../src/runs/runner.ts";
-import { addMember, fakeAws, postgresAvailable, testApp, type TestApp } from "./helpers.ts";
+import { addMember, fakeAws, memberOf, postgresAvailable, testApp, type TestApp } from "./helpers.ts";
 
 const available = await postgresAvailable();
 const here = import.meta.dirname;
@@ -26,12 +26,13 @@ describe.skipIf(!available)("requests", () => {
     const p = await t.db.insertInto("policies").values({ name, document: JSON.stringify({ Statement: [{ Effect: "Allow", Action: actions, Resource: [res] }] }) }).returning("id").executeTakeFirstOrThrow();
     await t.db.insertInto("policy_attachments").values({ policy_id: p.id, user_id: userId, group_id: null }).execute();
   };
-  /** A project of alice's, tied to the connection, shared with bob and carol as viewers. */
+  /** A project of alice's, tied to the connection; bob is a runner in it and carol an approver (DD-028). */
   const newProject = async (name: string) => {
     const made = await t.call("POST", "/api/projects", { cookie: alice.cookie, body: { name, design } });
     const id = made.body.project.id as string;
     expect((await t.call("PUT", `/api/projects/${id}/connection`, { cookie: alice.cookie, body: { connectionId: connId } })).status).toBe(200);
-    for (const u of [bob, carol]) await t.db.insertInto("project_shares").values({ project_id: id, user_id: u.id, group_id: null, role: "viewer" }).execute();
+    await t.db.insertInto("project_shares").values({ project_id: id, user_id: bob.id, group_id: null, ...memberOf("runner") }).execute();
+    await t.db.insertInto("project_shares").values({ project_id: id, user_id: carol.id, group_id: null, ...memberOf("approver") }).execute();
     return id;
   };
   /** bob queues a plan and it is run with the given script. */
@@ -61,9 +62,6 @@ describe.skipIf(!available)("requests", () => {
     const c = await t.call("POST", "/api/connections", { cookie: admin, body: { name: "acct", planRoleArn: PLAN, applyRoleArn: APPLY } });
     connId = c.body.connection.id;
     await policyFor(alice.id, "AliceUses", ["connection:Use"], `av2i:connection/${connId}`);
-    await policyFor(bob.id, "BobPlans", ["run:Plan"], "av2i:project/*");
-    await policyFor(bob.id, "BobUses", ["connection:Use"], `av2i:connection/${connId}`);
-    await policyFor(carol.id, "CarolApproves", ["run:Approve"], "av2i:project/*");
   });
   afterAll(async () => { await t.close(); });
 
@@ -129,10 +127,11 @@ describe.skipIf(!available)("requests", () => {
     const plan = await planned(pid, bob, "fake-tofu.sh");
     const reqId = (await send(plan)).body.request.id as string;
     expect((await run(plan, bob.cookie)).apply.destructive).toBe(true);
-    const d = await detail(reqId, alice.cookie);
-    expect(d.can).toMatchObject({ approve: false, approveBlocked: "destructive_forbidden", reject: true });
-    expect((await act(reqId, "approve", alice.cookie)).body.error.code).toBe("destructive_forbidden");
-    await policyFor(alice.id, "AliceDestroys", ["run:ApplyDestructive"], `av2i:project/${pid}`);
+    // carol approves but holds no run:ApplyDestructive; the owner holds every project permission
+    const seen = await detail(reqId, carol.cookie);
+    expect(seen.can).toMatchObject({ approve: false, approveBlocked: "destructive_forbidden", reject: true });
+    expect((await act(reqId, "approve", carol.cookie)).body.error.code).toBe("destructive_forbidden");
+    expect((await detail(reqId, alice.cookie)).can).toMatchObject({ approve: true, approveBlocked: null });
     expect((await act(reqId, "approve", alice.cookie)).status).toBe(200);
     expect((await apply(plan, bob.cookie)).body.error.code).toBe("confirm_required");
     expect((await apply(plan, bob.cookie, { confirmName: "nope" })).body.error.code).toBe("confirm_required");

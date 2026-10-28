@@ -7,7 +7,7 @@ import { open } from "../src/runs/crypto.ts";
 import { claim, failStale } from "../src/runs/queue.ts";
 import { recoverRunDirs } from "../src/runs/rescue.ts";
 import { execute } from "../src/runs/runner.ts";
-import { addMember, fakeAws, postgresAvailable, testApp, type TestApp } from "./helpers.ts";
+import { addMember, fakeAws, memberOf, postgresAvailable, testApp, type TestApp } from "./helpers.ts";
 
 const available = await postgresAvailable();
 const here = import.meta.dirname;
@@ -45,7 +45,7 @@ describe.skipIf(!available)("apply with approval", () => {
     const made = await t.call("POST", "/api/projects", { cookie: alice.cookie, body: { name, design } });
     const id = made.body.project.id as string;
     expect((await t.call("PUT", `/api/projects/${id}/connection`, { cookie: alice.cookie, body: { connectionId: connId } })).status).toBe(200);
-    await t.db.insertInto("project_shares").values({ project_id: id, user_id: bob.id, group_id: null, role: "viewer" }).execute();
+    await t.db.insertInto("project_shares").values({ project_id: id, user_id: bob.id, group_id: null, ...memberOf("viewer") }).execute();
     return id;
   };
   const queuePlan = async (projectId: string, cookie = alice.cookie) => (await t.call("POST", `/api/projects/${projectId}/runs`, { cookie, body: { kind: "plan" } })).body.run.id as string;
@@ -94,16 +94,17 @@ describe.skipIf(!available)("apply with approval", () => {
     expect(codes(await apply(plan))).toEqual(["already_applied"]);
   });
 
-  it("asks for the permission and the typed name when a plan deletes or replaces", async () => {
+  it("asks for the typed name when a plan deletes or replaces, and for the permission from a member who may apply but not delete", async () => {
     const pid = await newProject("destructive");
     const plan = await planned(pid, "fake-tofu.sh");
     const d = await detail(plan);
     expect(d.apply.destructive).toBe(true);
-    expect(d.can.applyDestructive).toBe(false);
-    expect((await apply(plan, { confirmName: "destructive" })).body.error.code).toBe("destructive_forbidden");
-    await policyFor(alice.id, "AliceDestroys", ["run:ApplyDestructive"], `av2i:project/${pid}`);
+    expect(d.can.applyDestructive).toBe(true);
     expect((await apply(plan)).body.error.code).toBe("confirm_required");
     expect((await apply(plan, { confirmName: "Destructive" })).body.error.code).toBe("confirm_required");
+    // a maintainer may apply and approve, but holds no run:ApplyDestructive
+    await t.db.updateTable("project_shares").set(memberOf("maintainer")).where("project_id", "=", pid).where("user_id", "=", bob.id).execute();
+    expect((await apply(plan, { confirmName: "destructive" }, bob.cookie)).body.error.code).toBe("destructive_forbidden");
     expect((await apply(plan, { confirmName: "destructive" })).status).toBe(201);
   });
 
@@ -166,9 +167,8 @@ describe.skipIf(!available)("apply with approval", () => {
     expect((await t.call("GET", `/api/state-rescues/${id}/download`, { cookie: bob.cookie })).status).toBe(200);
     expect(JSON.stringify(await t.db.selectFrom("audit_log").select("details").where("action", "=", "state.rescue_downloaded").execute())).not.toContain("lineage-of-the-rescue");
 
-    // restoring needs state:Write, which the owner does not have by default
-    expect((await t.call("POST", `/api/state-rescues/${id}/restore`, { cookie: alice.cookie })).status).toBe(403);
-    await policyFor(alice.id, "AliceRestores", ["state:Write"], `av2i:project/${pid}`);
+    // restoring needs state:Write: bob reads state but may not write it; the owner holds it
+    expect((await t.call("POST", `/api/state-rescues/${id}/restore`, { cookie: bob.cookie })).status).toBe(403);
     expect((await t.call("POST", `/api/state-rescues/${id}/dismiss`, { cookie: alice.cookie, body: { confirmName: "nope" } })).body.error.code).toBe("confirm_required");
     expect((await t.call("POST", `/api/state-rescues/${id}/restore`, { cookie: alice.cookie })).status).toBe(200);
     const v = await t.db.selectFrom("state_versions").select(["serial", "lineage"]).where("project_id", "=", pid).execute();

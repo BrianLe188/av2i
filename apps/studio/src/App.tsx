@@ -18,7 +18,6 @@ import { ApiError } from "./api.ts";
 import { ConflictDialog, type Conflict } from "./components/ConflictDialog.tsx";
 import { HistoryDialog } from "./components/HistoryDialog.tsx";
 import { RunDialog } from "./components/RunDialog.tsx";
-import { ShareDialog } from "./components/ShareDialog.tsx";
 import { SaveQueue, type Failure, type SyncStatus } from "./logic/sync.ts";
 import { createProject, getProject, saveProject, type ProjectFull } from "./projects.ts";
 import { analyze } from "./logic/analyze.ts";
@@ -53,8 +52,8 @@ export function App({ prefs, user, project }: { prefs: Prefs; user: User; projec
   const [status, setStatus] = useState<SyncStatus>("saved");
   const [conflict, setConflict] = useState<Conflict | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [shareOpen, setShareOpen] = useState(false);
-  const [runOpen, setRunOpen] = useState(false);
+  // the project page opens the Plan dialog with ?run=1
+  const [runOpen, setRunOpen] = useState(() => new URLSearchParams(window.location.search).get("run") === "1");
 
   const s = strings(lang);
   const design = hist.present;
@@ -106,7 +105,7 @@ export function App({ prefs, user, project }: { prefs: Prefs; user: User; projec
     try { const fresh = await getProject(projectId); adopt(fresh.project.design, fresh.project.rev); setConflict(null); } catch { setToast(s.proj.errorFatal); }
   };
   const copyMine = async () => {
-    try { const p = await createProject(design, `${design.name} (copy)`); setConflict(null); navigate(`/projects/${p.id}`); } catch { setToast(s.proj.errorFatal); }
+    try { const p = await createProject(design, `${design.name} (copy)`); setConflict(null); navigate(`/projects/${p.id}/design`); } catch { setToast(s.proj.errorFatal); }
   };
 
   const select = useCallback((sel: Selection, f?: string[]) => { setSelection(sel); setFocus(new Set(f ?? [])); }, []);
@@ -173,12 +172,12 @@ export function App({ prefs, user, project }: { prefs: Prefs; user: User; projec
         onLang={setLang}
         onTheme={prefs.toggleDark}
         user={user}
-        onHome={() => void leave("/projects")}
+        onHome={() => void leave(`/projects/${projectId}`)}
         status={status}
         readOnly={!writable}
         onStatusClick={() => status === "conflict" && conflict === null && setConflict({ currentRev: queue.rev, updatedBy: null, updatedAt: null })}
         onHistory={() => setHistoryOpen(true)}
-        onShare={project.can.share ? () => setShareOpen(true) : undefined}
+        onMembers={() => void leave(`/projects/${projectId}?tab=members`)}
         onRun={project.can.plan || project.can.approve || project.can.apply ? () => setRunOpen(true) : undefined}
         runAlert={project.project.rescuePending === true}
         onAccount={(what) => (what === "logout" ? void auth.logout() : void leave("/account"))}
@@ -208,7 +207,6 @@ export function App({ prefs, user, project }: { prefs: Prefs; user: User; projec
       s={s} projectId={projectId} open={historyOpen} onClose={() => setHistoryOpen(false)} writable={writable}
       beforeChange={() => queue.flush()} onRestored={(d, rev) => adopt(d, rev)}
     />
-    <ShareDialog s={s} projectId={projectId} open={shareOpen} onClose={() => setShareOpen(false)} />
     <RunDialog s={s} projectId={projectId} projectName={project.project.name} canPlan={project.can.plan} open={runOpen} onClose={() => setRunOpen(false)} beforeRun={() => queue.flush()} canSetVariables={project.can.variables} />
     <ConflictDialog
       s={s} conflict={conflict} onClose={() => setConflict(null)}

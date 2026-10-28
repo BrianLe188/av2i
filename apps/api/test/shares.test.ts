@@ -52,7 +52,10 @@ describe.skipIf(!available)("project shares", () => {
   });
 
   it("only people who may share can see or change the shares", async () => {
-    expect((await list(bob.cookie)).status).toBe(403);
+    // anyone who may read the project sees its members; only who may share changes them
+    const seen = await list(bob.cookie);
+    expect(seen.status).toBe(200);
+    expect(seen.body).toMatchObject({ canManage: false, mine: ["project:Read", "project:Write"] });
     expect((await put(bob.cookie, { user: "carol", role: "viewer" })).status).toBe(403);
     expect((await t.call("GET", `/api/projects/${project}/share-targets`, { cookie: bob.cookie })).status).toBe(403);
     const other = (await t.call("POST", "/api/projects", { cookie: alice.cookie, body: { design: blankDesign("Mine") } })).body.project.id;
@@ -86,5 +89,65 @@ describe.skipIf(!available)("project shares", () => {
     expect((await t.call("DELETE", `/api/projects/${project}/shares/${bobShare.id}`, { cookie: alice.cookie })).status).toBe(404);
     const actions = (await t.db.selectFrom("audit_log").select("action").execute()).map((r) => r.action);
     expect(actions).toEqual(expect.arrayContaining(["project.shared", "project.unshared"]));
+  });
+
+  describe("roles and permissions of a member (DD-028)", () => {
+    let proj: string;
+    let eve: { id: string; cookie: string };
+    let frank: { id: string; cookie: string };
+    let gina: { id: string; cookie: string };
+
+    beforeAll(async () => {
+      eve = await addMember(t, admin, "eve");
+      frank = await addMember(t, admin, "frank");
+      gina = await addMember(t, admin, "gina");
+      proj = (await t.call("POST", "/api/projects", { cookie: alice.cookie, body: { design: blankDesign("Team") } })).body.project.id;
+    });
+
+    it("gives each role the permissions it stands for, and lists the roles with the permissions the caller holds", async () => {
+      expect((await put(alice.cookie, { user: "eve", role: "runner" }, proj)).status).toBe(200);
+      expect((await put(alice.cookie, { user: "frank", role: "approver" }, proj)).status).toBe(200);
+      const r = (await list(alice.cookie, proj)).body;
+      expect(r.shares.find((x: any) => x.name === "eve")).toMatchObject({ role: "runner", actions: ["project:Read", "run:Plan", "state:Read"] });
+      expect(r.roles.map((x: any) => x.role)).toEqual(["viewer", "editor", "runner", "approver", "maintainer"]);
+      expect(r.actions).toHaveLength(11);
+      expect(r.mine).toHaveLength(11);
+      expect(r).toMatchObject({ canManage: true, owner: "alice" });
+      const eveCan = (await t.call("GET", `/api/projects/${proj}`, { cookie: eve.cookie })).body.can;
+      expect(eveCan).toMatchObject({ write: false, plan: true, approve: false, apply: false });
+      expect((await t.call("GET", `/api/projects/${proj}`, { cookie: frank.cookie })).body.can).toMatchObject({ plan: false, approve: true });
+    });
+
+    it("lets a custom member hold exactly the ticked permissions, and always the right to read", async () => {
+      expect((await put(alice.cookie, { user: "gina", role: "custom", actions: ["run:Apply", "state:Write"] }, proj)).status).toBe(200);
+      const g = (await list(alice.cookie, proj)).body.shares.find((x: any) => x.name === "gina");
+      expect(g).toMatchObject({ role: "custom" });
+      expect(g.actions.sort()).toEqual(["project:Read", "run:Apply", "state:Write"]);
+      expect((await t.call("GET", `/api/projects/${proj}`, { cookie: gina.cookie })).body.can).toMatchObject({ apply: true, plan: false, write: false });
+      expect((await put(alice.cookie, { user: "gina", role: "custom", actions: ["user:Create"] }, proj)).status).toBe(400);
+      expect((await put(alice.cookie, { user: "gina", role: "custom" }, proj)).status).toBe(200);
+      expect((await list(alice.cookie, proj)).body.shares.find((x: any) => x.name === "gina").actions).toEqual(["project:Read"]);
+    });
+
+    it("lets a member who may share grant only what they hold themselves", async () => {
+      // frank becomes a maintainer: he may share, plan, approve and apply, but holds no run:ApplyDestructive and no project:Delete
+      await put(alice.cookie, { user: "frank", role: "maintainer" }, proj);
+      expect((await put(frank.cookie, { user: "gina", role: "runner" }, proj)).status).toBe(200);
+      const tooMuch = await put(frank.cookie, { user: "gina", role: "custom", actions: ["run:Plan", "run:ApplyDestructive", "project:Delete"] }, proj);
+      expect(tooMuch.status).toBe(403);
+      expect(tooMuch.body.error).toMatchObject({ code: "grant_beyond_own", actions: ["run:ApplyDestructive", "project:Delete"] });
+      expect((await put(frank.cookie, { user: "gina", role: "maintainer" }, proj)).status).toBe(200);
+      // a runner cannot manage members at all, and the owner can grant everything
+      expect((await put(eve.cookie, { user: "gina", role: "viewer" }, proj)).status).toBe(403);
+      expect((await put(alice.cookie, { user: "gina", role: "custom", actions: ["run:ApplyDestructive", "project:Delete"] }, proj)).status).toBe(200);
+    });
+
+    it("lets a member read who else is in the project, but not change it", async () => {
+      const seen = await list(eve.cookie, proj);
+      expect(seen.status).toBe(200);
+      expect(seen.body).toMatchObject({ canManage: false, mine: ["project:Read", "run:Plan", "state:Read"] });
+      expect(seen.body.shares.length).toBeGreaterThan(2);
+      expect((await t.call("GET", `/api/projects/${proj}/share-targets`, { cookie: eve.cookie })).status).toBe(403);
+    });
   });
 });

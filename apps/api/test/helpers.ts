@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import pg from "pg";
 import { buildApp, CSRF_HEADER, CSRF_VALUE } from "../src/app.ts";
+import { PROJECT_ROLES } from "@av2i/authz";
 import type { AssumeRequest, AwsGateway } from "../src/aws.ts";
 import { ensureAdmin, syncBuiltinPolicies } from "../src/bootstrap.ts";
 import { COOKIE } from "../src/auth/sessions.ts";
@@ -137,3 +138,6 @@ export const blankDesign = (name = "untitled", nodes: { key: string }[] = []) =>
   schema: 1, name, settings: { region: "ap-southeast-1" },
   nodes: nodes.map((n) => ({ key: n.key, label: n.key, service: "vpc", props: {} })), edges: [],
 });
+
+/** A member row of a project as the API writes it: the role and the permissions that role stands for. */
+export const memberOf = (role: keyof typeof PROJECT_ROLES) => ({ role, actions: [...PROJECT_ROLES[role]] });

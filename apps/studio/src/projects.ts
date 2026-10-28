@@ -15,7 +15,7 @@ export interface ProjectSummary {
 }
 
 export interface ProjectFull {
-  project: { id: string; name: string; owner: string | null; ownerId: string; rev: number; updatedAt: string; updatedBy: string | null; design: Design; rescuePending?: boolean };
+  project: { id: string; name: string; owner: string | null; ownerId: string; rev: number; updatedAt: string; updatedBy: string | null; design: Design; rescuePending?: boolean; createdAt?: string; connection?: { id: string; name: string } | null };
   can: { write: boolean; delete: boolean; share: boolean; plan: boolean; variables: boolean; approve: boolean; apply: boolean };
 }
 
@@ -30,11 +30,17 @@ export const listVersions = (id: string) => api<{ versions: VersionRow[] }>("GET
 export const saveVersion = (id: string, note: string) => api<{ version: number }>("POST", `/api/projects/${id}/versions`, { note });
 export const restoreVersion = (id: string, n: number) => api<{ rev: number; design: Design }>("POST", `/api/projects/${id}/versions/${n}/restore`);
 
-export interface ShareRow { id: string; kind: "user" | "group"; name: string; role: "viewer" | "editor"; grantedBy: string | null; createdAt: string }
+export type MemberRole = "viewer" | "editor" | "runner" | "approver" | "maintainer" | "custom";
+export interface ShareRow { id: string; kind: "user" | "group"; name: string; role: MemberRole; actions: string[]; grantedBy: string | null; createdAt: string }
+export interface Members {
+  owner: string | null; shares: ShareRow[]; roles: { role: Exclude<MemberRole, "custom">; actions: string[] }[];
+  /** every project permission, and the ones the signed-in person holds in this project (they can grant only those) */
+  actions: string[]; mine: string[]; canManage: boolean;
+}
 
-export const listShares = (id: string) => api<{ owner: string | null; shares: ShareRow[] }>("GET", `/api/projects/${id}/shares`);
+export const listShares = (id: string) => api<Members>("GET", `/api/projects/${id}/shares`);
 export const shareTargets = (id: string) => api<{ users: string[]; groups: string[] }>("GET", `/api/projects/${id}/share-targets`);
-export const putShare = (id: string, who: { user: string } | { group: string }, role: "viewer" | "editor") => api("PUT", `/api/projects/${id}/shares`, { ...who, role });
+export const putShare = (id: string, who: { user: string } | { group: string }, role: MemberRole, actions?: string[]) => api("PUT", `/api/projects/${id}/shares`, { ...who, role, ...(role === "custom" ? { actions: actions ?? [] } : {}) });
 export const removeShare = (id: string, shareId: string) => api("DELETE", `/api/projects/${id}/shares/${shareId}`);
 
 export interface PlanSummary { add: number; change: number; destroy: number; replace: number; destructive: boolean; resources: { address: string; type: string; actions: string[] }[] }

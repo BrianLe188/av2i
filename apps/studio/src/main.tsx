@@ -16,6 +16,7 @@ import { ConnectionPage } from "./pages/ConnectionPage.tsx";
 import { ConnectionsPage } from "./pages/ConnectionsPage.tsx";
 import { RequestPage } from "./pages/RequestPage.tsx";
 import { RequestsPage } from "./pages/RequestsPage.tsx";
+import { ProjectDetailPage } from "./pages/ProjectDetailPage.tsx";
 import { PoliciesPage } from "./pages/PoliciesPage.tsx";
 import { PolicyPage } from "./pages/PolicyPage.tsx";
 import { ProjectPage } from "./pages/ProjectPage.tsx";
@@ -36,6 +37,7 @@ function Root() {
                   <Route index element={<Navigate to="/dashboard" replace />} />
                   <Route path="dashboard" element={<Dashboard />} />
                   <Route path="projects" element={<ProjectsPage />} />
+                  <Route path="projects/:id" element={<ProjectDetailPage />} />
                   <Route path="users" element={<Guard action="user:List"><UsersPage /></Guard>} />
                   <Route path="groups" element={<Guard action="group:Manage"><GroupsPage /></Guard>} />
                   <Route path="groups/:id" element={<Guard action="group:Manage"><GroupPage /></Guard>} />
@@ -50,7 +52,7 @@ function Root() {
                   <Route path="*" element={<NotFound />} />
                 </Route>
                 {/* the canvas is a layout of its own: the whole window, no sidebar */}
-                <Route path="projects/:id" element={<ProjectPage />} />
+                <Route path="projects/:id/design" element={<ProjectPage />} />
                 <Route path="designer" element={<Navigate to="/projects" replace />} />
               </Routes>
             </BrowserRouter>

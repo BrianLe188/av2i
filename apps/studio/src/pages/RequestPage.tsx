@@ -61,7 +61,7 @@ export function RequestPage() {
               <ApplyBar
                 s={s} planRunId={r.planRunId} projectName={r.projectName} destructive={d.apply.destructive} going={going} blockers={d.apply.blockers.map((b) => b.code)} expiresAt={d.apply.expiresAt}
                 request={{ id: r.id, number: r.number, status: r.status, requester: r.requester, decidedBy: r.decidedBy, can: d.can }} canApplyNow={d.can.apply} canRequest={false} replaceable={[]} applyRun={null}
-                fail={fail} onChanged={load} onApplyQueued={() => navigate(`/projects/${r.projectId}`)}
+                fail={fail} onChanged={load} onApplyQueued={() => navigate(`/projects/${r.projectId}/design?run=1`)}
               />
             )}
             {!open && <p className="text-sm text-muted-foreground" data-testid="request-closed">{r.status === "applied" ? s.run.appliedDone : s.req.closedText}</p>}

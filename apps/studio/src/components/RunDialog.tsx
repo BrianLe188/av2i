@@ -9,9 +9,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { ApiError } from "../api.ts";
 import type { Strings } from "../i18n.ts";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { listConnections, setProjectConnection, type ConnectionRow } from "../connections.ts";
-import { connError } from "./connError.ts";
 import { cancelRun, getRun, listRuns, listVariables, preflight, queuePlan, removeVariable, runLogs, setVariable, type AppliedSummary, type Preflight, type PlanSummary, type RunDetail, type RunRow, type VariableRow } from "../projects.ts";
 import { ApplyBar, RescueBanner } from "./ApplyPanel.tsx";
 import { PlanSummaryCard } from "./PlanSummaryCard.tsx";
@@ -30,7 +27,6 @@ export function RunDialog({ s, projectId, projectName, open, onClose, beforeRun,
   const [error, setError] = useState<string | null>(null);
   const [pre, setPre] = useState<Preflight | null>(null);
   const [vars, setVars] = useState<VariableRow[] | null>(null);
-  const [conns, setConns] = useState<ConnectionRow[]>([]);
   const [detail, setDetail] = useState<RunDetail | null>(null);
   const last = useRef(0);
   const end = useRef<HTMLDivElement>(null);
@@ -48,7 +44,7 @@ export function RunDialog({ s, projectId, projectName, open, onClose, beforeRun,
       setCurrent((c) => c ?? l[0]?.id ?? null);
     } catch (e) { fail(e); }
   }, [projectId, fail]);
-  useEffect(() => { if (open) { setError(null); setCurrent(null); setPre(null); void refresh(); void preflight(projectId).then(setPre).catch(fail); if (canPlan) { void listConnections().then(setConns).catch(() => setConns([])); void loadVars(); } } }, [open, refresh, projectId, fail, loadVars, canPlan]);
+  useEffect(() => { if (open) { setError(null); setCurrent(null); setPre(null); void refresh(); void preflight(projectId).then(setPre).catch(fail); if (canPlan) void loadVars(); } }, [open, refresh, projectId, fail, loadVars, canPlan]);
 
   // follow the chosen run: new log lines and its status every second while it is waiting or running
   useEffect(() => {
@@ -109,9 +105,7 @@ export function RunDialog({ s, projectId, projectName, open, onClose, beforeRun,
           <DialogDescription>{s.run.text}</DialogDescription>
         </DialogHeader>
         {error && <Alert variant="destructive"><AlertDescription data-testid="run-error">{error}</AlertDescription></Alert>}
-        {canPlan && <ConnectionRow s={s} pre={pre} conns={conns} onChange={async (id) => {
-          try { await setProjectConnection(projectId, id); toast(s.conn.chosen); setPre(null); setPre(await preflight(projectId)); } catch (e) { setError(connError(e, s)); }
-        }} />}
+        <ConnectionRow s={s} pre={pre} projectId={projectId} />
         {pre?.rescuePending && <RescueBanner s={s} projectId={projectId} projectName={projectName} fail={fail} onChanged={async () => { setPre(await preflight(projectId)); await reloadDetail(); }} />}
         {canPlan && <Checks s={s} pre={pre} />}
         {canPlan && vars && vars.length > 0 && <Variables s={s} projectId={projectId} vars={vars} can={canSetVariables} onChanged={loadVars} fail={fail} />}
@@ -227,20 +221,14 @@ function identityRow(s: Strings, id: Preflight["identity"]): { ok: boolean; text
   return { ok: false, text: hint ?? s.run.idError, detail: id.message };
 }
 
-/** Which AWS connection the runs of this project use: only the ones the person may use are offered. */
-function ConnectionRow({ s, pre, conns, onChange }: { s: Strings; pre: Preflight | null; conns: ConnectionRow[]; onChange: (id: string | null) => Promise<void> }) {
-  const value = pre?.connection?.id ?? "none";
+/** The AWS connection the runs of this project use. It is chosen on the project page (DD-028); here it is shown, with the way there. */
+function ConnectionRow({ s, pre, projectId }: { s: Strings; pre: Preflight | null; projectId: string }) {
+  const navigate = useNavigate();
   return (
     <div className="flex items-center gap-2 text-xs" data-testid="run-connection">
       <span className="font-medium">{s.conn.choose}</span>
-      <Select value={value} onValueChange={(v) => void onChange(v === "none" ? null : v)} disabled={!pre}>
-        <SelectTrigger size="sm" className="h-8 w-64" data-testid="run-connection-select"><SelectValue /></SelectTrigger>
-        <SelectContent>
-          <SelectItem value="none">{s.conn.chooseNone}</SelectItem>
-          {conns.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}{c.planOnly ? ` · ${s.conn.planOnly}` : ""}</SelectItem>)}
-          {pre?.connection && !conns.some((c) => c.id === pre.connection!.id) && <SelectItem value={pre.connection.id}>{pre.connection.name}</SelectItem>}
-        </SelectContent>
-      </Select>
+      <Badge variant="outline" data-testid="run-connection-name">{pre?.connection?.name ?? s.conn.chooseNone}</Badge>
+      <Button type="button" size="sm" variant="ghost" onClick={() => navigate(`/projects/${projectId}`)} data-testid="run-connection-change">{s.pd.overview}</Button>
     </div>
   );
 }

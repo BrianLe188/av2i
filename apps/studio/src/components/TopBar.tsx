@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { AlertTriangle, ArrowLeft, Check, Download, History, Play, Share2, Loader2, FolderOpen, KeyRound, Layers, LogOut, Moon, Redo2, Save, Sun, Undo2, UserRound } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, Download, History, Play, Users, Loader2, FolderOpen, KeyRound, Layers, LogOut, Moon, Redo2, Save, Sun, Undo2, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent,
@@ -37,8 +37,8 @@ interface Props {
   readOnly: boolean;
   onStatusClick: () => void;
   onHistory: () => void;
-  /** present only when the person may share this project */
-  onShare?: () => void;
+  /** opens the Members tab of the project page */
+  onMembers: () => void;
   /** present only when the person may run plans on this project */
   onRun?: () => void;
   /** an apply left a state that was not saved: the Plan button says so */
@@ -57,7 +57,7 @@ export function TopBar(p: Props) {
       {p.readOnly ? <Badge variant="secondary" data-testid="view-only">{s.proj.viewOnly}</Badge> : <SaveStatus status={p.status} s={s} onClick={p.onStatusClick} />}
       <div className="flex-1" />
       {p.onRun && <Button variant={p.runAlert ? "destructive" : "outline"} size="sm" onClick={p.onRun} data-testid="run" title={p.runAlert ? s.run.rescue.title : undefined}><Play />{s.run.plan}</Button>}
-      {p.onShare && <Button variant="outline" size="sm" onClick={p.onShare} data-testid="share"><Share2 />{s.proj.share}</Button>}
+      <Button variant="outline" size="sm" onClick={p.onMembers} data-testid="members"><Users />{s.pd.members}</Button>
       <Button variant="outline" size="sm" onClick={p.onHistory} data-testid="history"><History />{s.proj.history}</Button>
       <Button variant="outline" size="sm" onClick={p.onUndo} disabled={!p.canUndo || p.readOnly} data-testid="undo"><Undo2 />{s.undo}</Button>
       <Button variant="outline" size="sm" onClick={p.onRedo} disabled={!p.canRedo || p.readOnly} data-testid="redo"><Redo2 />{s.redo}</Button>

@@ -91,7 +91,7 @@ describe.skipIf(!available)("AWS connections", () => {
     expect((await t.call("POST", `/api/connections/${connId}/test`, { cookie: admin })).body.result.apply).toBeNull();
   });
 
-  it("makes a project choose a connection it may use, and refuses a plan without one or without the right to use it", async () => {
+  it("makes a project choose a connection its owner may use, and refuses a plan without one", async () => {
     expect((await plan(alice.cookie)).body.error.code).toBe("no_connection");
     expect((await t.call("PUT", `/api/projects/${projectId}/connection`, { cookie: alice.cookie, body: { connectionId: connId } })).body.error.code).toBe("no_such_connection");
     await policyFor(alice.id, "AliceUsesProd", ["connection:Use"], `av2i:connection/${connId}`);
@@ -134,13 +134,17 @@ describe.skipIf(!available)("AWS connections", () => {
     await t.call("PATCH", `/api/connections/${connId}`, { cookie: admin, body: { planRoleArn: PLAN } });
   });
 
-  it("answers preflight with the assumed role and refuses it to someone who may not use the connection", async () => {
+  it("answers preflight with the assumed role, and lets whoever may plan use the project's connection without connection:Use", async () => {
     const p = (await t.call("GET", `/api/projects/${projectId}/preflight`, { cookie: alice.cookie })).body;
     expect(p.identity).toMatchObject({ ok: true, via: "role", roleArn: PLAN, account: "999988887777" });
     expect(p.connection).toMatchObject({ name: "prod", planOnly: true });
+    // connection:Use was needed to choose the connection (DD-028), not to plan against it
     await t.db.deleteFrom("policy_attachments").where("user_id", "=", alice.id).execute();
-    expect((await t.call("GET", `/api/projects/${projectId}/preflight`, { cookie: alice.cookie })).body.identity).toMatchObject({ ok: false, reason: "forbidden" });
-    expect((await plan(alice.cookie)).body.error.code).toBe("connection_forbidden");
+    expect((await t.call("GET", `/api/projects/${projectId}/preflight`, { cookie: alice.cookie })).body.identity).toMatchObject({ ok: true, via: "role" });
+    expect((await plan(alice.cookie)).status).toBe(201);
+    // but she can no longer choose another connection
+    const other = await create(admin, { name: "other", planRoleArn: PLAN });
+    expect((await t.call("PUT", `/api/projects/${projectId}/connection`, { cookie: alice.cookie, body: { connectionId: other.body.connection.id } })).body.error.code).toBe("no_such_connection");
   });
 
   it("cannot delete a connection a project uses, and audits without any key", async () => {

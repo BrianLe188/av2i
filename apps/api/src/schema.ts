@@ -110,7 +110,8 @@ export interface ProjectSharesTable {
   project_id: string;
   user_id: string | null;
   group_id: string | null;
-  role: "viewer" | "editor";
+  role: "viewer" | "editor" | "runner" | "approver" | "maintainer" | "custom";
+  actions: Generated<string[]>;
   granted_by: string | null;
   created_at: Ts;
 }

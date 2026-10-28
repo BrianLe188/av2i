@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { variablesOf } from "@av2i/generator";
-import { addMember, postgresAvailable, testApp, type TestApp } from "./helpers.ts";
+import { addMember, postgresAvailable, testApp, type TestApp, memberOf } from "./helpers.ts";
 import { claim } from "../src/runs/queue.ts";
 import { execute } from "../src/runs/runner.ts";
 
@@ -39,7 +39,7 @@ describe.skipIf(!available)("project variables", () => {
     alice = await addMember(t, admin, "alice", ["ProjectEditor"]);
     editor = await addMember(t, admin, "erin", ["ProjectEditor"]);
     projectId = (await t.call("POST", "/api/projects", { cookie: alice.cookie, body: { design: withPassword } })).body.project.id;
-    await t.db.insertInto("project_shares").values({ project_id: projectId, user_id: editor.id, group_id: null, role: "editor" }).execute();
+    await t.db.insertInto("project_shares").values({ project_id: projectId, user_id: editor.id, group_id: null, ...memberOf("editor") }).execute();
   });
   afterAll(async () => { await t.close(); });
 

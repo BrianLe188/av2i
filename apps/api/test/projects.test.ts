@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { addMember, blankDesign, postgresAvailable, testApp, type TestApp } from "./helpers.ts";
+import { addMember, blankDesign, memberOf, postgresAvailable, testApp, type TestApp } from "./helpers.ts";
 
 const available = await postgresAvailable();
 
@@ -28,7 +28,7 @@ describe.skipIf(!available)("projects", () => {
     await t.db.insertInto("policy_attachments").values({ policy_id: p.id, user_id: userId, group_id: null }).execute();
   };
   const share = (projectId: string, who: { user?: string; group?: string }, role: "viewer" | "editor") =>
-    t.db.insertInto("project_shares").values({ project_id: projectId, user_id: who.user ?? null, group_id: who.group ?? null, role }).execute();
+    t.db.insertInto("project_shares").values({ project_id: projectId, user_id: who.user ?? null, group_id: who.group ?? null, ...memberOf(role) }).execute();
 
   it("needs project:Create, and a person with no policy cannot make a project", async () => {
     expect((await create(nobody.cookie)).status).toBe(403);
@@ -142,7 +142,7 @@ describe.skipIf(!available)("projects", () => {
       const seen = await t.call("GET", "/api/projects", { cookie: nobody.cookie });
       expect(seen.body.projects.map((p: any) => p.id)).toContain(id);
       expect((await save(nobody.cookie, id, blankDesign("Private"), 1)).status).toBe(403);
-      await t.db.updateTable("project_shares").set({ role: "editor" }).where("project_id", "=", id).execute();
+      await t.db.updateTable("project_shares").set(memberOf("editor")).where("project_id", "=", id).execute();
       expect((await save(nobody.cookie, id, blankDesign("Private"), 1)).status).toBe(200);
 
       const group = await t.db.insertInto("groups").values({ name: "team" }).returning("id").executeTakeFirstOrThrow();

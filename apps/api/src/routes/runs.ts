@@ -34,10 +34,6 @@ const PREFLIGHT = new Map<string, { at: number; stamp: string; result: unknown }
 export function runRoutes(app: FastifyInstance, ctx: Ctx): void {
   const { db, config, aws } = ctx;
   const { actor, authorize } = projectAccess(ctx);
-  /** what the signed-in person may do with a connection: the policy decides, ownership of the project gives nothing */
-  const mayUse = async (req: Parameters<typeof authorize>[0], connectionId: string) =>
-    evaluate(await authOf(req).statements(), { action: "connection:Use", resource: resource.connection(connectionId) }).allowed;
-
   const projectOf = async (id: string) => {
     const row = await db.selectFrom("projects").select(["id", "owner_id", "design", "name", "connection_id"]).where("id", "=", id).where("deleted_at", "is", null).executeTakeFirst();
     if (!row) throw notFound("No such project.");
@@ -66,11 +62,8 @@ export function runRoutes(app: FastifyInstance, ctx: Ctx): void {
     if (structural.length) throw new HttpError(422, "design_invalid", "The design is not valid.", { problems: structural.map((p) => `${p.where}: ${p.message}`) });
     const errors = runRules(design, registry).filter((f) => f.severity === "error");
     if (errors.length) throw new HttpError(422, "design_has_errors", "Fix the errors in the design first.", { findings: errors.map((f) => ({ rule: f.rule, targets: f.targets, message: f.message })) });
-    if (project.connection_id) {
-      if (!(await mayUse(req, project.connection_id))) throw new HttpError(403, "connection_forbidden", "You may not run against this project's AWS connection.");
-    } else if (!config.runWithServerIdentity) {
-      throw new HttpError(422, "no_connection", "Choose an AWS connection for this project first.");
-    }
+    // whoever may plan the project plans against its connection; connection:Use was needed to choose it (DD-028)
+    if (!project.connection_id && !config.runWithServerIdentity) throw new HttpError(422, "no_connection", "Choose an AWS connection for this project first.");
     const pending = await db.selectFrom("state_rescues").select("id").where("project_id", "=", id).where("resolved_at", "is", null).executeTakeFirst();
     if (pending) throw new HttpError(409, "rescue_pending", "An apply left a state that was not saved. Restore, download or dismiss it before running anything.");
     const required = requiredOf(design);
@@ -106,7 +99,6 @@ export function runRoutes(app: FastifyInstance, ctx: Ctx): void {
         const r = await aws.identity();
         return r.ok ? { ...r, via: "server" as const } : r;
       }
-      if (!(await mayUse(req, connection.id))) return { ok: false as const, reason: "forbidden" as const, message: "You may not use this connection." };
       const cached = PREFLIGHT.get(connection.id);
       if (cached && cached.at > Date.now() - 60_000 && cached.stamp === `${connection.updated_at.getTime()}`) return cached.result;
       const a = await aws.assume({ roleArn: connection.plan_role_arn, externalId: connection.external_id, sessionName: sessionName("preflight", id) });

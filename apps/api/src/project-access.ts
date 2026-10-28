@@ -1,4 +1,4 @@
-import { evaluate, ownerStatements, resource, shareStatements, type Action, type ShareRole, type Statement } from "@av2i/authz";
+import { evaluate, memberStatements, ownerStatements, resource, type Action, type Statement } from "@av2i/authz";
 import type { FastifyRequest } from "fastify";
 import { audit } from "./audit.ts";
 import { authOf, type Ctx } from "./context.ts";
@@ -14,7 +14,7 @@ export function projectAccess(ctx: Ctx) {
 
   /** The shares that reach this person: given to them, or to a group they belong to. */
   const sharesOf = async (userId: string, projectIds?: string[]) => {
-    let q = db.selectFrom("project_shares").select(["project_id", "role"]).where((eb) => eb.or([
+    let q = db.selectFrom("project_shares").select(["project_id", "role", "actions"]).where((eb) => eb.or([
       eb("user_id", "=", userId),
       eb("group_id", "in", eb.selectFrom("group_members").select("group_id").where("user_id", "=", userId)),
     ]));
@@ -27,7 +27,7 @@ export function projectAccess(ctx: Ctx) {
     const auth = authOf(req);
     const extra: Statement[] = [];
     if (project.owner_id === auth.session.userId) extra.push(...ownerStatements(project.id));
-    for (const s of await sharesOf(auth.session.userId, [project.id])) extra.push(...shareStatements(s.role as ShareRole, project.id));
+    for (const s of await sharesOf(auth.session.userId, [project.id])) extra.push(...memberStatements(s.actions as Action[], project.id, s.role));
     return [...(await auth.statements()), ...auth.scope(extra)];
   };
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  ACTIONS, ADMINISTRATOR, checkNewPassword, BUILTIN_POLICIES, allowedActions, can, evaluate, matchesAction, matchesResource, ownerStatements, parseDocument, resource, restrictToActions, shareStatements,
+  ACTIONS, ADMINISTRATOR, checkNewPassword, BUILTIN_POLICIES, allowedActions, can, evaluate, matchesAction, matchesResource, memberStatements, ownerStatements, parseDocument, resource, restrictToActions, shareStatements,
   type Statement,
 } from "../src/index.ts";
 
@@ -43,6 +43,12 @@ describe("evaluate", () => {
   it("adds the owner and the share role to the allows, and a Deny still wins over them", () => {
     expect(can(ownerStatements("p"), "project:Delete", resource.project("p"))).toBe(true);
     expect(can(ownerStatements("p"), "project:Delete", resource.project("q"))).toBe(false);
+    expect(can(ownerStatements("p"), "run:ApplyDestructive", resource.project("p"))).toBe(true);
+    expect(can(ownerStatements("p"), "state:Write", resource.project("p"))).toBe(true);
+    expect(can(shareStatements("runner", "p"), "run:Plan", resource.project("p"))).toBe(true);
+    expect(can(shareStatements("runner", "p"), "run:Apply", resource.project("p"))).toBe(false);
+    expect(can(shareStatements("approver", "p"), "run:Approve", resource.project("p"))).toBe(true);
+    expect(can(memberStatements(["project:Read", "run:ApplyDestructive"], "p"), "run:ApplyDestructive", resource.project("p"))).toBe(true);
     expect(can(shareStatements("viewer", "p"), "project:Write", resource.project("p"))).toBe(false);
     expect(can(shareStatements("editor", "p"), "project:Write", resource.project("p"))).toBe(true);
     expect(can([...shareStatements("editor", "p"), deny(["project:Write"], ["*"])], "project:Write", resource.project("p"))).toBe(false);

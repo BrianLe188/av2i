@@ -1,4 +1,4 @@
-import { evaluate, ownerStatements, resource, shareStatements, type Action, type ShareRole, type Statement } from "@av2i/authz";
+import { evaluate, memberStatements, ownerStatements, PROJECT_ACTIONS, PROJECT_ROLES, resource, type Action, type Statement } from "@av2i/authz";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { sql, type Transaction } from "kysely";
 import { audit } from "../audit.ts";
@@ -50,12 +50,12 @@ export function projectRoutes(app: FastifyInstance, ctx: Ctx): void {
       .orderBy("p.updated_at", "desc")
       .limit(500)
       .execute();
-    const shares = new Map<string, ShareRole[]>();
-    for (const s of await sharesOf(auth.session.userId)) shares.set(s.project_id, [...(shares.get(s.project_id) ?? []), s.role as ShareRole]);
+    const shares = new Map<string, { role: string; actions: string[] }[]>();
+    for (const s of await sharesOf(auth.session.userId)) shares.set(s.project_id, [...(shares.get(s.project_id) ?? []), { role: s.role, actions: s.actions }]);
     const stated = rows.map((r) => {
       const res = resource.project(r.id);
       const own = r.owner_id === auth.session.userId ? auth.scope(ownerStatements(r.id)) : [];
-      const shared = auth.scope((shares.get(r.id) ?? []).flatMap((role) => shareStatements(role, r.id)));
+      const shared = auth.scope((shares.get(r.id) ?? []).flatMap((m) => memberStatements(m.actions as Action[], r.id, m.role)));
       const all = [...policies, ...own, ...shared];
       // a project that only a policy opens also needs project:List; owning or being shared one is enough by itself
       const visible = evaluate(all, { action: "project:Read", resource: res }).allowed && (own.length > 0 || shared.length > 0 || evaluate(policies, { action: "project:List", resource: res }).allowed);
@@ -91,10 +91,10 @@ export function projectRoutes(app: FastifyInstance, ctx: Ctx): void {
     const row = await load(id);
     const statements = await authorize(req, row, "project:Read");
     const res = resource.project(id);
-    const full = await db.selectFrom("projects").select(["design", "connection_id"]).where("id", "=", id).executeTakeFirstOrThrow();
+    const full = await db.selectFrom("projects").select(["design", "connection_id", "created_at"]).where("id", "=", id).executeTakeFirstOrThrow();
     const conn = full.connection_id ? await db.selectFrom("aws_connections").select(["id", "name"]).where("id", "=", full.connection_id).executeTakeFirst() : undefined;
     return {
-      project: { ...summary(row, await nameOf(row.owner_id), await nameOf(row.updated_by)), design: full.design, connection: conn ?? null, rescuePending: !!(await db.selectFrom("state_rescues").select("id").where("project_id", "=", id).where("resolved_at", "is", null).executeTakeFirst()) },
+      project: { ...summary(row, await nameOf(row.owner_id), await nameOf(row.updated_by)), design: full.design, createdAt: full.created_at, connection: conn ?? null, rescuePending: !!(await db.selectFrom("state_rescues").select("id").where("project_id", "=", id).where("resolved_at", "is", null).executeTakeFirst()) },
       can: {
         write: evaluate(statements, { action: "project:Write", resource: res }).allowed,
         delete: evaluate(statements, { action: "project:Delete", resource: res }).allowed,
@@ -200,17 +200,23 @@ export function projectRoutes(app: FastifyInstance, ctx: Ctx): void {
 
   const shareParams = { type: "object", required: ["id", "shareId"], properties: { id: { type: "string", format: "uuid" }, shareId: { type: "string", format: "uuid" } } } as const;
 
+  /** The members of a project, visible to whoever may read it, with the roles and permissions a member can be given and which of them the caller holds (DD-028). */
   app.get("/api/projects/:id/shares", { schema: { params: idParams } }, async (req) => {
     const { id } = req.params as { id: string };
     const row = await load(id);
-    await authorize(req, row, "project:Share");
+    const statements = await authorize(req, row, "project:Read");
+    const res = resource.project(id);
     const rows = await db.selectFrom("project_shares as s")
       .leftJoin("users as u", "u.id", "s.user_id").leftJoin("groups as g", "g.id", "s.group_id").leftJoin("users as by", "by.id", "s.granted_by")
-      .select(["s.id", "s.role", "s.created_at", "u.username as user", "g.name as group", "by.username as by"])
+      .select(["s.id", "s.role", "s.actions", "s.created_at", "u.username as user", "g.name as group", "by.username as by"])
       .where("s.project_id", "=", id).orderBy("s.created_at").execute();
     return {
       owner: await nameOf(row.owner_id),
-      shares: rows.map((s) => ({ id: s.id, kind: s.user ? "user" : "group", name: s.user ?? s.group, role: s.role, grantedBy: s.by, createdAt: s.created_at })),
+      shares: rows.map((s) => ({ id: s.id, kind: s.user ? "user" : "group", name: s.user ?? s.group, role: s.role, actions: s.actions, grantedBy: s.by, createdAt: s.created_at })),
+      roles: Object.entries(PROJECT_ROLES).map(([role, actions]) => ({ role, actions })),
+      actions: PROJECT_ACTIONS,
+      mine: PROJECT_ACTIONS.filter((a) => evaluate(statements, { action: a, resource: res }).allowed),
+      canManage: evaluate(statements, { action: "project:Share", resource: res }).allowed,
     };
   });
 
@@ -227,15 +233,22 @@ export function projectRoutes(app: FastifyInstance, ctx: Ctx): void {
     schema: {
       params: idParams,
       body: { type: "object", required: ["role"], additionalProperties: false, properties: {
-        user: { type: "string", maxLength: 64 }, group: { type: "string", maxLength: 64 }, role: { type: "string", enum: ["viewer", "editor"] },
+        user: { type: "string", maxLength: 64 }, group: { type: "string", maxLength: 64 }, role: { type: "string", enum: [...Object.keys(PROJECT_ROLES), "custom"] },
+        actions: { type: "array", items: { type: "string", enum: [...PROJECT_ACTIONS] }, maxItems: PROJECT_ACTIONS.length },
       } },
     },
   }, async (req) => {
     const { id } = req.params as { id: string };
-    const body = req.body as { user?: string; group?: string; role: ShareRole };
+    const body = req.body as { user?: string; group?: string; role: keyof typeof PROJECT_ROLES | "custom"; actions?: string[] };
     const row = await load(id);
-    await authorize(req, row, "project:Share");
+    const statements = await authorize(req, row, "project:Share");
     if (Boolean(body.user) === Boolean(body.group)) throw badRequest("invalid_share", "Name either a user or a group.");
+    // a role is its set of permissions; a custom member gets the ones ticked, and always the right to read
+    const actions: string[] = body.role === "custom" ? [...new Set(["project:Read", ...(body.actions ?? [])])] : [...PROJECT_ROLES[body.role]];
+    // nobody can give more than they hold in the project
+    const res = resource.project(id);
+    const beyond = actions.filter((a) => !evaluate(statements, { action: a as Action, resource: res }).allowed);
+    if (beyond.length) throw new HttpError(403, "grant_beyond_own", `You can only grant what you hold in this project: ${beyond.join(", ")} are beyond that.`, { actions: beyond });
     const me = actor(req);
     let target: { column: "user_id" | "group_id"; id: string; name: string };
     if (body.user) {
@@ -250,9 +263,9 @@ export function projectRoutes(app: FastifyInstance, ctx: Ctx): void {
     }
     const existing = await db.selectFrom("project_shares").select("id").where("project_id", "=", id).where(target.column, "=", target.id).executeTakeFirst();
     const share = existing
-      ? await db.updateTable("project_shares").set({ role: body.role, granted_by: me.userId }).where("id", "=", existing.id).returning("id").executeTakeFirstOrThrow()
-      : await db.insertInto("project_shares").values({ project_id: id, [target.column]: target.id, role: body.role, granted_by: me.userId }).returning("id").executeTakeFirstOrThrow();
-    await audit(db, { actor: me, action: "project.shared", resource: resource.project(id), outcome: "success", ip: req.ip, details: { with: target.name, kind: body.user ? "user" : "group", role: body.role } });
+      ? await db.updateTable("project_shares").set({ role: body.role, actions, granted_by: me.userId }).where("id", "=", existing.id).returning("id").executeTakeFirstOrThrow()
+      : await db.insertInto("project_shares").values({ project_id: id, [target.column]: target.id, role: body.role, actions, granted_by: me.userId }).returning("id").executeTakeFirstOrThrow();
+    await audit(db, { actor: me, action: "project.shared", resource: resource.project(id), outcome: "success", ip: req.ip, details: { with: target.name, kind: body.user ? "user" : "group", role: body.role, actions } });
     return { id: share.id };
   });
 

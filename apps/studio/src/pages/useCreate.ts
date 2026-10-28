@@ -14,7 +14,7 @@ export function useCreateProject(): (design?: Design, name?: string) => Promise<
     try {
       const p = await createProject(design, name);
       toast(s.proj.created);
-      navigate(`/projects/${p.id}`);
+      navigate(`/projects/${p.id}/design`);
     } catch (e) {
       toast.error(describe(e, s));
     }
