@@ -32,6 +32,7 @@ Numbered `DD-nnn` to keep them apart from the specification's `D-nnn` ([../spec/
 | DD-025 | decided | AWS connections: a project's runs assume a role, the platform keeps no AWS secret |
 | DD-026 | decided | Apply the approved plan; keep the state right when an apply goes wrong |
 | DD-027 | decided | Requests: asking for an apply to be approved, with a talk like a pull request |
+| DD-028 | decided | A project page, and members with project permissions granted in the project |
 
 ## DD-001 Language and runtime
 
@@ -437,3 +438,11 @@ A member who may plan **sends a plan for approval**; the people who may approve 
 An approval covers that plan only and lets the requester or the approver apply it; a person who may both apply and approve applies at once. A plan that
 deletes or replaces needs an approver who holds `run:ApplyDestructive`. A request that went out of date takes a newer plan (the approval is cleared, the
 talk stays). Four states (waiting, approved, applied, closed); a generic table with a `kind` column, one kind for now. No email yet.
+
+## DD-028 A project page, and members with project permissions granted in the project
+
+Status: decided (owner, 28 October 2026); the design is in [project-members.md](project-members.md).
+
+System permissions stay on users and groups; permissions of one project are granted in it. A project opens on a **project page** (overview, members, requests);
+the canvas is `/projects/:id/design`. A member has a role (viewer, editor, runner, approver, maintainer) or a custom set of the 11 project permissions, and
+whoever shares can grant only what they hold. The owner holds all 11. `connection:Use` is needed to choose a project's connection, not to plan against it.
