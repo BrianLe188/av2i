@@ -2,8 +2,9 @@ import { resource } from "@av2i/authz";
 import type { FastifyInstance } from "fastify";
 import { audit } from "../audit.ts";
 import { sessionOnly, type Ctx } from "../context.ts";
-import { notFound } from "../errors.ts";
+import { badRequest, conflict, notFound } from "../errors.ts";
 import { projectAccess } from "../project-access.ts";
+import { backendOf, parseBackend } from "../runs/backend.ts";
 import { open, requireKey } from "../runs/crypto.ts";
 import { diffStates, instancesOf, listOutputs, listResources, summarizeState } from "../runs/stateview.ts";
 
@@ -21,7 +22,7 @@ export function stateViewRoutes(app: FastifyInstance, ctx: Ctx): void {
   const { actor, authorize } = projectAccess(ctx);
 
   const projectOf = async (id: string) => {
-    const p = await db.selectFrom("projects").select(["id", "owner_id", "name"]).where("id", "=", id).where("deleted_at", "is", null).executeTakeFirst();
+    const p = await db.selectFrom("projects").select(["id", "owner_id", "name", "state_backend"]).where("id", "=", id).where("deleted_at", "is", null).executeTakeFirst();
     if (!p) throw notFound("No such project.");
     return p;
   };
@@ -32,9 +33,27 @@ export function stateViewRoutes(app: FastifyInstance, ctx: Ctx): void {
   };
   const stateOf = (v: { key_id: string; nonce: Buffer; data: Buffer }) => open(requireKey(config.stateKey), { keyId: v.key_id, nonce: v.nonce, data: v.data });
 
+  /** Chooses where the state is kept. A project that already has state must move it with a migration (DD-032), so only a project with none can switch here. */
+  app.put("/api/projects/:id/state/backend", { schema: { params: projectParams, body: { type: "object", required: ["backend"], properties: { backend: { type: "object" } } } } }, async (req) => {
+    const { id } = req.params as { id: string };
+    const p = await projectOf(id);
+    await authorize(req, p, "state:Write");
+    sessionOnly(req);
+    const parsed = parseBackend((req.body as { backend: unknown }).backend);
+    if (!parsed.ok) throw badRequest("invalid_backend", parsed.message);
+    const has = await db.selectFrom("state_versions").select("id").where("project_id", "=", id).limit(1).executeTakeFirst();
+    if (has) throw conflict("migration_required", "The project already has state; it has to be moved with a migration.");
+    const busy = await db.selectFrom("runs").select("id").where("project_id", "=", id).where("status", "in", ["queued", "running"]).limit(1).executeTakeFirst();
+    if (busy) throw conflict("run_active", "A run is queued or running for this project.");
+    await db.updateTable("projects").set({ state_backend: parsed.backend.kind === "platform" ? null : JSON.stringify(parsed.backend) }).where("id", "=", id).execute();
+    await audit(db, { actor: actor(req), action: "state.backend_set", resource: resource.project(id), outcome: "success", ip: req.ip, details: { kind: parsed.backend.kind } });
+    return { backend: parsed.backend };
+  });
+
   app.get("/api/projects/:id/state/versions", { schema: { params: projectParams } }, async (req) => {
     const { id } = req.params as { id: string };
-    await authorize(req, await projectOf(id), "state:Read");
+    const p = await projectOf(id);
+    await authorize(req, p, "state:Read");
     const rows = await db.selectFrom("state_versions as v").leftJoin("runs as r", "r.id", "v.run_id").leftJoin("users as u", "u.id", "r.created_by")
       .select(["v.id", "v.serial", "v.lineage", "v.run_id", "v.created_at", "v.resources", "v.outputs", "v.bytes", "v.key_id", "v.nonce", "v.data", "r.kind as run_kind", "u.username as by"])
       .where("v.project_id", "=", id).orderBy("v.id", "desc").limit(LIST).execute();
@@ -50,7 +69,7 @@ export function stateViewRoutes(app: FastifyInstance, ctx: Ctx): void {
       }
       out.push({ id: v.id, serial: v.serial, lineage: v.lineage, runId: v.run_id, runKind: v.run_kind, by: v.by, createdAt: v.created_at, resources, outputs, bytes });
     }
-    return { versions: out, backend: { kind: "platform" } };
+    return { versions: out, backend: backendOf(p.state_backend) };
   });
 
   app.get("/api/projects/:id/state/versions/:vid", { schema: { params: idParams } }, async (req) => {

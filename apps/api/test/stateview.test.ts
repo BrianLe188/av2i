@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { addMember, memberOf, postgresAvailable, testApp, blankDesign, type TestApp } from "./helpers.ts";
+import { backendOf, parseBackend, s3BackendFile } from "../src/runs/backend.ts";
 import { seal } from "../src/runs/crypto.ts";
 import { addressOf, diffStates, instancesOf, listOutputs, listResources, redactedAttributes, summarizeState } from "../src/runs/stateview.ts";
 
@@ -45,6 +46,27 @@ describe("reading a state", () => {
 });
 
 const available = await postgresAvailable();
+
+describe("the state backend", () => {
+  const good = { kind: "s3", bucket: "my-state", key: "env/prod.tfstate", region: "eu-west-1" };
+  it("accepts a sound S3 backend and refuses what could break out of the file", () => {
+    expect(parseBackend(good)).toEqual({ ok: true, backend: { ...good, encrypt: true } });
+    expect(parseBackend({ ...good, endpoint: "http://moto:5000", usePathStyle: true })).toMatchObject({ ok: true });
+    for (const bad of [{ bucket: "A_B" }, { key: '../x' }, { key: 'a"b' }, { region: "nowhere" }, { endpoint: "ftp://x" }, { kms: "nope" }, { kind: "gcs" }]) expect(parseBackend({ ...good, ...bad }).ok).toBe(false);
+    expect(backendOf({ junk: 1 })).toEqual({ kind: "platform" });
+  });
+
+  it("writes the block: lock file only for an apply, path style and endpoint for an S3-compatible server", () => {
+    const b = (parseBackend({ ...good, endpoint: "http://moto:5000", usePathStyle: true, kms: "alias/state" }) as { backend: Parameters<typeof s3BackendFile>[0] }).backend;
+    const plan = s3BackendFile(b, false), apply = s3BackendFile(b, true);
+    expect(plan).toContain('bucket = "my-state"');
+    expect(plan).toContain("use_path_style = true");
+    expect(plan).toContain('endpoints = { s3 = "http://moto:5000" }');
+    expect(plan).toContain('kms_key_id = "alias/state"');
+    expect(plan).not.toContain("use_lockfile");
+    expect(apply).toContain("use_lockfile = true");
+  });
+});
 
 describe.skipIf(!available)("the state viewer API", () => {
   let t: TestApp;
@@ -123,5 +145,16 @@ describe.skipIf(!available)("the state viewer API", () => {
     const log = JSON.stringify(await t.db.selectFrom("audit_log").select(["action", "details"]).where("action", "=", "state.downloaded").execute());
     expect(log).toContain("\"serial\":2");
     expect(log).not.toContain("hunter2");
+  });
+
+  it("moves a project with no state to S3, and refuses once it has state or a run is active", async () => {
+    const fresh = (await t.call("POST", "/api/projects", { cookie: alice.cookie, body: { design: blankDesign("Fresh") } })).body.project.id;
+    const put = (id: string, cookie: string, backend: object) => t.call("PUT", `/api/projects/${id}/state/backend`, { cookie, body: { backend } });
+    const s3 = { kind: "s3", bucket: "my-state", key: "k.tfstate", region: "eu-west-1" };
+    expect((await put(fresh, outsider.cookie, s3)).status).toBe(404);
+    expect((await put(fresh, alice.cookie, { ...s3, bucket: "X" })).body.error.code).toBe("invalid_backend");
+    expect((await put(fresh, alice.cookie, s3)).status).toBe(200);
+    expect((await t.call("GET", `/api/projects/${fresh}/state/versions`, { cookie: alice.cookie })).body.backend).toMatchObject({ kind: "s3", bucket: "my-state" });
+    expect((await put(projectId, writer.cookie, s3)).body.error.code).toBe("migration_required");
   });
 });

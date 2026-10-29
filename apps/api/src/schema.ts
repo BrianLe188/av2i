@@ -95,6 +95,7 @@ export interface ProjectsTable {
   deleted_at: TsNull;
   connection_id: ColumnType<string | null, string | null | undefined, string | null>;
   request_seq: Generated<number>;
+  state_backend: ColumnType<unknown, string | null | undefined, string | null>;
 }
 
 export interface ProjectVersionsTable {

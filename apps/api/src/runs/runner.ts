@@ -12,6 +12,7 @@ import { storeRescue } from "./rescue.ts";
 import { closeAfterApply } from "../requests.ts";
 import type { Db } from "../db.ts";
 import { open, requireKey, seal } from "./crypto.ts";
+import { backendOf, s3BackendFile } from "./backend.ts";
 import { requiredOf, valuesOf } from "./variables.ts";
 import { summarizePlan } from "./plan.ts";
 import type { Claimed } from "./queue.ts";
@@ -148,7 +149,9 @@ export async function execute(db: Db, config: Config, claimed: Claimed, aws: Aws
     // the folder carries the run's id so that, after a crash, an errored.tfstate in it can be saved instead of deleted
     const work = (dir = mkdtempSync(join(config.runsDir, `run-${claimed.id}-`)));
     for (const [name, text] of Object.entries(generate(claimed.design as Design))) if (name.endsWith(".tf")) writeFileSync(join(work, name), text);
-    writeFileSync(join(work, "backend.tf"), backendFile(config, claimed.project_id));
+    const backend = backendOf((await db.selectFrom("projects").select("state_backend").where("id", "=", claimed.project_id).executeTakeFirst())?.state_backend);
+    // a plan on S3 takes no lock, so the plan role can stay read-only; an apply locks with the native lock file (DD-032)
+    writeFileSync(join(work, "backend.tf"), backend.kind === "s3" ? s3BackendFile(backend, isApply) : backendFile(config, claimed.project_id));
     const env: NodeJS.ProcessEnv = { HOME: work, TF_IN_AUTOMATION: "1", TF_INPUT: "0", TF_PLUGIN_CACHE_DIR: join(config.runsDir, "plugin-cache"), TF_HTTP_USERNAME: "run", TF_HTTP_PASSWORD: claimed.token };
     for (const [k, v] of Object.entries(process.env)) if (v !== undefined && PASS.test(k)) env[k] = v;
     const who = await runIdentity({ db, config, aws }, claimed);
@@ -189,7 +192,7 @@ export async function execute(db: Db, config: Config, claimed: Claimed, aws: Aws
       applied = m ? { added: Number(m[1]), changed: Number(m[2]), destroyed: Number(m[3]) } : null;
       if (applied) await db.updateTable("runs").set({ summary: JSON.stringify(applied) }).where("id", "=", claimed.id).execute();
     } else {
-      await step("plan", ["plan", "-input=false", "-no-color", "-lock=true", "-out=plan.bin"]);
+      await step("plan", ["plan", "-input=false", "-no-color", `-lock=${backend.kind === "s3" ? "false" : "true"}`, "-out=plan.bin"]);
       const shown = await step("show -json", ["show", "-json", "plan.bin"], true);
       const summary = summarizePlan(JSON.parse(shown.stdout));
       log.line(`Plan: ${summary.add} to add, ${summary.change} to change, ${summary.destroy} to destroy, ${summary.replace} to replace.`);
