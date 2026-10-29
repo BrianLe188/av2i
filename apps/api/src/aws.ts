@@ -1,5 +1,8 @@
+import { GetBucketVersioningCommand, GetObjectCommand, HeadBucketCommand, HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { AssumeRoleCommand, GetCallerIdentityCommand, STSClient } from "@aws-sdk/client-sts";
 import { fromContainerMetadata, fromEnv, fromInstanceMetadata } from "@aws-sdk/credential-providers";
+
+import type { S3Backend } from "./runs/backend.ts";
 
 type Provider = ReturnType<typeof fromEnv>;
 
@@ -41,11 +44,25 @@ export interface AwsGateway {
   /** who the server is (no keys), or who the given temporary keys are */
   identity(keys?: Keys): Promise<Identity & { source?: Source }>;
   assume(req: AssumeRequest): Promise<Assumed>;
+  /** looks at the bucket of an S3 state backend with the given keys (or the server's own): can it be reached, is it versioned, is the file there */
+  s3Check(keys: Keys | undefined, b: S3Backend): Promise<S3Check>;
+  /** the state file of an S3 backend as it is now, or null when there is none */
+  s3Read(keys: Keys | undefined, b: S3Backend): Promise<{ text: string; modifiedAt: Date | null } | null>;
 }
+
+export interface S3Check { bucket: { ok: boolean; message?: string }; versioning: { ok: boolean; status: "Enabled" | "Suspended" | "Off" | "unknown"; message?: string }; object: { ok: boolean; exists: boolean; message?: string } }
 
 const region = (env: NodeJS.ProcessEnv) => env.AWS_REGION || env.AWS_DEFAULT_REGION || "us-east-1";
 const client = (credentials: Provider | { accessKeyId: string; secretAccessKey: string; sessionToken?: string }, env: NodeJS.ProcessEnv) =>
   new STSClient({ credentials, region: region(env), maxAttempts: 1, requestHandler: { requestTimeout: 6000, connectionTimeout: 2500 } });
+
+const s3Client = (keys: Keys | undefined, b: S3Backend, env: NodeJS.ProcessEnv) =>
+  new S3Client({
+    region: b.region, maxAttempts: 1, requestHandler: { requestTimeout: 8000, connectionTimeout: 3000 },
+    credentials: keys ? { accessKeyId: keys.accessKeyId, secretAccessKey: keys.secretAccessKey, sessionToken: keys.sessionToken } : serverCredentials(env).provider,
+    ...(b.endpoint ? { endpoint: b.endpoint } : {}), ...(b.usePathStyle ? { forcePathStyle: true } : {}),
+  });
+const problem = (e: unknown) => (e instanceof Error ? `${e.name}: ${e.message}`.slice(0, 300) : "failed");
 
 export function realGateway(env: NodeJS.ProcessEnv = process.env): AwsGateway {
   const base = () => serverCredentials(env);
@@ -65,6 +82,34 @@ export function realGateway(env: NodeJS.ProcessEnv = process.env): AwsGateway {
       } finally {
         sts.destroy();
       }
+    },
+
+    async s3Check(keys, b) {
+      const s3 = s3Client(keys, b, env);
+      const out: S3Check = { bucket: { ok: false }, versioning: { ok: false, status: "unknown" }, object: { ok: false, exists: false } };
+      try {
+        try { await s3.send(new HeadBucketCommand({ Bucket: b.bucket })); out.bucket = { ok: true }; } catch (e) { out.bucket = { ok: false, message: problem(e) }; return out; }
+        try {
+          const v = await s3.send(new GetBucketVersioningCommand({ Bucket: b.bucket }));
+          const status = v.Status === "Enabled" ? "Enabled" : v.Status === "Suspended" ? "Suspended" : "Off";
+          out.versioning = { ok: status === "Enabled", status };
+        } catch (e) { out.versioning = { ok: false, status: "unknown", message: problem(e) }; }
+        try { await s3.send(new HeadObjectCommand({ Bucket: b.bucket, Key: b.key })); out.object = { ok: true, exists: true }; } catch (e) {
+          out.object = (e as { name?: string }).name === "NotFound" || (e as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404 ? { ok: true, exists: false } : { ok: false, exists: false, message: problem(e) };
+        }
+        return out;
+      } finally { s3.destroy(); }
+    },
+
+    async s3Read(keys, b) {
+      const s3 = s3Client(keys, b, env);
+      try {
+        const r = await s3.send(new GetObjectCommand({ Bucket: b.bucket, Key: b.key }));
+        return { text: (await r.Body?.transformToString("utf8")) ?? "", modifiedAt: r.LastModified ?? null };
+      } catch (e) {
+        if ((e as { name?: string }).name === "NoSuchKey") return null;
+        throw new Error(problem(e));
+      } finally { s3.destroy(); }
     },
 
     async assume(req) {

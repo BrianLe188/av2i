@@ -7,7 +7,8 @@ const CLAIM_LOCK = 7_021_023; // advisory lock key: two workers claiming togethe
 export interface Claimed {
   id: string;
   project_id: string;
-  kind: "plan" | "apply";
+  kind: "plan" | "apply" | "migrate";
+  migrate_to: unknown;
   design: unknown;
   design_hash: string;
   created_by: string | null;
@@ -27,7 +28,7 @@ export async function claim(db: Db): Promise<Claimed | null> {
       .where("id", "=", (eb) => eb.selectFrom("runs as r").select("r.id").where("r.status", "=", "queued")
         .where((e) => e.not(e.exists(e.selectFrom("runs as x").select("x.id").whereRef("x.project_id", "=", "r.project_id").where("x.status", "=", "running"))))
         .orderBy("r.created_at").limit(1).forUpdate().skipLocked())
-      .returning(["id", "project_id", "kind", "design", "design_hash", "created_by", "connection_id", "plan_run_id"]).executeTakeFirst();
+      .returning(["id", "project_id", "kind", "design", "design_hash", "created_by", "connection_id", "plan_run_id", "migrate_to"]).executeTakeFirst();
     return row ? ({ ...row, token } as Claimed) : null;
   });
 }

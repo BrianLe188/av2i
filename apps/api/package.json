@@ -16,6 +16,7 @@
     "@av2i/model": "workspace:*",
     "@av2i/registry": "workspace:*",
     "@av2i/rules": "workspace:*",
+    "@aws-sdk/client-s3": "^3.1158.0",
     "@aws-sdk/client-sts": "^3.1156.0",
     "@aws-sdk/credential-providers": "^3.1156.0",
     "@fastify/cookie": "^11.1.3",

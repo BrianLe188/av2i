@@ -112,7 +112,7 @@ export function ProjectDetailPage() {
 
         {tab === "members" && <MembersPanel s={s} projectId={id} />}
 
-        {tab === "state" && p.can.stateRead && <StatePanel s={s} projectId={id} canDownload={p.can.stateWrite} />}
+        {tab === "state" && p.can.stateRead && <StatePanel s={s} projectId={id} projectName={pr.name} canDownload={p.can.stateWrite} />}
 
         {tab === "requests" && (
           <Card className="py-0">

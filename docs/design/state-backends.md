@@ -32,3 +32,10 @@ Status: decided (owner, 29 October 2026: the plan and its five answers accepted 
 ## Not now
 
 Other backends (GCS, Azure, PostgreSQL, a third-party `http`); `tofu state mv`, `rm` and `import`; force-unlock; drift reports; removing old state versions.
+
+## As built (R3b)
+
+- A project's backend is `projects.state_backend` (null: the platform). `PUT .../state/backend` sets it for a project with no state; a project with state moves with `POST .../state/migrate` (a `migrate` run: typed project name, `state:Write`, a connection with an apply role, nothing else running).
+- The move is `state pull` from the old backend and `state push` into the new one, each in a folder with only a backend block, then a read-back (same lineage, serial not lower, same number of resources). The new backend is recorded only after that; the old copy stays. Tried against OpenTofu 1.13 and Moto S3: an empty backend answers `state pull` with a blank state (serial 0, no lineage), and a push into it starts a lineage of its own, so the run pushes a second time with `-force` to keep the original lineage. The serial ends one or two above the source; a retried move recognises its own earlier copy.
+- Plan on S3 runs with `-lock=false`; apply writes `use_lockfile = true`. Not tried: the native lock file on Moto, or an apply on S3 end to end.
+- The viewer shows only the current state of an S3 backend (version id 0); older versions stay in the bucket. `POST .../state/check` reports bucket, versioning and file, and returns the policies the plan and apply roles need.

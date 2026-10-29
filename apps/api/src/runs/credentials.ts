@@ -26,7 +26,7 @@ export function assumeProblem(code: "trust" | "base" | "other", roleArn: string,
  * own identity and gets only the temporary keys; the server's own keys never reach the tofu process. A project with no connection runs
  * as the server itself only when the server was told to (development).
  */
-export async function runIdentity(deps: { db: Db; config: Config; aws: AwsGateway }, run: { id: string; kind: "plan" | "apply"; connection_id: string | null; created_by: string | null }): Promise<RunIdentity> {
+export async function runIdentity(deps: { db: Db; config: Config; aws: AwsGateway }, run: { id: string; kind: "plan" | "apply" | "migrate"; connection_id: string | null; created_by: string | null }): Promise<RunIdentity> {
   const { db, config, aws } = deps;
   if (!run.connection_id) {
     if (!config.runWithServerIdentity) throw new Error("This project has no AWS connection. Choose one before running.");
@@ -36,7 +36,7 @@ export async function runIdentity(deps: { db: Db; config: Config; aws: AwsGatewa
   }
   const c = await db.selectFrom("aws_connections").select(["name", "plan_role_arn", "apply_role_arn", "external_id"]).where("id", "=", run.connection_id).executeTakeFirst();
   if (!c) throw new Error("The AWS connection of this run no longer exists.");
-  const roleArn = run.kind === "apply" ? c.apply_role_arn : c.plan_role_arn;
+  const roleArn = run.kind !== "plan" ? c.apply_role_arn : c.plan_role_arn;
   if (!roleArn) throw new Error(`The connection "${c.name}" has no apply role, so it can only plan.`);
   const user = run.created_by ? (await db.selectFrom("users").select("username").where("id", "=", run.created_by).executeTakeFirst())?.username : undefined;
   const session = sessionName(user ?? "platform", run.id);

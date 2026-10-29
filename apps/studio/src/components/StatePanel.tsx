@@ -7,14 +7,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { Strings } from "../i18n.ts";
-import { getStateDiff, getStateResource, getStateVersion, listStateVersions, stateDownloadUrl, type StateDetail, type StateDiff, type StateVersion } from "../projects.ts";
+import { StateBackendCard } from "./StateBackendCard.tsx";
+import { getStateDiff, getStateResource, getStateVersion, listStateVersions, stateDownloadUrl, type StateDetail, type StateDiff, type StateBackend, type StateVersion } from "../projects.ts";
 import { describe } from "./auth/errors.ts";
 
 const kb = (n: number) => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`);
 
 /** The state the platform keeps: its versions, what a version holds with secrets hidden, and what changed since the one before (DD-032). */
-export function StatePanel({ s, projectId, canDownload }: { s: Strings; projectId: string; canDownload: boolean }) {
+export function StatePanel({ s, projectId, projectName, canDownload }: { s: Strings; projectId: string; projectName: string; canDownload: boolean }) {
   const [versions, setVersions] = useState<StateVersion[] | null>(null);
+  const [backend, setBackend] = useState<StateBackend>({ kind: "platform" });
+  const [problem, setProblem] = useState<string | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [detail, setDetail] = useState<StateDetail | null>(null);
   const [diff, setDiff] = useState<StateDiff | null>(null);
@@ -24,7 +27,7 @@ export function StatePanel({ s, projectId, canDownload }: { s: Strings; projectI
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    try { setVersions((await listStateVersions(projectId)).versions); } catch (e) { setError(describe(e, s)); }
+    try { const r = await listStateVersions(projectId); setVersions(r.versions); setBackend(r.backend); setProblem(r.problem); } catch (e) { setError(describe(e, s)); }
   }, [projectId, s]);
   useEffect(() => { void load(); }, [load]);
 
@@ -48,7 +51,8 @@ export function StatePanel({ s, projectId, canDownload }: { s: Strings; projectI
 
   return (
     <div className="grid gap-4" data-testid="state-panel">
-      <p className="text-sm text-muted-foreground">{s.st.backend}: <Badge variant="outline" data-testid="state-backend">{s.st.backendPlatform}</Badge></p>
+      {versions && <StateBackendCard key={JSON.stringify(backend)} s={s} projectId={projectId} projectName={projectName} backend={backend} hasState={backend.kind === "s3" || versions.length > 0} canWrite={canDownload} onChanged={() => void load()} />}
+      {problem && <Alert variant="destructive" role="alert"><AlertDescription>{s.st.problem}: {problem}</AlertDescription></Alert>}
       {error && <Alert variant="destructive" role="alert"><AlertDescription>{error}</AlertDescription></Alert>}
       <Card className="py-0">
         <Table>

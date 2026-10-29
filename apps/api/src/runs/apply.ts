@@ -26,7 +26,7 @@ export interface Blocker {
 
 export interface PlanFacts {
   id: string;
-  kind: "plan" | "apply";
+  kind: "plan" | "apply" | "migrate";
   status: string;
   hasPlan: boolean;
   finished_at: Date | null;

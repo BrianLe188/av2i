@@ -13,6 +13,7 @@ import { closeAfterApply } from "../requests.ts";
 import type { Db } from "../db.ts";
 import { open, requireKey, seal } from "./crypto.ts";
 import { backendOf, s3BackendFile } from "./backend.ts";
+import { migrateState } from "./migrate.ts";
 import { requiredOf, valuesOf } from "./variables.ts";
 import { summarizePlan } from "./plan.ts";
 import type { Claimed } from "./queue.ts";
@@ -159,6 +160,25 @@ export async function execute(db: Db, config: Config, claimed: Claimed, aws: Aws
     secrets.push(...who.secrets);
     log.line(who.summary);
     await db.updateTable("runs").set({ role_arn: who.roleArn, aws_account: who.account }).where("id", "=", claimed.id).execute();
+    if (claimed.kind === "migrate") {
+      const to = backendOf(claimed.migrate_to);
+      const moved = await migrateState({
+        from: backend, to, platformBackend: backendFile(config, claimed.project_id), work, log: (l) => log.line(l),
+        tofu: async (cwd, title, args, capture = false) => {
+          log.line(`$ tofu ${title}`);
+          const left = deadline - Date.now();
+          if (left <= 0) throw new Error(timeoutMessage);
+          const r = await run(config.tofuBin, args, { cwd, env, capture, timeoutMs: left, onLine: (l) => { if (!capture) log.line(l); } });
+          if (r.timedOut) throw new Error(timeoutMessage);
+          if (r.code !== 0) throw new Error(`tofu ${title} exited with code ${r.code}`);
+          return r.stdout;
+        },
+      });
+      await db.updateTable("projects").set({ state_backend: to.kind === "platform" ? null : JSON.stringify(to) }).where("id", "=", claimed.project_id).execute();
+      await db.updateTable("runs").set({ summary: JSON.stringify({ moved: moved.serial, to: to.kind }) }).where("id", "=", claimed.id).execute();
+      log.line(`The state now lives in ${to.kind === "s3" ? "S3" : "the platform"}.`);
+      return;
+    }
     if (!isApply) {
       // a saved plan already holds its values, so only a plan needs them
       const needed = requiredOf(claimed.design as Design).map((v) => v.name);

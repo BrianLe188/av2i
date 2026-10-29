@@ -136,7 +136,7 @@ export interface ApiTokensTable {
 export interface RunsTable {
   id: Generated<string>;
   project_id: string;
-  kind: "plan" | "apply";
+  kind: "plan" | "apply" | "migrate";
   status: Generated<"queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted">;
   design: ColumnType<unknown, string, string>;
   design_hash: string;
@@ -157,6 +157,7 @@ export interface RunsTable {
   aws_account: ColumnType<string | null, string | null | undefined, string | null>;
   plan_run_id: ColumnType<string | null, string | null | undefined, string | null>;
   files_hash: ColumnType<string | null, string | null | undefined, string | null>;
+  migrate_to: ColumnType<unknown, string | null | undefined, string | null>;
 }
 
 export interface RunLogsTable {

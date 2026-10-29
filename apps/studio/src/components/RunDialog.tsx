@@ -140,7 +140,7 @@ export function RunDialog({ s, projectId, projectName, open, onClose, beforeRun,
                 <li key={r.id}>
                   <button type="button" onClick={() => setCurrent(r.id)} className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left hover:bg-muted ${r.id === current ? "bg-muted" : ""}`}>
                     <Badge variant={tone(r.status)}>{s.run.status[r.status]}</Badge>
-                    <Badge variant="outline">{r.kind === "apply" ? s.run.kindApply : s.run.kindPlan}</Badge>
+                    <Badge variant="outline">{r.kind === "migrate" ? s.st.moveKind : r.kind === "apply" ? s.run.kindApply : s.run.kindPlan}</Badge>
                     <span>{new Date(r.createdAt).toLocaleString()}</span>
                     {r.createdBy && <span className="text-muted-foreground">{s.run.by} {r.createdBy}</span>}
                   </button>

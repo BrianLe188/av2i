@@ -52,3 +52,18 @@ export function s3BackendFile(b: S3Backend, withLock: boolean): string {
   if (withLock) lines.push("use_lockfile = true");
   return `terraform {\n  backend "s3" {\n${lines.map((l) => `    ${l}`).join("\n")}\n  }\n}\n`;
 }
+
+/** The statements to add to the roles of a connection so they can use an S3 backend: the plan role reads, the apply role also writes and locks. */
+export function s3Policies(b: S3Backend): { plan: object; apply: object } {
+  const arn = `arn:aws:s3:::${b.bucket}`;
+  const object = `${arn}/${b.key}`;
+  const read = [
+    { Effect: "Allow", Action: ["s3:ListBucket", "s3:GetBucketVersioning"], Resource: arn },
+    { Effect: "Allow", Action: ["s3:GetObject"], Resource: object },
+  ];
+  const kms = b.kms && b.kms.startsWith("arn:") ? [{ Effect: "Allow", Action: ["kms:Decrypt", "kms:GenerateDataKey"], Resource: b.kms }] : [];
+  return {
+    plan: { Version: "2012-10-17", Statement: read },
+    apply: { Version: "2012-10-17", Statement: [...read, { Effect: "Allow", Action: ["s3:PutObject", "s3:DeleteObject"], Resource: [object, `${object}.tflock`] }, ...kms] },
+  };
+}

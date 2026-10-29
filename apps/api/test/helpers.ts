@@ -4,7 +4,7 @@ import { join } from "node:path";
 import pg from "pg";
 import { buildApp, CSRF_HEADER, CSRF_VALUE } from "../src/app.ts";
 import { PROJECT_ROLES } from "@av2i/authz";
-import type { AssumeRequest, AwsGateway } from "../src/aws.ts";
+import type { AssumeRequest, AwsGateway, S3Check } from "../src/aws.ts";
 import { ensureAdmin, syncBuiltinPolicies } from "../src/bootstrap.ts";
 import { COOKIE } from "../src/auth/sessions.ts";
 import type { Config } from "../src/config.ts";
@@ -49,10 +49,12 @@ export const ADMIN_PASSWORD = "Correct-Horse-Battery-1";
 export const SERVER_ARN = "arn:aws:sts::111122223333:assumed-role/av2i-server/i-0abc";
 
 /** Stands in for AWS: roles listed in `deny` refuse to be assumed; every call is recorded. */
-export function fakeAws(opts: { deny?: Record<string, "trust" | "base" | "other"> } = {}): AwsGateway & { calls: { assume: AssumeRequest[] } } {
+export function fakeAws(opts: { deny?: Record<string, "trust" | "base" | "other">; s3?: { check?: S3Check; text?: string | null } } = {}): AwsGateway & { calls: { assume: AssumeRequest[] } } {
   const calls = { assume: [] as AssumeRequest[] };
   return {
     calls,
+    async s3Check() { return opts.s3?.check ?? { bucket: { ok: true }, versioning: { ok: true, status: "Enabled" }, object: { ok: true, exists: true } }; },
+    async s3Read() { return opts.s3?.text == null ? null : { text: opts.s3.text, modifiedAt: new Date("2026-10-29T10:00:00Z") }; },
     async identity(keys) {
       return keys ? { ok: true, account: "999988887777", arn: "arn:aws:sts::999988887777:assumed-role/fake/session" } : { ok: true, account: "111122223333", arn: SERVER_ARN, source: "instance" };
     },

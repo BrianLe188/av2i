@@ -19,7 +19,7 @@ export function stateRoutes(app: FastifyInstance, ctx: Ctx): void {
   const route = { config: { public: true, runAuth: true } };
 
   /** The tofu process signs in as `run` with a secret made for its run only; it works for that project while the run is running. */
-  const guard = async (req: FastifyRequest): Promise<{ projectId: string; runId: string; kind: "plan" | "apply" }> => {
+  const guard = async (req: FastifyRequest): Promise<{ projectId: string; runId: string; kind: "plan" | "apply" | "migrate" }> => {
     const { id } = req.params as { id: string };
     const m = /^Basic\s+(\S+)$/i.exec(req.headers.authorization ?? "");
     const [user, ...rest] = m ? Buffer.from(m[1]!, "base64").toString("utf8").split(":") : [];
@@ -47,7 +47,7 @@ export function stateRoutes(app: FastifyInstance, ctx: Ctx): void {
    */
   app.post("/api/state/:id", { ...route, ...stateBody, schema: { params } }, async (req) => {
     const { projectId: id, runId, kind } = await guard(req);
-    if (kind !== "apply") throw new HttpError(403, "plan_cannot_write", "A plan never writes state.");
+    if (kind === "plan") throw new HttpError(403, "plan_cannot_write", "A plan never writes state.");
     const key = requireKey(config.stateKey);
     const lockId = (req.query as { ID?: string }).ID;
     const held = await db.selectFrom("state_locks").select(["lock_id", "run_id"]).where("project_id", "=", id).executeTakeFirst();

@@ -45,7 +45,7 @@ export const removeShare = (id: string, shareId: string) => api("DELETE", `/api/
 
 export interface PlanSummary { add: number; change: number; destroy: number; replace: number; destructive: boolean; resources: { address: string; type: string; actions: string[] }[] }
 export interface RunRow {
-  id: string; projectId: string; kind: "plan" | "apply"; status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted";
+  id: string; projectId: string; kind: "plan" | "apply" | "migrate"; status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted";
   planRunId: string | null;
   createdBy: string | null; createdAt: string; startedAt: string | null; finishedAt: string | null; error: string | null; summary: PlanSummary | AppliedSummary | null;
 }
@@ -99,8 +99,15 @@ export interface StateOutput { name: string; sensitive: boolean; value: unknown 
 export interface StateDetail { version: { id: number; serial: number; lineage: string; createdAt: string }; resources: StateResource[]; outputs: StateOutput[] }
 export interface StateDiff { from: { id: number; serial: number } | null; to: { id: number; serial: number }; added: string[]; removed: string[]; changed: string[] }
 
-export const listStateVersions = (id: string) => api<{ versions: StateVersion[]; backend: { kind: string } }>("GET", `/api/projects/${id}/state/versions`);
+export interface S3Backend { kind: "s3"; bucket: string; key: string; region: string; encrypt: boolean; kms?: string; endpoint?: string; usePathStyle?: boolean }
+export type StateBackend = { kind: "platform" } | S3Backend;
+export interface S3CheckResult { ok: boolean; access: { ok: boolean; message?: string }; bucket?: { ok: boolean; message?: string }; versioning?: { ok: boolean; status: string; message?: string }; object?: { ok: boolean; exists: boolean; message?: string }; policies: { plan: object; apply: object } }
+
+export const listStateVersions = (id: string) => api<{ versions: StateVersion[]; backend: StateBackend; problem: string | null }>("GET", `/api/projects/${id}/state/versions`);
 export const getStateVersion = (id: string, vid: number) => api<StateDetail>("GET", `/api/projects/${id}/state/versions/${vid}`);
 export const getStateResource = (id: string, vid: number, address: string) => api<{ instances: { address: string; attributes: Record<string, unknown> }[] }>("GET", `/api/projects/${id}/state/versions/${vid}/resource?address=${encodeURIComponent(address)}`);
 export const getStateDiff = (id: string, vid: number) => api<StateDiff>("GET", `/api/projects/${id}/state/versions/${vid}/diff`);
 export const stateDownloadUrl = (id: string, vid: number) => `/api/projects/${id}/state/versions/${vid}/download`;
+export const checkStateBackend = (id: string, backend?: S3Backend) => api<S3CheckResult>("POST", `/api/projects/${id}/state/check`, backend ? { backend } : {});
+export const setStateBackend = (id: string, backend: StateBackend) => api<{ backend: StateBackend }>("PUT", `/api/projects/${id}/state/backend`, { backend });
+export const migrateStateBackend = (id: string, backend: StateBackend, confirmName: string) => api<{ run: { id: string } }>("POST", `/api/projects/${id}/state/migrate`, { backend, confirmName });
