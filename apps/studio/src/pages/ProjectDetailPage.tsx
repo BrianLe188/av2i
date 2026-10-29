@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError } from "../api.ts";
 import { MembersPanel } from "../components/MembersPanel.tsx";
+import { StatePanel } from "../components/StatePanel.tsx";
 import { connError } from "../components/connError.ts";
 import { listConnections, setProjectConnection, type ConnectionRow } from "../connections.ts";
 import { getProject, type ProjectFull } from "../projects.ts";
@@ -19,14 +20,14 @@ import { useStrings } from "../prefs.ts";
 import { Page } from "./Page.tsx";
 import { StatusBadge } from "./RequestsPage.tsx";
 
-type Tab = "overview" | "members" | "requests";
+type Tab = "overview" | "members" | "requests" | "state";
 
 /** The page a project opens on: what it is, who works in it, its requests. The canvas is one click away (DD-028). */
 export function ProjectDetailPage() {
   const s = useStrings();
   const { id = "" } = useParams();
   const [params, setParams] = useSearchParams();
-  const tab = (["overview", "members", "requests"].includes(params.get("tab") ?? "") ? params.get("tab") : "overview") as Tab;
+  const tab = (["overview", "members", "requests", "state"].includes(params.get("tab") ?? "") ? params.get("tab") : "overview") as Tab;
   const [p, setP] = useState<ProjectFull | null>(null);
   const [gone, setGone] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +70,7 @@ export function ProjectDetailPage() {
             <TabsTrigger value="overview" data-testid="tab-overview">{s.pd.overview}</TabsTrigger>
             <TabsTrigger value="members" data-testid="tab-members">{s.pd.members}</TabsTrigger>
             <TabsTrigger value="requests" data-testid="tab-requests">{s.pd.requests}</TabsTrigger>
+            {p.can.stateRead && <TabsTrigger value="state" data-testid="tab-state">{s.st.tab}</TabsTrigger>}
           </TabsList>
         </Tabs>
 
@@ -109,6 +111,8 @@ export function ProjectDetailPage() {
         )}
 
         {tab === "members" && <MembersPanel s={s} projectId={id} />}
+
+        {tab === "state" && p.can.stateRead && <StatePanel s={s} projectId={id} canDownload={p.can.stateWrite} />}
 
         {tab === "requests" && (
           <Card className="py-0">

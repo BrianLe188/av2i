@@ -83,6 +83,13 @@ const dict = {
       legacyTitle: "Chính sách gắn trước đây", legacyText: "Các chính sách này vẫn có hiệu lực, cộng với các ô tích ở trên.", legacyDetach: "Gỡ", legacyConvert: "Chuyển thành các ô tích", legacyConverted: "Đã chuyển thành quyền hệ thống.", legacyCannot: "Chính sách {n} có Deny hoặc giới hạn theo tài nguyên nên không chuyển được; gỡ nó hoặc sửa ở trang Chính sách.",
       hiddenProject: "Có {n} quyền dự án áp cho mọi dự án (từ chính sách cũ); không hiện ở đây, chỉ sửa ở tab JSON của chính sách.", loading: "Đang tải…",
     },
+    st: {
+      tab: "State", backend: "Nơi lưu state", backendPlatform: "Nền tảng (PostgreSQL, mã hoá)", versions: "Các phiên bản", none: "Dự án chưa có state: nó xuất hiện sau lần apply đầu tiên.",
+      serial: "Serial", at: "Thời điểm", by: "Tạo bởi", resources: "Tài nguyên", outputs: "Output", size: "Kích thước", viaPlan: "plan", viaApply: "apply",
+      detail: "Tài nguyên của phiên bản", filter: "Lọc theo địa chỉ hoặc loại", outputsTitle: "Output", hiddenNote: "Giá trị nhạy cảm được ẩn.", attributes: "Thuộc tính", noResources: "Không có tài nguyên.",
+      diffTitle: "Thay đổi so với phiên bản trước", diffFirst: "Đây là phiên bản đầu tiên.", added: "Thêm", removed: "Xoá", changed: "Đổi", noChange: "Không có thay đổi về tài nguyên.",
+      download: "Tải state đầy đủ", downloadWarn: "Có cả mật khẩu dạng chữ rõ; việc tải được ghi vào nhật ký.", close: "Đóng", pick: "Chọn một phiên bản để xem.",
+    },
     run: {
       kindPlan: "Plan", kindApply: "Apply", appliedSummary: "{added} thêm, {changed} sửa, {destroyed} xoá",       applyTitle: "Áp dụng lên AWS", applyBtn: "Apply", replanBtn: "Chạy plan lại", viewApply: "Xem lần apply", applyingNow: "Đang áp dụng plan này.", appliedDone: "Plan này đã được áp dụng.",
       expires: "Plan có hiệu lực đến {t}.", destructiveBox: "Plan này sẽ xoá hoặc thay thế:",
@@ -270,6 +277,13 @@ const dict = {
       save: "Save permissions", saved: "Permissions saved.", all: "All permissions", count: "{n} permissions", none: "No system permissions", summary: "System permissions",
       legacyTitle: "Policies attached before", legacyText: "These policies still apply, on top of the ticks above.", legacyDetach: "Detach", legacyConvert: "Turn into ticks", legacyConverted: "Turned into system permissions.", legacyCannot: "Policy {n} has a Deny or limits to some resources, so it cannot be turned into ticks; detach it or edit it on the Policies page.",
       hiddenProject: "{n} project permissions apply to every project (from an older policy); they are not shown here and are edited only in the policy's JSON tab.", loading: "Loading…",
+    },
+    st: {
+      tab: "State", backend: "Where the state is kept", backendPlatform: "The platform (PostgreSQL, encrypted)", versions: "Versions", none: "The project has no state yet: it appears after the first apply.",
+      serial: "Serial", at: "Time", by: "Made by", resources: "Resources", outputs: "Outputs", size: "Size", viaPlan: "plan", viaApply: "apply",
+      detail: "Resources of the version", filter: "Filter by address or type", outputsTitle: "Outputs", hiddenNote: "Sensitive values are hidden.", attributes: "Attributes", noResources: "No resources.",
+      diffTitle: "Changes since the previous version", diffFirst: "This is the first version.", added: "Added", removed: "Removed", changed: "Changed", noChange: "No change in resources.",
+      download: "Download the full state", downloadWarn: "It includes passwords in clear; the download is written to the audit log.", close: "Close", pick: "Pick a version to look at.",
     },
     run: {
       kindPlan: "Plan", kindApply: "Apply", appliedSummary: "{added} added, {changed} changed, {destroyed} destroyed",       applyTitle: "Apply to AWS", applyBtn: "Apply", replanBtn: "Run plan again", viewApply: "See the apply", applyingNow: "This plan is being applied.", appliedDone: "This plan was applied.",

@@ -19,6 +19,7 @@ import { projectRoutes } from "./routes/projects.ts";
 import { requestRoutes } from "./routes/requests.ts";
 import { rescueRoutes } from "./routes/rescues.ts";
 import { runRoutes } from "./routes/runs.ts";
+import { stateViewRoutes } from "./routes/stateview.ts";
 import { stateRoutes } from "./routes/state.ts";
 import { tokenRoutes } from "./routes/tokens.ts";
 import { userRoutes } from "./routes/users.ts";
@@ -79,6 +80,7 @@ export function buildApp(deps: { db: Db; config: Config; aws?: AwsGateway; logge
   projectRoutes(app, ctx);
   tokenRoutes(app, ctx);
   stateRoutes(app, ctx);
+  stateViewRoutes(app, ctx);
   runRoutes(app, ctx);
   variableRoutes(app, ctx);
   connectionRoutes(app, ctx);

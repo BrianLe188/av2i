@@ -16,7 +16,7 @@ export interface ProjectSummary {
 
 export interface ProjectFull {
   project: { id: string; name: string; owner: string | null; ownerId: string; rev: number; updatedAt: string; updatedBy: string | null; design: Design; rescuePending?: boolean; createdAt?: string; connection?: { id: string; name: string } | null };
-  can: { write: boolean; delete: boolean; share: boolean; plan: boolean; variables: boolean; approve: boolean; apply: boolean };
+  can: { write: boolean; delete: boolean; share: boolean; plan: boolean; variables: boolean; approve: boolean; apply: boolean; stateRead: boolean; stateWrite: boolean };
 }
 
 export interface VersionRow { version: number; note: string; auto: boolean; createdAt: string; by: string | null; nodes: number }
@@ -92,3 +92,15 @@ export interface VariableRow { name: string; sensitive: boolean; node: string; s
 export const listVariables = (id: string) => api<{ variables: VariableRow[] }>("GET", `/api/projects/${id}/variables`).then((r) => r.variables);
 export const setVariable = (id: string, name: string, value: string) => api("PUT", `/api/projects/${id}/variables/${encodeURIComponent(name)}`, { value });
 export const removeVariable = (id: string, name: string) => api("DELETE", `/api/projects/${id}/variables/${encodeURIComponent(name)}`);
+
+export interface StateVersion { id: number; serial: number; lineage: string; runId: string | null; runKind: "plan" | "apply" | null; by: string | null; createdAt: string; resources: number; outputs: number; bytes: number }
+export interface StateResource { address: string; mode: string; type: string; name: string; provider: string; module: string | null; id: string | null }
+export interface StateOutput { name: string; sensitive: boolean; value: unknown }
+export interface StateDetail { version: { id: number; serial: number; lineage: string; createdAt: string }; resources: StateResource[]; outputs: StateOutput[] }
+export interface StateDiff { from: { id: number; serial: number } | null; to: { id: number; serial: number }; added: string[]; removed: string[]; changed: string[] }
+
+export const listStateVersions = (id: string) => api<{ versions: StateVersion[]; backend: { kind: string } }>("GET", `/api/projects/${id}/state/versions`);
+export const getStateVersion = (id: string, vid: number) => api<StateDetail>("GET", `/api/projects/${id}/state/versions/${vid}`);
+export const getStateResource = (id: string, vid: number, address: string) => api<{ instances: { address: string; attributes: Record<string, unknown> }[] }>("GET", `/api/projects/${id}/state/versions/${vid}/resource?address=${encodeURIComponent(address)}`);
+export const getStateDiff = (id: string, vid: number) => api<StateDiff>("GET", `/api/projects/${id}/state/versions/${vid}/diff`);
+export const stateDownloadUrl = (id: string, vid: number) => `/api/projects/${id}/state/versions/${vid}/download`;

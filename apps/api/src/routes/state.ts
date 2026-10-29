@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { Ctx } from "../context.ts";
 import { HttpError, notFound, unauthorized } from "../errors.ts";
 import { open, requireKey, seal } from "../runs/crypto.ts";
+import { summarizeState } from "../runs/stateview.ts";
 
 const params = { type: "object", required: ["id"], properties: { id: { type: "string", format: "uuid" } } } as const;
 /** State of a big design is a few megabytes at most; this leaves room without letting a stray call fill the disk. */
@@ -65,8 +66,10 @@ export function stateRoutes(app: FastifyInstance, ctx: Ctx): void {
         throw new HttpError(409, "serial_conflict", "A different state with the same serial is stored.");
       }
     }
-    const sealed = seal(key, Buffer.from(JSON.stringify(state)));
-    await db.insertInto("state_versions").values({ project_id: id, serial, lineage: state.lineage, key_id: sealed.keyId, nonce: sealed.nonce, data: sealed.data, run_id: runId }).execute();
+    const text = JSON.stringify(state);
+    const sealed = seal(key, Buffer.from(text));
+    const sum = summarizeState(state, Buffer.byteLength(text));
+    await db.insertInto("state_versions").values({ project_id: id, serial, lineage: state.lineage, key_id: sealed.keyId, nonce: sealed.nonce, data: sealed.data, run_id: runId, ...sum }).execute();
     return { ok: true };
   });
 

@@ -102,6 +102,8 @@ export function projectRoutes(app: FastifyInstance, ctx: Ctx): void {
         plan: evaluate(statements, { action: "run:Plan", resource: res }).allowed,
         variables: evaluate(statements, { action: "variable:Write", resource: res }).allowed,
         approve: evaluate(statements, { action: "run:Approve", resource: res }).allowed,
+        stateRead: evaluate(statements, { action: "state:Read", resource: res }).allowed,
+        stateWrite: evaluate(statements, { action: "state:Write", resource: res }).allowed,
         apply: evaluate(statements, { action: "run:Apply", resource: res }).allowed,
       },
     };

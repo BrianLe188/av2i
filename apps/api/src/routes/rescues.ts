@@ -35,7 +35,8 @@ export function rescueRoutes(app: FastifyInstance, ctx: Ctx): void {
 
   app.get("/api/state-rescues/:id/download", { schema: { params: idParams } }, async (req, reply) => {
     const r = await rescueOf((req.params as { id: string }).id);
-    await authorize(req, await projectOf(r.project_id), "state:Read");
+    // the clear state, with its secrets: the right to write state (DD-032)
+    await authorize(req, await projectOf(r.project_id), "state:Write");
     sessionOnly(req);
     const key = requireKey(config.stateKey);
     await audit(db, { actor: actor(req), action: "state.rescue_downloaded", resource: resource.project(r.project_id), outcome: "success", ip: req.ip, details: { rescue: r.id } });

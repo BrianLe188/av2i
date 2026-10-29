@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { Config } from "../config.ts";
 import type { Db } from "../db.ts";
 import { open, seal } from "./crypto.ts";
+import { summarizeState } from "./stateview.ts";
 
 /**
  * What an apply created but OpenTofu could not write to the backend is left by OpenTofu as `errored.tfstate`. It is the only record of
@@ -42,10 +43,11 @@ export async function restoreRescue(db: Db, key: Buffer, id: string, userId: str
   if (latest && r.serial <= latest.serial) return { ok: false, code: "serial_not_newer", message: "The stored state is already as new as the rescued one: download it to compare." };
   const text = open(key, { keyId: r.key_id, nonce: r.nonce, data: r.data });
   await db.transaction().execute(async (trx) => {
-    await trx.insertInto("state_versions").values({ project_id: r.project_id, serial: r.serial, lineage: r.lineage, key_id: r.key_id, nonce: r.nonce, data: r.data, run_id: r.run_id }).execute();
+    let sum = { resources: 0, outputs: 0, bytes: text.length };
+    try { sum = summarizeState(JSON.parse(text.toString("utf8")), text.length); } catch { /* counted as empty: the file is kept as it is */ }
+    await trx.insertInto("state_versions").values({ project_id: r.project_id, serial: r.serial, lineage: r.lineage, key_id: r.key_id, nonce: r.nonce, data: r.data, run_id: r.run_id, ...sum }).execute();
     await trx.updateTable("state_rescues").set({ resolved_at: new Date(), resolved_by: userId, resolution: "restored" }).where("id", "=", id).execute();
   });
-  void text;
   return { ok: true };
 }
 

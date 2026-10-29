@@ -174,6 +174,9 @@ export interface StateVersionsTable {
   nonce: Buffer;
   data: Buffer;
   run_id: string | null;
+  resources: ColumnType<number | null, number | null | undefined, number | null>;
+  outputs: ColumnType<number | null, number | null | undefined, number | null>;
+  bytes: ColumnType<number | null, number | null | undefined, number | null>;
   created_at: Ts;
 }
 

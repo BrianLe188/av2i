@@ -164,7 +164,8 @@ describe.skipIf(!available)("apply with approval", () => {
     const dl = await t.call("GET", `/api/state-rescues/${id}/download`, { cookie: alice.cookie });
     expect(dl.status).toBe(200);
     expect(dl.body).toMatchObject({ serial: 5, lineage: "lineage-of-the-rescue" });
-    expect((await t.call("GET", `/api/state-rescues/${id}/download`, { cookie: bob.cookie })).status).toBe(200);
+    // the clear state needs the right to write state: bob reads state but may not
+    expect((await t.call("GET", `/api/state-rescues/${id}/download`, { cookie: bob.cookie })).status).toBe(403);
     expect(JSON.stringify(await t.db.selectFrom("audit_log").select("details").where("action", "=", "state.rescue_downloaded").execute())).not.toContain("lineage-of-the-rescue");
 
     // restoring needs state:Write: bob reads state but may not write it; the owner holds it
