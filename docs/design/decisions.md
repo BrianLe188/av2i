@@ -36,6 +36,7 @@ Numbered `DD-nnn` to keep them apart from the specification's `D-nnn` ([../spec/
 | DD-029 | decided | Built-in policies can have their permissions chosen, with a picker |
 | DD-030 | decided | Permissions given directly to a user or a group, and the table of effective permissions |
 | DD-031 | decided | System permissions on users and groups, project permissions in the project, both as tickboxes |
+| DD-032 | decided | The state viewer, and S3 as the place of the state |
 
 ## DD-001 Language and runtime
 
@@ -485,3 +486,11 @@ reads, and whoever shares can tick only what they hold. `project:List` is in nei
 The user and group dialogs no longer attach policies; policies attached before keep working and are listed in the dialog with **Detach** and **Turn into ticks**. The policy page picker shows the system
 permissions and keeps project permissions it finds in the document. An **administrator** is now whoever's effective permissions (policies, groups, direct) include what manages users and policies, and
 every change of policies or direct permissions is undone if it would leave none. The table of effective permissions is not in the dialogs (the API keeps it).
+
+## DD-032 The state viewer, and S3 as the place of the state
+
+Status: decided (owner, 29 October 2026); the design is in [state-backends.md](state-backends.md). R3 of DD-023, in two steps.
+
+R3a: a **State** tab on the project page shows the versions of the state the platform keeps, their resources and outputs with sensitive values hidden, and a diff between two versions; the clear
+state can be downloaded only with `state:Write`. R3b: a project can keep its state in **S3 or an S3-compatible server** through its AWS connection, and the state moves between the platform and S3
+by a `migrate` run that checks lineage and serial on the way and switches only if they match; a plan on S3 runs without the lock so that the plan role stays read-only.
